@@ -12,7 +12,7 @@ let
             "myEspEntity",                  // this index order is used for incoming state events and output calls as well (ie state.esp[0] etc...)
         ]
     },
-    automation = [                                                          // create an (index, clock) => {},  array member function for each automation you want to create
+    automation = [                                                          // create an (index) => {},  array member function for each automation you want to create
         (index) => {
             if (!state.auto[index]) init();                                 // initialize automation
             let st = state.auto[index];                                     // set automation state object's shorthand name to "st" (state) 
