@@ -10,7 +10,10 @@ let
         ],
         esp: [                              // add all your ESP entities here
             "myEspEntity",                  // this index order is used for incoming state events and output calls as well (ie state.esp[0] etc...)
-        ]
+        ],
+        myAutomationNonVolatileData: {      // create your own area for non-volatile data for each function if needed
+            test: "a test string",
+        },
     },
     automation = [                                                          // create an (index) => {},  array member function for each automation you want to create
         (index) => {
@@ -20,11 +23,12 @@ let
             function init() {
                 state.auto.push({                                           // create object for this automation in local state
                     name: "Auto-System",                                    // give this automation a name 
-                    example: { started: false, step: time.sec }             // initialize an object for each of this automation's devices or features     
+                    example: { started: false, step: time.sec }             // initialize an object for each of this automation's devices or features (volatile data) 
                 });
                 setInterval(() => { automation[index](index); }, 1e3);      // set minimum rerun time, otherwise this automation function will only on ESP and HA push updates / events
                 setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds
                 log("system started", index, 1);                            // log automation start with index number and severity (0: debug, 1:event, 2: warning, 3: error)
+                log(cfg.myAutomationNonVolatileData.test)                   // log some string stored in your non-volatile data
                 em.on("input_button.test", () => button.test());            // create an event emitter for HA or ESP entity that calls a function when data is received
                 em.on("power1-relay1", (newState) => {                      // an event emitter for HA or ESP device that directly performs a function
                     log("my esp toggle function", index, 1);
@@ -48,14 +52,27 @@ let
                 }
             };
 
-            if (coreData("mySharedData").myData == "myValue")               // compare a variable from another TW Client using coreData (after register with coreData shown above), coreData returns "data" variable or object
-                log("sensor on other client is a match", index, 1);         // see list of variables in coreData in  127.0.0.1:20000/diag client/state/coreData (use firefox)
+
+            // "state" is not "st". 
+            //      "st" is local volatile memory unique to each function - to store your automation data
+            //      "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entities
+            //       state.ha[0]  is  where the incoming data of   cfg.ha[0] entity is stored
+            //       state.esp[0]  is  where the incoming data of   cfg.esp[0] entity is stored
+
+            if (state.ha[0] == true && st.example.started == false) {      // compare a Home Assistant entity with a value in your program - do something
+                log("turning off outside lights", index, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
+                st.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
+                st.example.started = true;                                  // set automation state variable
+            }
 
             if (state.esp[0] == true && st.example.started == false) {      // compare an ESPHome entity with a value in your program - do something
                 log("turning off outside lights", index, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
                 st.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
                 st.example.started = true;                                  // set automation state variable
             }
+            // coreData is optional, dont use it if you dont need it
+            if (coreData("mySharedData").myData == "myValue")               // compare a variable from another TW Client using coreData (after register with coreData shown above), coreData returns "data" variable or object
+                log("sensor on other client is a match", index, 1);         // see list of variables in coreData in  127.0.0.1:20000/diag client/state/coreData (use firefox)
 
             /*      Time Variables  
                 time.mil            current time milliseconds 
