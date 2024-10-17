@@ -54,7 +54,7 @@ let
 
 
             // "state" is not "st". 
-            //      "st" is local volatile memory unique to each function - to store your automation data
+            //      "st" is local volatile memory unique to each automation function - to store your automation data
             //      "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entities
             //       state.ha[0]  is  where the incoming data of   cfg.ha[0] entity is stored
             //       state.esp[0]  is  where the incoming data of   cfg.esp[0] entity is stored
