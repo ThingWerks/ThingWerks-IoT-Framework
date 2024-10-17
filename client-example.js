@@ -57,7 +57,7 @@ let
                 st.example.started = true;                                  // set automation state variable
             }
 
-            /*      Time Variables   -  add DOW? sent by core?
+            /*      Time Variables  
                 time.mil            current time milliseconds 
                 time.min            current minute
                 time.sec            current second
@@ -83,14 +83,14 @@ let
             };
             /*
                 ---Debugging web server---
-                http:/127.0.0.1:20000/client --show all client volatile and non-volatile memory
-                http:/127.0.0.1:20000/ha ------show all entities available from Home Assistant
-                http:/127.0.0.1:20000/esp -----show all discovered ESP Home modules
-                http:/127.0.0.1:20000/tg ------last 100 received Telegram messages
-                http:/127.0.0.1:20000/nv ------show all core non-volatile memory
-                http:/127.0.0.1:20000/state ---show all core volatile memory
-                http:/127.0.0.1:20000/cfg -----show all core configuration
-                http:/127.0.0.1:20000/log -----last 500 log messages
+                http://127.0.0.1:20000/client --show all client volatile and non-volatile memory
+                http://127.0.0.1:20000/ha ------show all entities available from Home Assistant
+                http://127.0.0.1:20000/esp -----show all discovered ESP Home modules
+                http://127.0.0.1:20000/tg ------last 100 received Telegram messages
+                http://127.0.0.1:20000/nv ------show all core non-volatile memory
+                http://127.0.0.1:20000/state ---show all core volatile memory
+                http://127.0.0.1:20000/cfg -----show all core configuration
+                http://127.0.0.1:20000/log -----last 500 log messages
          */
         },
         (index) => {    // add subsequent automations like this
