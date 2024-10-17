@@ -1,0 +1,47 @@
+{
+    "webDiag": true,
+    "webDiagPort": 20000,
+    "debugging": true,
+    "workingDir": "/apps/tw/",
+    "homeAssistant": [
+        {
+            "enable": true,
+            "legacyAPI": false,
+            "address": "10.20.0.10",
+            "port": 8123,
+            "token": "myKey"
+        }
+    ],
+    "telegram": {
+        "enable": true,
+        "logLevel": 2,
+        "logDebug": false,
+        "logESPDisconnect": false,
+        "token": "myTelegramIDToken"
+    },
+    "esp": {
+        "enable": true,
+        "devices": [
+            {
+                "ip": "10.20.0.98",
+                "key": "myKey"
+            },
+            {
+                "ip": "10.20.0.97",
+                "key": "myKey"
+            },
+            {
+                "ip": "10.20.0.96",
+                "key": "myKey"
+            },
+            {
+                "ip": "10.20.0.95",
+                "key": "myKey"
+            },            
+            {
+                "ip": "10.20.0.94",
+                "key": "myKey"
+            }
+        ]
+    }
+}
