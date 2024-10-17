@@ -20,7 +20,7 @@ let
             if (!state.auto[index]) init();                                 // initialize automation
             let st = state.auto[index];                                     // set automation state object's shorthand name to "st" (state) 
 
-            function init() {
+            function init() {                                               // the init() function is called only once at the start of each automation
                 state.auto.push({                                           // create object for this automation in local state
                     name: "Auto-System",                                    // give this automation a name 
                     example: { started: false, step: time.sec }             // initialize an object for each of this automation's devices or features (volatile data) 
