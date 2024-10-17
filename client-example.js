@@ -89,7 +89,7 @@ let
                 time.epoch          unix epoch time in seconds
                 time.epochMin       unix epoch time in minutes
                 time.epochMil       unix epoch time in milliseconds
-
+                time.stamp          current time in string format ie. 10-16 11:07:18.560
             */
 
             function timer() { // called once per minute   // set events to run at a specific time using clock function. match hour and minute of day, etc
