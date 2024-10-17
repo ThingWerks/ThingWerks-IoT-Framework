@@ -11,12 +11,12 @@ let
         esp: [                              // add all your ESP entities here
             "myEspEntity",                  // this index order is used for incoming state events and output calls as well (ie state.esp[0] etc...)
         ],
-        myAutomationNonVolatileData: {      // create your own area for non-volatile data for each function if needed
+        myAutomationNonVolatileData: {      // create your own area for non-volatile config data for each function if needed
             test: "a test string",
         },
     },
     automation = [                                                          // create an (index) => {},  array member function for each automation you want to create
-        (index) => {
+        (index) => {                                                        // each automation is ran with every incoming ESPHome or Home Assistant event  
             if (!state.auto[index]) init();                                 // initialize automation
             let st = state.auto[index];                                     // set automation state object's shorthand name to "st" (state) 
 
@@ -26,7 +26,7 @@ let
                     example: { started: false, step: time.sec }             // initialize an object for each of this automation's devices or features (volatile data) 
                 });
                 setInterval(() => { automation[index](index); }, 1e3);      // set minimum rerun time, otherwise this automation function will only on ESP and HA push updates / events
-                setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds
+                setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds (in addition to incoming ESP or Home Assistant events)
                 log("system started", index, 1);                            // log automation start with index number and severity (0: debug, 1:event, 2: warning, 3: error)
                 log(cfg.myAutomationNonVolatileData.test)                   // log some string stored in your non-volatile data
                 em.on("input_button.test", () => button.test());            // create an event emitter for HA or ESP entity that calls a function when data is received
@@ -49,10 +49,14 @@ let
                     ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");    // send my sensor data to HA. your sensor name, value, unit of your choice
                     // first time data is sent, HA will create this sensor, find in entities list
                     send("coreData", { name: "myObjectName", data: { myData: "myDataOrObject" } });  // send a variable to the Core for other clients to access
+                    nv.myAutomation = { myVar: "test" };                    // create data structure for your non-volatile data           
+                    log("writing NV data to disk...", index, 1);
+                    file.write.nv();       // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directoy
                 }
             };
-
-
+            
+            // "cfg" is config data as specified above
+            // "nv" is non-volatile data that is read during during first boot of script and saved whenever you call file.write.nv();
             // "state" is not "st". 
             //      "st" is local volatile memory unique to each automation function - to store your automation data
             //      "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entities
