@@ -56,7 +56,7 @@ let
             };
             
             // "cfg" is config data as specified above
-            // "nv" is non-volatile data that is read during during first boot of script and saved whenever you call file.write.nv();
+            // "nv" is non-volatile data that is read once during first boot of script and saved whenever you call file.write.nv();
             // "state" is not "st". 
             //      "st" is local volatile memory unique to each automation function - to store your automation data
             //      "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entities
@@ -92,8 +92,8 @@ let
                 time.stamp          current time in string format ie. 10-16 11:07:18.560
             */
 
-            function timer() { // called once per minute   // set events to run at a specific time using clock function. match hour and minute of day, etc
-                if (time.hour == 18 && time.min == 0) {
+            function timer() { // called once per minute   
+                if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
                     log("turning on outside lights", index, 1);
                     ha.send("switch.light_outside_switch", true);
                 }
