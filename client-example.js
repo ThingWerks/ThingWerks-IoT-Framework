@@ -11,8 +11,12 @@ let
         esp: [                              // add all your ESP entities here
             "myEspEntity",                  // this index order is used for incoming state events and output calls as well (ie state.esp[0] etc...)
         ],
-        myAutomationNonVolatileData: {      // create your own area for non-volatile config data for each function if needed
+        udp: [                              // UDP api is under development
+            "myUdpEntity",
+        ],
+        myAutomationConfigData: {      // create your own area for non-volatile config data for each function if needed
             test: "a test string",
+            params: true
         },
     },
     automation = [                                                          // create an (index) => {},  array member function for each automation you want to create
@@ -28,12 +32,12 @@ let
                 setInterval(() => { automation[index](index); }, 1e3);      // set minimum rerun time, otherwise this automation function will only on ESP and HA push updates / events
                 setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds (in addition to incoming ESP or Home Assistant events)
                 log("system started", index, 1);                            // log automation start with index number and severity (0: debug, 1:event, 2: warning, 3: error)
-                log(cfg.myAutomationNonVolatileData.test)                   // log some string stored in your non-volatile data
+                log(cfg.myAutomationConfigData.test)                        // log some string stored in your non-volatile data
                 em.on("input_button.test", () => button.test());            // create an event emitter for HA or ESP entity that calls a function when data is received
                 em.on("power1-relay1", (newState) => {                      // an event emitter for HA or ESP device that directly performs a function
                     log("my esp toggle function", index, 1);
                 });
-                send("coreData", { register: true, name: ["myObject", "obj2"] });     // register with core to receive data from other client
+                send("coreData", { register: true, name: ["myObject", "obj2"] });     // optional - register with core to receive data from other client
             }
 
 
@@ -46,20 +50,20 @@ let
                     ha.send(2, true);                                       // or you can call my the entity's ID name as listed in Home Assistant entity list
                     esp.send("myEspEntity", true);                          // call esp device by name or cfg.esp array element number
                     esp.send(0, true);
-                    ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");    // send my sensor data to HA. your sensor name, value, unit of your choice
-                    // first time data is sent, HA will create this sensor, find in entities list
+                    ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");    // send sensor data to HA. your sensor name, value, unit of your choice
+                    ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
                     send("coreData", { name: "myObjectName", data: { myData: "myDataOrObject" } });  // send a variable to the Core for other clients to access
                     nv.myAutomation = { myVar: "test" };                    // create data structure for your non-volatile data           
-                    log("writing NV data to disk...", index, 1);
+                    log("writing NV data to disk...", index, 1);            // example log event
                     file.write.nv();       // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directoy
                 }
             };
-            
+
             // "cfg" is config data as specified above
             // "nv" is non-volatile data that is read once during first boot of script and saved whenever you call file.write.nv();
             // "state" is not "st". 
             //      "st" is local volatile memory unique to each automation function - to store your automation data
-            //      "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entities
+            //      "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entity states
             //       state.ha[0]  is  where the incoming data of   cfg.ha[0] entity is stored
             //       state.esp[0]  is  where the incoming data of   cfg.esp[0] entity is stored
 
@@ -104,7 +108,8 @@ let
             };
             /*
                 ---Debugging web server---
-                http://127.0.0.1:20000/client --show all client volatile and non-volatile memory
+                http://127.0.0.1:20000/client/nameOfClient -----show all volatile and non-volatile memory of a specific client
+                http://127.0.0.1:20000/all -----show all client volatile and non-volatile memory
                 http://127.0.0.1:20000/ha ------show all entities available from Home Assistant
                 http://127.0.0.1:20000/esp -----show all discovered ESP Home modules
                 http://127.0.0.1:20000/tg ------last 100 received Telegram messages
@@ -233,7 +238,7 @@ let
                             }
                             break;
                         case "diag":                // incoming diag refresh request, then reply object
-                            send("diag", { state: state, nv: nv });
+                            send("diag", { state, nv });
                             break;
                         case "telegram":
                             switch (buf.obj.class) {
@@ -263,7 +268,7 @@ let
         },
         init: function () {
             nv = {};
-            state = { auto: [], ha: [], esp: [], coreData: [], onlineHA: false, onlineESP: false, online: false };
+            state = { auto: [], ha: [], esp: [], udp: [], coreData: [], onlineHA: false, onlineESP: false, online: false };
             time = {
                 boot: null,
                 get epochMil() { return Date.now(); },
@@ -415,7 +420,7 @@ let
                     fs.readFile(workingDir + "/nv-" + scriptName + ".json", function (err, data) {
                         if (err) {
                             log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
-                                + ", nv-clientName.json file should be in same folder as client.js file");
+                                + ", nv-" + scriptName + ".json file should be in same folder as client.js file (" + workingDir + ")");
                             nv = { telegram: [] };
                         }
                         else { nv = JSON.parse(data); }
