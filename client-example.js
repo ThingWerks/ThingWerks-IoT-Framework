@@ -29,7 +29,7 @@ let
                     name: "Auto-System",                                    // give this automation a name 
                     example: { started: false, step: time.sec }             // initialize an object for each of this automation's devices or features (volatile data) 
                 });
-                setInterval(() => { automation[index](index); }, 1e3);      // set minimum rerun time, otherwise this automation function will only on ESP and HA push updates / events
+                setInterval(() => { automation[index](index); }, 1e3);      // set minimum rerun time, otherwise this automation function will only run on ESP and HA push events
                 setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds (in addition to incoming ESP or Home Assistant events)
                 log("system started", index, 1);                            // log automation start with index number and severity (0: debug, 1:event, 2: warning, 3: error)
                 log(cfg.myAutomationConfigData.test)                        // log some string stored in your non-volatile data
