@@ -13,7 +13,7 @@ if (isMainThread) {
                         for (let y = 0; y < cfg.homeAssistant.length; y++) {
                             haSystem = y;
                             for (let z = 0; z < logs.haInputs[y].length; z++) {
-                                if (x == client.ha.length - 1 && z == logs.haInputs[y].length - 1) checkIfCompleted(x);
+                                if (x == client.ha.length - 1 && z == logs.haInputs[y].length - 1) checkIfCompleted(y);
                                 if (logs.haInputs[y][z] == client.ha[x]) {
                                     log("HA fetch found device for Client: " + a.color("white", client.name) + " On HA System: " + y + " - Entity: " + logs.haInputs[y][z], 1, 0)
                                     getData(y, client.ha[x]);
@@ -247,16 +247,16 @@ if (isMainThread) {
                         }
                         break;
                     case "udpState":    // incoming state change for UDP duplex client
-                            for (let x = 0; x < cfg.udp.devices.length; x++) {
-                                //console.log
-                                for (let y = 0; y < state.esp[x].entity.length; y++) {
-                                    if (state.esp[x].entity[y].name == buf.obj.name) {
-                                        thread.esp[x].postMessage(
-                                            { type: "espSend", obj: { name: buf.obj.name, id: state.esp[x].entity[y].id, state: buf.obj.state } });
-                                        break;
-                                    }
+                        for (let x = 0; x < cfg.udp.devices.length; x++) {
+                            //console.log
+                            for (let y = 0; y < state.esp[x].entity.length; y++) {
+                                if (state.esp[x].entity[y].name == buf.obj.name) {
+                                    thread.esp[x].postMessage(
+                                        { type: "espSend", obj: { name: buf.obj.name, id: state.esp[x].entity[y].id, state: buf.obj.state } });
+                                    break;
                                 }
                             }
+                        }
                         log("incoming UDP state: " + buf.obj.name + " data: " + buf.obj.state, 3, 0);
                         break;
                     case "udpTele":     // incoming UDP telemetry data from UDP Simplex client
@@ -492,7 +492,7 @@ if (isMainThread) {
                 function checkUDPreg() {
                     let registered = false;
                     for (let x = 0; x < state.client.length; x++) {
-                        if (state.client[x].port == port ) {
+                        if (state.client[x].port == port) {
                             state.client[x].time = time.epochMil;
                             id = x;
                             registered = true;
