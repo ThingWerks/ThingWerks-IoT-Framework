@@ -13,7 +13,7 @@ if (isMainThread) {
                         for (let y = 0; y < cfg.homeAssistant.length; y++) {
                             haSystem = y;
                             for (let z = 0; z < logs.haInputs[y].length; z++) {
-                                if (x == client.ha.length - 1 && z == logs.haInputs[y].length - 1) checkIfCompleted(y);
+                                if (x == client.ha.length - 1 && z == logs.haInputs[y].length - 1) checkIfCompleted(x);
                                 if (logs.haInputs[y][z] == client.ha[x]) {
                                     log("HA fetch found device for Client: " + a.color("white", client.name) + " On HA System: " + y + " - Entity: " + logs.haInputs[y][z], 1, 0)
                                     getData(y, client.ha[x]);
@@ -114,9 +114,9 @@ if (isMainThread) {
                                     send({ type: "auth", access_token: config.token, });
                                     break;
                                 case "auth_ok":
-                                    //  state.client = []; // force UDP client to reconnect if WS gets disconnected (will force fetch again)
-                                    for (let x = 0; x < state.client.length; x++) {
-                                        udp.send(JSON.stringify({ type: "haFetchAgain" }), state.client[x].port);
+                                    //  state.udp = []; // force UDP client to reconnect if WS gets disconnected (will force fetch again)
+                                    for (let x = 0; x < state.udp.length; x++) {
+                                        udp.send(JSON.stringify({ type: "haFetchAgain" }), state.udp[x].port);
                                     }
                                     log("Websocket (" + a.color("white", config.address) + ") authentication accepted", 1);
                                     log("Websocket (" + a.color("white", config.address) + ") subscribing to event listener", 1);
@@ -147,10 +147,10 @@ if (isMainThread) {
                                             else logs.ws[haNum][client.logStep] = buf.event                     // record last 200 ws events for this client into the ws log  
                                             if (client.logStep < 200) client.logStep++; else client.logStep = 0;
                                             //  log("WS received data" + JSON.stringify(buf.event))
-                                            for (let x = 0; x < state.client.length; x++) {                    // scan all UDP clients
-                                                for (let y = 0; y < state.client[x].ha.length; y++) {          // scan registered HA entities for each client 
-                                                    if (state.client[x].ha[y] == buf.event.data.entity_id) {   // if this entity ID matches Client X's Entity Y
-                                                        //     log("WS received data for sensor: " + x + " local name: " + state.client[x].ha[y] + " buf name: " + buf.event.data.entity_id + JSON.stringify(buf.event.data.new_state))
+                                            for (let x = 0; x < state.udp.length; x++) {                    // scan all UDP clients
+                                                for (let y = 0; y < state.udp[x].ha.length; y++) {          // scan registered HA entities for each client 
+                                                    if (state.udp[x].ha[y] == buf.event.data.entity_id) {   // if this entity ID matches Client X's Entity Y
+                                                        //     log("WS received data for sensor: " + x + " local name: " + state.udp[x].ha[y] + " buf name: " + buf.event.data.entity_id + JSON.stringify(buf.event.data.new_state))
                                                         if (ibuf === "on") obuf = true;                     // check if entity is binary
                                                         else if (ibuf === "off") obuf = false;
                                                         else if (ibuf === null || ibuf == undefined) log("HA (" + a.color("white", config.address) + ") is sending bogus (null/undefined) data: " + ibuf, 1, 2);
@@ -165,7 +165,7 @@ if (isMainThread) {
                                                             + buf.event.data.new_state.entity_id + " Bytes: " + ibuf.length + " data: " + ibuf, 1, 2);
                                                         //   log("ws sensor: " + x + " data: " + buf.event.data.new_state.state + " result: " + ibuf);
                                                         if (obuf != undefined) {                            // send data to relevant clients 
-                                                            udp.send(JSON.stringify({ type: "haStateUpdate", obj: { id: y, state: obuf } }), state.client[x].port);
+                                                            udp.send(JSON.stringify({ type: "haStateUpdate", obj: { id: y, state: obuf } }), state.udp[x].port);
                                                         }
                                                     }
                                                 }
@@ -225,46 +225,15 @@ if (isMainThread) {
         },
         sys = {
             udp: function (data, info) {
-                let buf, port = info.port, id = undefined,
-                    haNum = undefined;
+                let buf, port = info.port, registered = false, id = undefined,
+                    haNum = undefined, time = Date.now();
                 try { buf = JSON.parse(data); }
                 catch (error) { log("A UDP client (" + info.address + ") is sending invalid JSON data: " + error, 3, 3); return; }
                 // console.log(buf)
+                sys.watchDog(time);
                 checkUDPreg();
                 switch (buf.type) {
-                    case "heartBeat": state.client[id].heartBeat = true; break; // start heartbeat 
-                    case "udpFetch":
-                        log("incoming UDP Fetch request from client: " + state.client[id].name, 3, 0);
-                        for (let x = 0; x < state.client.length; x++) {
-                            for (let y = 0; y < state.udp[x].entity.length; y++) {
-                                for (let b = 0; b < state.client[id].udp.length; b++) {
-                                    if (state.client[id].udp[b] == state.udp[x].entity[y].name) {
-                                        log("sending ESP Device ID: " + b + "  Name:" + state.udp[x].entity[y].name + "  data: " + state.udp[x].entity[y].state, 3, 0);
-                                        udp.send(JSON.stringify({ type: "udpState", obj: { id: b, state: state.udp[x].entity[y].state } }), port);
-                                    }
-                                }
-                            }
-                        }
-                        break;
-                    case "udpState":    // incoming state change for UDP duplex client
-                        for (let x = 0; x < cfg.udp.devices.length; x++) {
-                            //console.log
-                            for (let y = 0; y < state.esp[x].entity.length; y++) {
-                                if (state.esp[x].entity[y].name == buf.obj.name) {
-                                    thread.esp[x].postMessage(
-                                        { type: "espSend", obj: { name: buf.obj.name, id: state.esp[x].entity[y].id, state: buf.obj.state } });
-                                    break;
-                                }
-                            }
-                        }
-                        log("incoming UDP state: " + buf.obj.name + " data: " + buf.obj.state, 3, 0);
-                        break;
-                    case "udpTele":     // incoming UDP telemetry data from UDP Simplex client
-
-                        break;
-                    case "udpRegister": // incoming duplex UDP client registration 
-
-                        break;
+                    case "heartBeat": state.udp[id].heartBeat = true; break; // heartbeat
                     case "espState":    // incoming state change (ESP)
                         if (cfg.esp.enable == true) {
                             for (let x = 0; x < cfg.esp.devices.length; x++) {
@@ -278,14 +247,14 @@ if (isMainThread) {
                                 }
                             }
                         }
-                        log("incoming ESP state: " + buf.obj.name + " data: " + buf.obj.state, 3, 0);
+                        log("incoming esp state: " + buf.obj.name + " data: " + buf.obj.state, 3, 0);
                         break;
-                    case "espFetch":    // incoming ESP fetch request from TWIT client
-                        log("incoming ESP Fetch request from client: " + state.client[id].name, 3, 0);
+                    case "espFetch":
+                        log("incoming ESP Fetch request from client: " + state.udp[id].name, 3, 0);
                         for (let x = 0; x < state.esp.length; x++) {
                             for (let y = 0; y < state.esp[x].entity.length; y++) {
-                                for (let b = 0; b < state.client[id].esp.length; b++) {
-                                    if (state.client[id].esp[b] == state.esp[x].entity[y].name) {
+                                for (let b = 0; b < state.udp[id].esp.length; b++) {
+                                    if (state.udp[id].esp[b] == state.esp[x].entity[y].name) {
                                         log("sending ESP Device ID: " + b + "  Name:" + state.esp[x].entity[y].name + "  data: " + state.esp[x].entity[y].state, 3, 0);
                                         udp.send(JSON.stringify({ type: "espState", obj: { id: b, state: state.esp[x].entity[y].state } }), port);
                                     }
@@ -293,15 +262,15 @@ if (isMainThread) {
                             }
                         }
                         break;
-                    case "haFetch":     // incoming HA fetch request from TWIT client
-                        log("Client " + id + " - " + a.color("white", state.client[id].name) + " - requesting fetch", 3, 0);
-                        ha.fetch(state.client[id]);
+                    case "haFetch":     // incoming state fetch request
+                        log("Client " + id + " - " + a.color("white", state.udp[id].name) + " - requesting fetch", 3, 0);
+                        ha.fetch(state.udp[id]);
                         break;
                     case "haQuery":     // HA all device list request
                         logs.haInputs = [];
                         for (let x = 0; x < cfg.homeAssistant.length; x++) {
                             logs.haInputs.push([]);
-                            log("Client: " + state.client[id].name + " is querying HA (" + a.color("white", cfg.homeAssistant[x].address) + ") entities", 3, 1);
+                            log("Client: " + state.udp[id].name + " is querying HA (" + a.color("white", cfg.homeAssistant[x].address) + ") entities", 3, 1);
                             hass[x].states.list()
                                 .then(dbuf => { dbuf.forEach(element => { logs.haInputs[x].push(element.entity_id) }); })
                                 .catch(err => {
@@ -343,7 +312,7 @@ if (isMainThread) {
                         state.perf.ha[haNum].id = state.ha[haNum].ws.id;
                         let sort = ["input_boolean", "input_button", "switch"];
                         if (buf.obj.unit == undefined) {
-                            log("Client: " + state.client[id].name + " is setting HA entity: " + buf.obj.name + " to value: " + buf.obj.state, 3, 0);
+                            log("Client: " + state.udp[id].name + " is setting HA entity: " + buf.obj.name + " to value: " + buf.obj.state, 3, 0);
                             for (let x = 0; x < sort.length; x++) {
                                 if (buf.obj.name) {
                                     if (buf.obj.name.includes(sort[x])) {
@@ -370,24 +339,17 @@ if (isMainThread) {
                         }
                         break;
                     case "register":    // incoming registrations
-                        state.client[id].name = buf.name;
+                        state.udp[id].name = buf.name;
                         log("client " + id + " - " + a.color("white", buf.name) + " - is initiating new connection", 3, 1);
-                        if (buf.obj.ha != undefined && buf.obj.ha.length > 0) {
+                        if (buf.obj.ha != undefined) {
                             log("client " + id + " - " + a.color("white", buf.name) + " - is registering Home Assistant entities", 3, 1);
-                            buf.obj.ha.forEach(element => { state.client[id].ha.push(element) });
+                            buf.obj.ha.forEach(element => { state.udp[id].ha.push(element) });
                         }
-                        if (buf.obj.esp != undefined && buf.obj.esp.length > 0) {
+                        if (buf.obj.esp != undefined) {
                             buf.obj.esp.forEach(element => {
                                 log("client " + id + " - " + a.color("white", buf.name) + " - is registering ESP entity - "
                                     + a.color("green", element), 3, 1);
-                                state.client[id].esp.push(element)
-                            });
-                        }
-                        if (buf.obj.udp != undefined && buf.obj.udp.length > 0) {
-                            buf.obj.udp.forEach(element => {
-                                log("client " + id + " - " + a.color("white", buf.name) + " - is registering UDP entity - "
-                                    + a.color("green", element), 3, 1);
-                                state.client[id].udp.push(element)
+                                state.udp[id].esp.push(element)
                             });
                         }
                         if (buf.obj.telegram != undefined && buf.obj.telegram == true) {
@@ -395,18 +357,18 @@ if (isMainThread) {
                             state.telegram.port = info.port;
                         }
                         break;
-                    case "coreData":    // incoming sensor state from clients
+                    case "coreData":      // incoming sensor state from clients
                         let exist = false;
                         if (buf.obj.register == true) {
-                            log("Client : " + state.client[id].name == undefined ? id : state.client[id].name
+                            log("Client : " + state.udp[id].name == undefined ? id : state.udp[id].name
                                 + " is registering for CoreData updates", 3, 1);
-                            if (state.client[id].coreData == undefined) state.client[id].coreData = [];
+                            if (state.udp[id].coreData == undefined) state.udp[id].coreData = [];
                             if (Array.isArray(buf.obj.name)) {
-                                log("Client : " + state.client[id].name == undefined ? id : state.client[id].name
+                                log("Client : " + state.udp[id].name == undefined ? id : state.udp[id].name
                                     + " is registering CoreData as an array, enumerating", 3, 1);
-                                buf.obj.name.forEach(element => { state.client[id].coreData.push(element); });
+                                buf.obj.name.forEach(element => { state.udp[id].coreData.push(element); });
                             }
-                            else state.client[id].coreData.push(buf.obj.name)
+                            else state.udp[id].coreData.push(buf.obj.name)
                         } else {
                             for (let x = 0; x < state.coreData.length; x++) {
                                 if (state.coreData[x].name == buf.obj.name) {
@@ -416,19 +378,19 @@ if (isMainThread) {
                                 }
                             }
                             if (exist == false) {     // a client is sending sensor data for the first time
-                                log("Client: " + (state.client[id].name == undefined ? id : state.client[id].name)
+                                log("Client: " + (state.udp[id].name == undefined ? id : state.udp[id].name)
                                     + " - is populating CoreData: " + buf.obj.name, 3, 1);
                                 state.coreData.push({ name: buf.obj.name, data: buf.obj.data });
                             }
-                            for (let x = 0; x < state.client.length; x++) {
-                                if (state.client[x].coreData != undefined) {
-                                    for (let y = 0; y < state.client[x].coreData.length; y++) {
-                                        if (state.client[x].coreData[y] == buf.obj.name) {
+                            for (let x = 0; x < state.udp.length; x++) {
+                                if (state.udp[x].coreData != undefined) {
+                                    for (let y = 0; y < state.udp[x].coreData.length; y++) {
+                                        if (state.udp[x].coreData[y] == buf.obj.name) {
                                             //    log("sending coreData: " + buf.obj.name + "  to client: " + x, 3, 0);
                                             udp.send(JSON.stringify({
                                                 type: "coreData",
                                                 obj: { name: buf.obj.name, data: buf.obj.data, }
-                                            }), state.client[x].port);
+                                            }), state.udp[x].port);
                                         }
                                     }
                                 }
@@ -438,30 +400,27 @@ if (isMainThread) {
                     case "log":         // incoming log messages from UDP clients
                         log(buf.obj.message, buf.obj.mod, buf.obj.level, port);
                         break;
-                    case "diag-old":    // incoming UDP client Diag
+                    case "diag":        // incoming UDP client Diag
                         //console.log(buf)
                         // console.log(buf.obj);
-                        let diagBuf = { auto: [], ha: [], esp: [], udp: [], coreData: [] };
-                        if (buf.obj.state.udp != undefined && buf.obj.state.udp.length > 0)
-                            for (let x = 0; x < buf.obj.state.udp.length; x++) {
-                                diagBuf.udp.push({ name: state.client[id].udp[x], state: buf.obj.state.udp[x] });
-                            }
-                        if (buf.obj.state.ha != undefined && buf.obj.state.ha.length > 0)
+                        let diagBuf = { auto: [], ha: [], esp: [], coreData: [] };
+                        if (buf.obj.state.ha)
                             for (let x = 0; x < buf.obj.state.ha.length; x++) {
-                                diagBuf.ha.push({ name: state.client[id].ha[x], state: buf.obj.state.ha[x] });
+                                diagBuf.ha.push({ name: state.udp[id].ha[x], state: buf.obj.state.ha[x] });
                             }
-                        if (buf.obj.state.esp != undefined && buf.obj.state.esp.length > 0)
+                        if (buf.obj.state.esp)
                             for (let x = 0; x < buf.obj.state.esp.length; x++) {
-                                diagBuf.esp.push({ name: state.client[id].esp[x], state: buf.obj.state.esp[x] });
-                            }
-                        if (buf.obj.state.coreData != undefined && buf.obj.state.coreData.length > 0)
-                            for (let x = 0; x < buf.obj.state.coreData.length; x++) {
-                                diagBuf.coreData.push(buf.obj.state.coreData[x]);
+                                diagBuf.esp.push({ name: state.udp[id].esp[x], state: buf.obj.state.esp[x] });
                             }
                         for (let x = 0; x < buf.obj.state.auto.length; x++) {
                             diagBuf.auto.push(buf.obj.state.auto[x]);
                         }
-                        diag[id] = { name: state.client[id].name, ip: state.client[id].ip, state: diagBuf, nv: buf.obj.nv }
+                        if (buf.obj.state.coreData) {
+                            for (let x = 0; x < buf.obj.state.coreData.length; x++) {
+                                diagBuf.coreData.push(buf.obj.state.coreData[x]);
+                            }
+                        }
+                        diag[id] = { name: state.udp[id].name, ip: state.udp[id].ip, state: diagBuf, nv: buf.obj.nv }
                         break;
                     case "telegram":
                         log("receiving telegram data: " + buf.obj, 4, 0);
@@ -490,28 +449,26 @@ if (isMainThread) {
                         break;
                 }
                 function checkUDPreg() {
-                    let registered = false;
-                    for (let x = 0; x < state.client.length; x++) {
-                        if (state.client[x].port == port) {
-                            state.client[x].time = time.epochMil;
+                    for (let x = 0; x < state.udp.length; x++) {
+                        if (state.udp[x].port == port) {
+                            state.udp[x].time = time;
                             id = x;
                             registered = true;
                             break;
                         }
                     }
-                    if (registered == false)
-                        for (let x = 0; x < state.client.length; x++) {
-                            //   console.log("udp port for client: " + x + state.client[x].port);
-                            if (state.client[x].port == undefined) {
-                                log("client " + x + " is being cleared (unpopulated)", 3, 2);
-                                state.client[x] = { name: buf.name, port: port, ip: info.address, time: time.epochMil, ha: [], esp: [], udp: [] };
-                                id = x;
-                                registered = true;
-                                break;
-                            }
+                    for (let x = 0; x < state.udp.length; x++) {
+                        //   console.log("udp port for client: " + x + state.udp[x].port);
+                        if (state.udp[x].port == undefined) {
+                            log("client " + x + " is being cleared (unpopulated)", 3, 2);
+                            state.udp[x] = { name: buf.name, port: port, ip: info.address, time: time, ha: [], esp: [] };
+                            id = x;
+                            registered = true;
+                            break;
                         }
+                    }
                     if (registered == false) {
-                        id = state.client.push({ name: buf.name, port: port, ip: info.address, time: time.epochMil, ha: [], esp: [], udp: [] }) - 1;
+                        id = state.udp.push({ name: buf.name, port: port, ip: info.address, time: time, ha: [], esp: [] }) - 1;
                         //diag.push([]);
                         if (buf.type == "heartBeat") {
                             log("client " + id + " is unrecognized", 3, 2);
@@ -520,11 +477,11 @@ if (isMainThread) {
                     }
                 }
             },
-            watchDog: function () {
-                for (let x = 0; x < state.client.length; x++) {
-                    if (state.client[x].heartBeat == true && time.epochMil - state.client[x].time >= 2000) {
-                        log("Client: " + state.client[x].name + " has crashed!!", 3, 0);
-                        state.client.splice(x, 1);
+            watchDog: function (time) {
+                for (let x = 0; x < state.udp.length; x++) {
+                    if (state.udp[x].heartBeat == true && time - state.udp[x].time >= 2000) {
+                        log("Client: " + state.udp[x].name + " has crashed!!", 3, 0);
+                        state.udp.splice(x, 1);
                         diag.splice(x, 1);
                         log("rescanning HA inputs")
                         for (let x = 0; x < cfg.homeAssistant.length; x++) {  // reset HA Inputs when client restart (crashes)
@@ -535,9 +492,9 @@ if (isMainThread) {
                                 })
                                 .catch(err => { log("fetching failed", 0, 2); });
                         }
-                    } else if (time.epochMil - state.client[x].time >= 10000) {
+                    } else if (time - state.udp[x].time >= 10000) {
                         log("removing stale client id: " + x, 3);
-                        state.client.splice(x, 1);
+                        state.udp.splice(x, 1);
                     }
                 }
             },
@@ -564,10 +521,10 @@ if (isMainThread) {
                             case "state":
                                 //   console.log("incoming state change: ", state.esp[data.esp].entity[data.obj.io]);
                                 state.esp[data.esp].entity[data.obj.io].state = data.obj.state;   // store the state locally 
-                                for (let a = 0; a < state.client.length; a++) {        // scan all the UDP clients and find which one cares about this entity
-                                    for (let b = 0; b < state.client[a].esp.length; b++) {                 // scan each UDP clients registered ESP entity list
-                                        if (state.client[a].esp[b] == state.esp[data.esp].entity[data.obj.io].name) {     // if there's a match, send UDP client the data
-                                            udp.send(JSON.stringify({ type: "espState", obj: { id: b, state: data.obj.state } }), state.client[a].port);
+                                for (let a = 0; a < state.udp.length; a++) {        // scan all the UDP clients and find which one cares about this entity
+                                    for (let b = 0; b < state.udp[a].esp.length; b++) {                 // scan each UDP clients registered ESP entity list
+                                        if (state.udp[a].esp[b] == state.esp[data.esp].entity[data.obj.io].name) {     // if there's a match, send UDP client the data
+                                            udp.send(JSON.stringify({ type: "espState", obj: { id: b, state: data.obj.state } }), state.udp[a].port);
                                             //    console.log("UDP Client: " + a + " esp: " + b + " state: ", data.obj.state);
                                             break;
                                         }
@@ -619,14 +576,14 @@ if (isMainThread) {
                         sys.checkArgs();
                         log("specified Working Directory: " + cfg.workingDir);
                         log("actual working directory: " + workingDir);
-                        if (cfg.esp != undefined && cfg.esp.devices != undefined && cfg.esp.devices.length > 0 && cfg.esp.enable == true) { // load worker threads
+                        if (cfg.esp != undefined && cfg.esp.enable == true) {               // load worker threads
                             cfg.esp.devices.forEach((_, x) => { newWorker(x, true); });
                             function newWorker(x, boot) {
                                 if (boot) log("initialing ESP thread: " + x);
                                 else log("re-initialing crashed ESP thread: " + x);
                                 thread.esp[x] = (new Worker(__filename, { workerData: { esp: x } }));
                                 thread.esp[x].on('message', (data) => sys.ipc(data));
-                                thread.esp[x].on('error', (error) => { log("ESP worker: " + x + " crashed", 0, 3); console.log(error); newWorker(x); });
+                                thread.esp[x].on('error', (error) => { log("ESP worker: " + x + " crashed", 0, 3); newWorker(x); });
                                 thread.esp[x].on('exit', (code) => { log("ESP worker: " + x + " exited", 0, 3); newWorker(x); });
                                 thread.esp[x].postMessage({ type: "config", obj: cfg });
                             }
@@ -641,7 +598,7 @@ if (isMainThread) {
                             express.get("/cfg", function (request, response) { response.send(cfg); });
                             express.get("/perf", function (request, response) { response.send(state.perf); });
                             express.get("/esp", function (request, response) { response.send(state.esp); });
-                            express.get("/udp", function (request, response) { response.send(state.client); });
+                            express.get("/udp", function (request, response) { response.send(state.udp); });
                             express.get("/ha", function (request, response) {
                                 for (let x = 0; x < cfg.homeAssistant.length; x++) {
                                     logs.haInputs[x] = [];
@@ -653,69 +610,12 @@ if (isMainThread) {
                                         .catch(err => { log("fetching failed", 0, 2); });
                                 }
                             });
-                            express.get("/client-old", function (request, response) {
-                                diag = [];
-                                for (let x = 0; x < state.client.length; x++) {
-                                    udp.send(JSON.stringify({ type: "diag" }), state.client[x].port);
-                                    console.log(state.client)
-                                    console.log("getting for client: " + x)
+                            express.get("/client", function (request, response) {
+                                for (let x = 0; x < state.udp.length; x++) {
+                                    udp.send(JSON.stringify({ type: "diag" }), state.udp[x].port);
                                 }
                                 setTimeout(() => { response.send(diag); }, 100);
-                            });
-                            express.get("/all", async function (request, response) {
-                                diag = [];
-                                let diagPromises = state.client.map(client => sendDiagCommand(client, 1000)); // Timeout of 1000ms
-                                try {
-                                    let results = await Promise.all(diagPromises);
-                                    results.forEach(result => {
-                                        if (result.error) console.warn(result.error); // Log if client timed out
-                                        else diag.push(result.data.obj); // Collect successful responses
-                                    });
-                                    response.send(diag);
-                                } catch (error) {
-                                    response.status(500).send(`Error collecting diagnostic data: ${error.message}`);
-                                }
-                            });
-                            express.get("/client-num/:id", async function (request, response) {
-                                const clientId = parseInt(request.params.id, 10);  // Extract client ID from the URL
-                                const client = state.client[clientId];  // Find the client in the array by its index
-                                if (!client) return response.status(404).send({ error: `Client with ID ${clientId} not found` });
-                                try {
-                                    const result = await sendDiagCommand(client, 1000);  // Timeout of 1000ms
-                                    if (result.error) return response.status(408).send(result);
-                                    response.send(result);
-                                } catch (error) {
-                                    response.status(500).send({ error: `Error collecting diagnostic data: ${error.message}` });
-                                }
-                            });
-                            express.get("/client/:name", async function (request, response) {
-                                const clientName = request.params.name;  // Extract client name from the URL
-                                const client = state.client.find(c => c.name === clientName);  // Find the client by name
-                                if (!client) return response.status(404).send({ error: `Client with name "${clientName}" not found` });
-                                try {
-                                    const result = await sendDiagCommand(client, 1000);  // Timeout of 1000ms
-                                    if (result.error) return response.status(408).send(result);
-                                    response.send(result);
-                                } catch (error) {
-                                    response.status(500).send({ error: `Error collecting diagnostic data: ${error.message}` });
-                                }
-                            });
-                            function sendDiagCommand(client, timeout = 1000) {
-                                return new Promise((resolve) => {
-                                    udp.send(JSON.stringify({ type: "diag" }), client.port);
-                                    const timer = setTimeout(() => {
-                                        resolve({ name: client.name, ip: client.ip, error: `Timeout for client: ${client.name}` });
-                                    }, timeout);
-                                    const onDiagResponse = (msg) => {
-                                        let buf = JSON.parse(msg);
-                                        if (buf.clientId === client.id) {
-                                            clearTimeout(timer); // Clear the timeout if response received
-                                            resolve({ client: client.name, state: buf.obj.state, nv: buf.obj.nv });
-                                        }
-                                    };
-                                    udp.once("message", onDiagResponse); // Use `once` to only listen for one response per client
-                                });
-                            }
+                            })
                             serverWeb = express.listen(cfg.webDiagPort, function () { log("diag web server starting on port " + cfg.webDiagPort, 0); });
                         }
                         if (cfg.telegram && cfg.telegram.enable == true) {
@@ -804,13 +704,12 @@ if (isMainThread) {
                         udp.bind(65432, "127.0.0.1");
                         log("stating websocket service...");
                         if (cfg.homeAssistant) ha.ws();
-                        setInterval(() => { sys.watchDog(); }, 1e3);
                         setTimeout(() => log("TW Core just went online", 0, 2), 20e3);
                         break;
                 }
             },
             init: function () { // initialize system volatile memory
-                state = { client: [], udp: [], ha: [], esp: [], perf: { ha: [] }, coreData: [] };
+                state = { udp: [], ha: [], esp: [], perf: { ha: [] }, coreData: [] };
                 diag = [];      // array for each UDP client diag
                 ws = [];
                 hass = [];
