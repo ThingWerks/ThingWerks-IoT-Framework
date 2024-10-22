@@ -2,7 +2,7 @@
     "webDiag": true,
     "webDiagPort": 20000,
     "debugging": true,
-    "workingDir": "/apps/tw/",
+    "workingDir": "/apps/twit/",
     "homeAssistant": [
         {
             "enable": true,
