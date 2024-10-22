@@ -82,7 +82,7 @@ let
             if (coreData("mySharedData").myData == "myValue")               // compare a variable from another TW Client using coreData (after register with coreData shown above), coreData returns "data" variable or object
                 log("sensor on other client is a match", index, 1);         // see list of variables in coreData in  127.0.0.1:20000/diag client/state/coreData (use firefox)
 
-            /*      Time Variables  
+            /*      Time Methods  
                 time.mil            current time milliseconds 
                 time.min            current minute
                 time.sec            current second
