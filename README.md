@@ -8,10 +8,10 @@ Home Assistant has an excellent GUI for PC and mobile devices and is even accept
 
 ## TWIT Principal of Operation
 
-### The Core
+#### The Core
 Acts as a communication hub between Home Assistant, ESPHome, other IoT devices and the TWIT Clients. It has centralized logging of all communications as TWIT client logging.   
 
-### The Client
+#### The Client
 The TWIT Clients consist of the TWIT boiler plate code. You insert your automation code into the designated automation area in JavaScript format. You Follow the programming structure as defined in the TWIT-Client Example https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/client-example.js  and utilize the methods explained there for logging, processing telemetry data, toggling outputs, etc 
 
 
