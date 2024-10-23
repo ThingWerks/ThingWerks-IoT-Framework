@@ -19,4 +19,4 @@ The TWIT Clients consist of the TWIT boiler plate code. You insert your automati
 
 TWIT has mainly been developed to interact with IoT devices either by using the ESPHome API or by connecting to devices via Home Assistant as a gateway for devices like Zigbee, or other communication methods supported by Home Assistant like Zigbee2MQTT, etc. 
 
-General purpose IoT devices such as Arduino, ST Micro Controllers, PIC etc, that cannot or should not be dependent on Home Assistant nor support the ESPHome would connect to TWIT via a the UDP based TWIT API. PLC and other industrial control systems can connect via RS485 or UART IP gateway, UART interface or the UDP API. 
+General purpose IoT devices such as Arduino, ST Micro Controllers, PIC etc, that cannot or should not be dependent on Home Assistant nor support the ESPHome API would connect to TWIT via a the UDP based TWIT API. PLC and other industrial control systems can connect via RS485 or UART IP gateway, UART interface or the UDP API. 
