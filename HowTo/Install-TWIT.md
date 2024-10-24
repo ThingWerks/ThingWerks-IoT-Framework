@@ -29,7 +29,7 @@ To install packages, you must have build-essential: ```sudo apt install build-es
 ### Run and Test Core
 - Its suggested to use Termux for testing Core and Clients side by side
 - dwonload TWIT core.js: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js
-- run the Core.js file using nodemon:  ```nodemon /apps/twit/core.js -w /apps/twit/core.js```
-- install the Core as a service when its working to your liking: ```node /apps/twit/core.js -i```
-- uninstall the service if needed ```node /apps/twit/core.js -u```
+- run the Core.js file using nodemon:  ```sudo nodemon /apps/twit/core.js -w /apps/twit/core.js -w /apps/twit/config.json```
+- install the Core as a service when its working to your liking: ```sudo node /apps/twit/core.js -i```
+- uninstall the service if needed: ```sudo node /apps/twit/core.js -u```
 
