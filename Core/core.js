@@ -1006,31 +1006,31 @@ if (isMainThread) {
                         "WantedBy=multi-user.target\n",
                         "[Service]",
                         "ExecStartPre=/bin/bash -c 'uptime=$(awk \\'{print int($1)}\\' /proc/uptime); if [ $uptime -lt 300 ]; then sleep 45; fi'",
-                        ((journal == false) ? "ExecStartPre=mv /apps/log-tw-core.txt /apps/log-tw-core-last.txt\n " + exec : exec),
-                        ((journal == false) ? "StandardOutput=file:/apps/log-tw-core.txt\n Type=simple" : "Type=simple"),
+                        ((journal == false) ? "ExecStartPre=mv /apps/log-twit-core.txt /apps/log-twit-core-last.txt\n " + exec : exec),
+                        ((journal == false) ? "StandardOutput=file:/apps/log-twit-core.txt\n Type=simple" : "Type=simple"),
                         "User=root",
                         "Group=root",
                         "WorkingDirectory=" + cfg.workingDir,
                         "Restart=on-failure",
                         "RestartSec=5\n",
                     ];
-                    fs.writeFileSync("/etc/systemd/system/tw-core.service", service.join("\n"));
+                    fs.writeFileSync("/etc/systemd/system/twit-core.service", service.join("\n"));
                     // execSync("mkdir /apps/ha -p");
                     // execSync("cp " + process.argv[1] + " /apps/ha/");
                     execSync("systemctl daemon-reload");
-                    execSync("systemctl enable tw-core.service");
-                    execSync("systemctl start tw-core");
-                    execSync("service tw-core status");
+                    execSync("systemctl enable twit-core.service");
+                    execSync("systemctl start twit-core");
+                    execSync("service twit-core status");
                     log("service installed and started");
-                    console.log("type:  journalctl -f -u tw-core  or  tail -f /apps/log-tw-core.txt -n 500");
+                    console.log("type:  journalctl -f -u twit-core  or  tail -f /apps/log-twit-core.txt -n 500");
                     process.exit();
                 }
                 if (process.argv[2] == "-u") {
-                    log("uninstalling TW-Core service...");
-                    execSync("systemctl stop tw-core");
-                    execSync("systemctl disable tw-core.service");
-                    fs.unlinkSync("/etc/systemd/system/tw-core.service");
-                    console.log("TW-Core service uninstalled");
+                    log("uninstalling TWIT-Core service...");
+                    execSync("systemctl stop twit-core");
+                    execSync("systemctl disable twit-core.service");
+                    fs.unlinkSync("/etc/systemd/system/twit-core.service");
+                    console.log("TWIT-Core service uninstalled");
                     process.exit();
                 }
             },
