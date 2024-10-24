@@ -1,23 +1,16 @@
 #!/usr/bin/node
 let
     cfg = {
-        moduleName: "NewClientModule",      // give this NodeJS Client a name for notification
-        telegram: {                         // delete this object if you don't use Telegram
-            password: "password",           // password for telegram registration
-        },
-        ha: [                               // add all your home assistant entities here
-            "myHaEntity",                   // this index order is used for incoming state events and output calls as well (ie state.ha[0] etc...)
+        moduleName: "test",      // give this NodeJS Client a name for notification
+        ha: [
+            "input_boolean.test",                    // add all your home assistant entities here
+            "input_boolean.ttest2",
+            "input_boolean.test3",
+            "input_boolean.test4"
         ],
-        esp: [                              // add all your ESP entities here
-            "myEspEntity",                  // this index order is used for incoming state events and output calls as well (ie state.esp[0] etc...)
-        ],
-        udp: [                              // UDP api is under development
-            "myUdpEntity",
-        ],
-        myAutomationConfigData: {      // create your own area for non-volatile config data for each function if needed
-            test: "a test string",
-            params: true
-        },
+        udp: [
+            //    "test",
+        ]
     },
     automation = [                                                          // create an (index) => {},  array member function for each automation you want to create
         (index) => {                                                        // each automation is ran with every incoming ESPHome or Home Assistant event  
@@ -29,95 +22,16 @@ let
                     name: "Auto-System",                                    // give this automation a name 
                     example: { started: false, step: time.sec }             // initialize an object for each of this automation's devices or features (volatile data) 
                 });
-                setInterval(() => { automation[index](index); }, 1e3);      // set minimum rerun time, otherwise this automation function will only run on ESP and HA push events
-                setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds (in addition to incoming ESP or Home Assistant events)
+                for (let x = 0; x < cfg.ha.length; x++) {
+
+                    em.on(cfg.ha[x], () => console.log(cfg.ha[x] + " toggle: " + state.ha[x]));
+
+                }
                 log("system started", index, 1);                            // log automation start with index number and severity (0: debug, 1:event, 2: warning, 3: error)
-                log(cfg.myAutomationConfigData.test)                        // log some string stored in your non-volatile data
-                em.on("input_button.test", () => button.test());            // create an event emitter for HA or ESP entity that calls a function when data is received
-                em.on("power1-relay1", (newState) => {                      // an event emitter for HA or ESP device that directly performs a function
-                    log("my esp toggle function", index, 1);
-                });
-                send("coreData", { register: true, name: ["myObject", "obj2"] });     // optional - register with core to receive data from other client
+                //                send("coreData", { register: true, name: ["myObject", "obj2"] });     // register with core to receive data from other client
             }
 
 
-            let button = {                                                  // example methods of toggling ESP or Home Assistant entities and sensors
-                test: function () {                                         // example object member function called by emitter
-                    ha.send("switch.fan_exhaust_switch", false);            // different methods to set state of HA and ESP entities
-                    ha.send("input_boolean.fan_auto", true);
-                    ha.send("switch.fan_bed_switch", false);
-                    ha.send(0, false);                                      // you can call by the entity number as listed in the order in cfg.ha
-                    ha.send(2, true);                                       // or you can call my the entity's ID name as listed in Home Assistant entity list
-                    esp.send("myEspEntity", true);                          // call esp device by name or cfg.esp array element number
-                    esp.send(0, true);
-                    ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");    // send sensor data to HA. your sensor name, value, unit of your choice
-                    ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
-                    send("coreData", { name: "myObjectName", data: { myData: "myDataOrObject" } });  // send a variable to the Core for other clients to access
-                    nv.myAutomation = { myVar: "test" };                    // create data structure for your non-volatile data           
-                    log("writing NV data to disk...", index, 1);            // example log event
-                    file.write.nv();       // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directoy
-                }
-            };
-
-            // "cfg" is config data as specified above
-            // "nv" is non-volatile data that is read once during first boot of script and saved whenever you call file.write.nv();
-            // "state" is not "st". 
-            //      "st" is local volatile memory unique to each automation function - to store your automation data
-            //      "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entity states
-            //       state.ha[0]  is  where the incoming data of   cfg.ha[0] entity is stored
-            //       state.esp[0]  is  where the incoming data of   cfg.esp[0] entity is stored
-
-            if (state.ha[0] == true && st.example.started == false) {      // compare a Home Assistant entity with a value in your program - do something
-                log("turning off outside lights", index, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
-                st.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
-                st.example.started = true;                                  // set automation state variable
-            }
-
-            if (state.esp[0] == true && st.example.started == false) {      // compare an ESPHome entity with a value in your program - do something
-                log("turning off outside lights", index, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
-                st.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
-                st.example.started = true;                                  // set automation state variable
-            }
-            // coreData is optional, dont use it if you dont need it
-            if (coreData("mySharedData").myData == "myValue")               // compare a variable from another TW Client using coreData (after register with coreData shown above), coreData returns "data" variable or object
-                log("sensor on other client is a match", index, 1);         // see list of variables in coreData in  127.0.0.1:20000/diag client/state/coreData (use firefox)
-
-            /*      Time Methods  
-                time.mil            current time milliseconds 
-                time.min            current minute
-                time.sec            current second
-                time.hour           current hour
-                time.day            current day of the month (ie 1-30)
-                time.dow            current day of the week (ie 1-7)
-                time.boot           time elapsed from first boot in seconds
-                time.epoch          unix epoch time in seconds
-                time.epochMin       unix epoch time in minutes
-                time.epochMil       unix epoch time in milliseconds
-                time.stamp          current time in string format ie. 10-16 11:07:18.560
-            */
-
-            function timer() { // called once per minute   
-                if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
-                    log("turning on outside lights", index, 1);
-                    ha.send("switch.light_outside_switch", true);
-                }
-                if (time.hour == 22 && time.min == 0) {
-                    log("turning off outside lights", index, 1);
-                    ha.send("switch.light_outside_switch", false);
-                }
-            };
-            /*
-                ---Debugging web server---
-                http://127.0.0.1:20000/client/nameOfClient -----show all volatile and non-volatile memory of a specific client
-                http://127.0.0.1:20000/all -----show all client volatile and non-volatile memory
-                http://127.0.0.1:20000/ha ------show all entities available from Home Assistant
-                http://127.0.0.1:20000/esp -----show all discovered ESP Home modules
-                http://127.0.0.1:20000/tg ------last 100 received Telegram messages
-                http://127.0.0.1:20000/nv ------show all core non-volatile memory
-                http://127.0.0.1:20000/state ---show all core volatile memory
-                http://127.0.0.1:20000/cfg -----show all core configuration
-                http://127.0.0.1:20000/log -----last 500 log messages
-         */
         },
         (index) => {    // add subsequent automations like this
 
@@ -320,7 +234,7 @@ let
             udp = udpClient.createSocket('udp4');
             if (process.argv[2] == "-i") {
                 moduleName = cfg.moduleName.toLowerCase();
-                log("installing TW-Client-" + cfg.moduleName + " service...");
+                log("installing TWIT-Client-" + cfg.moduleName + " service...");
                 let service = [
                     "[Unit]",
                     "Description=",
@@ -338,24 +252,24 @@ let
                     "Restart=on-failure",
                     "RestartSec=10\n",
                 ];
-                fs.writeFileSync("/etc/systemd/system/tw-client-" + moduleName + ".service", service.join("\n"));
+                fs.writeFileSync("/etc/systemd/system/twit-client-" + moduleName + ".service", service.join("\n"));
                 // execSync("mkdir /apps/ha -p");
                 // execSync("cp " + process.argv[1] + " /apps/ha/");
                 execSync("systemctl daemon-reload");
-                execSync("systemctl enable tw-client-" + moduleName + ".service");
-                execSync("systemctl start tw-client-" + moduleName);
-                execSync("service tw-client-" + moduleName + " status");
+                execSync("systemctl enable twit-client-" + moduleName + ".service");
+                execSync("systemctl start twit-client-" + moduleName);
+                execSync("service twit-client-" + moduleName + " status");
                 log("service installed and started");
-                console.log("type: journalctl -fu tw-client-" + moduleName);
+                console.log("type: journalctl -fu twit-client-" + moduleName);
                 process.exit();
             }
             if (process.argv[2] == "-u") {
                 moduleName = cfg.moduleName.toLowerCase();
-                log("uninstalling TW-Client-" + cfg.moduleName + " service...");
-                execSync("systemctl stop tw-client-" + moduleName);
-                execSync("systemctl disable tw-client-" + moduleName + ".service");
-                fs.unlinkSync("/etc/systemd/system/tw-client-" + moduleName + ".service");
-                console.log("TW-Client-" + cfg.moduleName + " service uninstalled");
+                log("uninstalling TWIT-Client-" + cfg.moduleName + " service...");
+                execSync("systemctl stop twit-client-" + moduleName);
+                execSync("systemctl disable twit-client-" + moduleName + ".service");
+                fs.unlinkSync("/etc/systemd/system/twit-client-" + moduleName + ".service");
+                console.log("TWIT-Client-" + cfg.moduleName + " service uninstalled");
                 process.exit();
             }
             file = {
@@ -435,12 +349,24 @@ let
                 case 2:
                     state.online = true;
                     setInterval(() => { send("heartBeat"); time.boot++; }, 1e3);
-                    if (cfg.ha) { send("haFetch"); confirmHA(); }
+                    if (cfg.ha != undefined && cfg.ha.length > 0) {
+                        log("Starting Home Assistant", 1);
+                        send("haFetch");
+                        confirmHA();
+                    }
                     else setTimeout(() => { automation.forEach((func, index) => { func(index) }); }, 1e3);
-                    if (cfg.esp) {
-                        if (!cfg.ha) confirmESP();
+                    if (cfg.esp != undefined && cfg.esp.length > 0) {
+                        log("Starting ESPHome", 1);
+                        if (cfg.ha == undefined && cfg.ha.length < 0) confirmESP();
                         send("espFetch");
                     }
+                    /*
+                    if (cfg.udp != undefined && cfg.udp.length > 0) {
+                        log("Starting UDP", 1);
+                        if (cfg.ha == undefined && cfg.ha.length < 0) confirmESP();
+                        send("espFetch");
+                    }
+                    */
                     function confirmHA() {
                         setTimeout(() => {
                             if (state.onlineHA == false) {
