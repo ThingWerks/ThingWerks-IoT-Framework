@@ -108,7 +108,7 @@ let
             };
             /*
                 ---Debugging web server---
-                http://127.0.0.1:20000/client/nameOfClient -----show all volatile and non-volatile memory of a specific client
+                http://127.0.0.1:20000/client/nameOfClient -----show all volatile and non-volatile memory of a specific TWIT client
                 http://127.0.0.1:20000/all -----show all client volatile and non-volatile memory
                 http://127.0.0.1:20000/ha ------show all entities available from Home Assistant
                 http://127.0.0.1:20000/esp -----show all discovered ESP Home modules
