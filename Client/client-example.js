@@ -208,7 +208,6 @@ let
                             automation.forEach((func, index) => { func(index) });
                             break;
                         case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
-                            state.ha = (buf.obj);
                             log("Core has reconnected to HA, fetching again");
                             send("espFetch");
                             break;
