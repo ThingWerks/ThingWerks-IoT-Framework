@@ -1,4 +1,4 @@
-## TWIT Framerwork Core and Client Installation and Setup
+## TWIT Framework Core and Client Installation and Setup
 
 
 ### Prepare Application Permissions and Directories 
@@ -27,11 +27,11 @@ To install packages, you must have build-essential: ```sudo apt install build-es
 - Add ESPHome Devices (IP and key)
 
 ### Run and Test Core
-- Its suggested to use Termux for testing Core and Clients side by side
-- dwonload TWIT core.js: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js
+- Its suggested to use Tmux for testing Core and Clients side by side
+- download TWIT core.js: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js
 - run the Core.js file using nodemon:  ```sudo nodemon /apps/twit/core.js -w /apps/twit/core.js -w /apps/twit/config.json```
 - install the Core as a service when its working to your liking: 
-  -  Install using Journel Logging ```sudo node /apps/twit/core.js -i -j```
+  -  Install using Journal Logging ```sudo node /apps/twit/core.js -i -j```
   -  Install using Logging File ```sudo node /apps/twit/core.js -i```
   -  View logging file live: ```tail -f /apps/log-twit-core.txt -n 500``` or ```journalctl -fu twit-core```
 - uninstall the service if needed: ```sudo node /apps/twit/core.js -u```
