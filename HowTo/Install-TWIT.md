@@ -33,6 +33,6 @@ To install packages, you must have build-essential: ```sudo apt install build-es
 - install the Core as a service when its working to your liking: 
   -  Install using Journel Logging ```sudo node /apps/twit/core.js -i -j```
   -  Install using Logging File ```sudo node /apps/twit/core.js -i```
-  -  View logging file live: ```tail -f /apps/log-twit-core.txt -n 500``` or ```journalctl -fu twit-client-nameOfClient```
+  -  View logging file live: ```tail -f /apps/log-twit-core.txt -n 500``` or ```journalctl -fu twit-core```
 - uninstall the service if needed: ```sudo node /apps/twit/core.js -u```
 
