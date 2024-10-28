@@ -1,0 +1,95 @@
+esphome:
+  name: cdrrmo-test
+  friendly_name: CDRRMO-Test
+esp32: 
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+api:
+  encryption:
+    key: "myKey"
+ota:
+  platform: esphome
+  password: "myPassword"
+wifi:
+  networks:
+   - ssid: "LG V60"
+    password: "password"
+    hidden: false
+    priority: 22
+  - ssid: "GlobeAtHome_9068E"
+    password: "password"
+    hidden: false
+    priority: 20
+  - ssid: "Ugyon-Sipalay❤️Free-WiFi"
+    hidden: false
+    priority: 10    
+  fast_connect: false
+  output_power: 20dB
+  power_save_mode: none
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Asia/Manila
+    servers:
+     - asia.pool.ntp.org
+     - 1.pool.ntp.org
+     - 2.pool.ntp.org
+wireguard:
+  private_key: myPrivateKey
+  peer_public_key: myPeerPublicKey
+  peer_preshared_key: myPresharedKey
+  peer_endpoint: vpn.server.com
+  peer_port: 51820
+  peer_persistent_keepalive: 25s
+  address: 10.255.0.2
+  netmask: 255.255.255.255
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    id: wifi_signal_sensor
+    accuracy_decimals: 2
+    update_interval: 10s
+  - platform: adc
+    pin: GPIO35
+    attenuation: 12db
+    name: "Pressure Depth"
+    id: pressure_meters
+    accuracy_decimals: 2
+    unit_of_measurement: "m"  # Specify the unit as meters
+    icon: "mdi:ruler"
+    update_interval: 1s 
+    filters:
+      - exponential_moving_average:
+          alpha: 0.3  # Smoothing factor (closer to 1 means less smoothing)
+          send_every: 1  # Send averaged value every 10 readings
+      - lambda: |-
+          const float psi_rating = 5.0;
+          const float zero_calibration = 0.4980;
+          float psi_value = (psi_rating / 4.0) * (x - zero_calibration);
+          float meters = 0.703249 * psi_value;
+          return round(meters * 100.0) / 100.0;
+  - platform: adc
+    pin: GPIO34
+    attenuation: 12db
+    name: "Pressure Raw"
+    accuracy_decimals: 4
+    unit_of_measurement: "v"  # Specify the unit as meters
+    update_interval: 1s 
+    filters:
+      - exponential_moving_average:
+          alpha: 0.03  # Smoothing factor (closer to 1 means less smoothing)
+          send_every: 1  # Send averaged value every 10 readings
+switch:
+  - platform: gpio
+    name: "led"
+    pin:
+      number: 2
+      inverted: false
+  - platform: restart
+    name: "Restart ESP"
+    id: restart_action
+
+
+
