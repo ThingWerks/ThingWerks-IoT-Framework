@@ -1,8 +1,6 @@
 ## TWIT Framework Core Installation and Setup
 
-
-### Prepare Application Permissions and Directories 
-
+### Prepare Application Directories and Permissions 
 ```
 sudo mkdir /apps/twit  -p
 sudo chown $USER /apps -R
