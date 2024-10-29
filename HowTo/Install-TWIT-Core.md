@@ -1,4 +1,4 @@
-## TWIT Framework Core and Client Installation and Setup
+## TWIT Framework Core Installation and Setup
 
 
 ### Prepare Application Permissions and Directories 
