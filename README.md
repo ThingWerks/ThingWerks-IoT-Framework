@@ -9,7 +9,7 @@ Home Assistant has an excellent GUI for PC and mobile devices and is even accept
 ## TWIT Principal of Operation
 
 #### The Core
-Acts as a communication hub between Home Assistant, ESPHome, other IoT devices and the TWIT Clients. It has centralized logging of all device and TWIT Client communication.   
+Acts as a communication hub between Home Assistant, ESPHome, other IoT devices and the TWIT Clients. It has centralized logging of all device and TWIT Clients.   
 ##### How To install TWIT: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT.md
 
 #### The Client
