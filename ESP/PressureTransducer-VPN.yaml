@@ -45,6 +45,11 @@ wireguard:
   peer_persistent_keepalive: 25s
   address: 10.255.0.2
   netmask: 255.255.255.255
+globals:
+  - id: zero_calibration
+    type: float
+    restore_value: true
+    initial_value: '0.4980'  # Initial calibration value
 sensor:
   - platform: wifi_signal
     name: "WiFi Signal"
@@ -57,30 +62,30 @@ sensor:
     name: "Pressure Depth"
     id: pressure_meters
     accuracy_decimals: 2
-    unit_of_measurement: "m"  # Specify the unit as meters
+    unit_of_measurement: "m"
     icon: "mdi:ruler"
     update_interval: 1s 
     filters:
       - exponential_moving_average:
-          alpha: 0.3  # Smoothing factor (closer to 1 means less smoothing)
-          send_every: 1  # Send averaged value every 10 readings
+          alpha: 0.3
+          send_every: 1
       - lambda: |-
           const float psi_rating = 5.0;
-          const float zero_calibration = 0.4980;
-          float psi_value = (psi_rating / 4.0) * (x - zero_calibration);
+          float psi_value = (psi_rating / 4.0) * (x - id(zero_calibration));
           float meters = 0.703249 * psi_value;
           return round(meters * 100.0) / 100.0;
   - platform: adc
     pin: GPIO34
     attenuation: 12db
     name: "Pressure Raw"
+    id: pressure_raw
     accuracy_decimals: 4
-    unit_of_measurement: "v"  # Specify the unit as meters
+    unit_of_measurement: "v"
     update_interval: 1s 
     filters:
       - exponential_moving_average:
-          alpha: 0.03  # Smoothing factor (closer to 1 means less smoothing)
-          send_every: 1  # Send averaged value every 10 readings
+          alpha: 0.08
+          send_every: 1
 switch:
   - platform: gpio
     name: "led"
@@ -90,6 +95,17 @@ switch:
   - platform: restart
     name: "Restart ESP"
     id: restart_action
+  - platform: template
+    name: "Calibrate Pressure Sensor"
+    id: calibration_switch
+    optimistic: true
+    turn_on_action:
+      - lambda: |-
+          float current_raw = id(pressure_raw).state;
+          id(zero_calibration) = current_raw;
+          ESP_LOGD("calibrate", "New zero calibration set to: %.4f", current_raw);
+      - delay: 500ms  
+      - switch.turn_off: calibration_switch  
 
 
 
