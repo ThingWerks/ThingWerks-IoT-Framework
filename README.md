@@ -1,6 +1,5 @@
 # ThingWerks IoT Framework (TWIT)
 
-## Preamble
 The TWIT project was created with the sole purpose of making a highly reliable, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while making use of Home Assistants GUI if desired. 
 
 The TWIT framework is a NodeJS Core-Client system with template-based client-side extensible modules. After years of industrial system development and having few options for a smartphone/web monitoring and control interface, Home Assistant is the perfect addition. Using TWIT with Home Assistant allows for rapid development of systems that look pleasing, are highly functional; this also significantly reduces development costs. 
