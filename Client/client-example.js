@@ -11,7 +11,7 @@ let
         esp: [                              // add all your ESP entities here
             "myEspEntity",                  // this index order is used for incoming state events and output calls as well (ie state.esp[0] etc...)
         ],
-        udp: [                              // UDP api is under development
+        udp: [                              // UDP API is under development
             "myUdpEntity",
         ],
         myAutomationConfigData: {      // create your own area for non-volatile config data for each function if needed
@@ -49,7 +49,7 @@ let
                     ha.send(0, false);                                      // you can call by the entity number as listed in the order in cfg.ha
                     ha.send(2, true);                                       // or you can call my the entity's ID name as listed in Home Assistant entity list
                     esp.send("myEspEntity", true);                          // call esp device by name or cfg.esp array element number
-                    esp.send(0, true);
+                   
                     ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");    // send sensor data to HA. your sensor name, value, unit of your choice
                     ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
                     send("coreData", { name: "myObjectName", data: { myData: "myDataOrObject" } });  // send a variable to the Core for other clients to access
@@ -123,11 +123,11 @@ let
 
         }
     ];
-let
+    let
     user = {        // user configurable block - Telegram 
         telegram: { // enter a case matching your desireable input
             agent: function (msg) {
-                //  log("incoming telegram message: " + msg, 0, 0);
+                //  log("incoming telegram message: " + msg,  0);
                 //  console.log("incoming telegram message: ", msg);
                 if (telegram.auth(msg)) {
                     switch (msg.text) {
@@ -137,14 +137,14 @@ let
                         case "r":
                             bot(msg.from.id, "Test Menu:");
                             setTimeout(() => {      // delay to ensure menu Title gets presented first in Bot channel
-                                telegram.buttonToggle(msg, "t1", "Test Button");
+                                telegram.buttonToggle(msg, "TestToggle", "Test Button");
                                 setTimeout(() => {      // delay to ensure menu Title gets presented first in Bot channel
-                                    telegram.buttonMulti(msg, "t2", "Test Choices", ["test1", "test2", "test3"]);
+                                    telegram.buttonMulti(msg, "TestMenu", "Test Choices", ["test1", "test2", "test3"]);
                                 }, 200);
                             }, 200);
                             break;
                         default:
-                            log("incoming telegram message - unknown command - " + JSON.stringify(msg.text), 0, 0);
+                            log("incoming telegram message - unknown command - " + JSON.stringify(msg.text), 0);
                             break;
                     }
                 }
@@ -153,24 +153,24 @@ let
                 else bot(msg.chat.id, "i don't know you, go away");
 
             },
-            response: function (msg) {  // enter a two character code to identify your callback "case" 
+            callback: function (msg) {  // enter a two character code to identify your callback "case" 
                 let code = msg.data.slice(0, 2);
                 let data = msg.data.slice(2);
                 switch (code) {
-                    case "t1":  // read button input and toggle corresponding function
+                    case "TestToggle":  // read button input and toggle corresponding function
                         if (data == "true") { myFunction(true); break; }
                         if (data == "false") { myFunction(false); break; }
                         break;
-                    case "t2":  // read button input and perform actions
+                    case "TestMenu":  // read button input and perform actions
                         switch (data) {
-                            case "test1": bot.sendMessage(msg.from.id, log("test1", "Telegram", 0)); break;
-                            case "test2": bot.sendMessage(msg.from.id, log("test2", "Telegram", 0)); break;
-                            case "test3": bot.sendMessage(msg.from.id, log("test3", "Telegram", 0)); break;
+                            case "test1": bot(msg.from.id, "Telegram " + data); log("Telegram test1", 0); break;
+                            case "test2": bot(msg.from.id, "Telegram " + data); log("Telegram test2", 0); break;
+                            case "test3": bot(msg.from.id, "Telegram " + data); log("Telegram test3", 0); break;
                         }
                         break;
                 }       // create a function for use with your callback
                 function myFunction(newState) {    // function that reads the callback input and toggles corresponding boolean in Home Assistant
-                    bot.sendMessage(msg.from.id, "Test State: " + newState);
+                    bot(msg.from.id, "Test State: " + newState);
                 }
             },
         },
@@ -240,9 +240,13 @@ let
                             send("diag", { state, nv });
                             break;
                         case "telegram":
+                            // console.log("receiving telegram message: " + buf.obj);
                             switch (buf.obj.class) {
                                 case "agent":
                                     user.telegram.agent(buf.obj.data);
+                                    break;
+                                case "callback":
+                                    user.telegram.callback(buf.obj.data);
                                     break;
                             }
                             break;
@@ -252,14 +256,14 @@ let
             });
         },
         register: function () {
-            log("registering with TW-Core");
+            log("registering with TWIT-Core");
             let obj = {};
             if (cfg.ha != undefined) obj.ha = cfg.ha;
             if (cfg.esp != undefined) obj.esp = cfg.esp;
             if (cfg.telegram != undefined) obj.telegram = true;
             send("register", obj, cfg.moduleName);
-            if (nv.telegram != undefined) {
-                log("registering telegram users with TW-Core");
+            if (cfg.telegram != undefined) {
+                log("registering telegram users with TWIT-Core");
                 for (let x = 0; x < nv.telegram.length; x++) {
                     send("telegram", { class: "sub", id: nv.telegram[x].id });
                 }
@@ -476,8 +480,8 @@ let
         },
     };
 setTimeout(() => { sys.init(); }, 1e3);
-function bot(id, data, obj) { send("telegram", { class: "send", id: id, data: data, obj: obj }) }
-function send(type, obj, name) { udp.send(JSON.stringify({ type: type, obj: obj, name: name }), 65432, '127.0.0.1') }
+function bot(id, data, obj) { send("telegram", { class: "send", id, data, obj }) }
+function send(type, obj, name) { udp.send(JSON.stringify({ type, obj, name }), 65432, '127.0.0.1') }
 function coreData(name) {
     for (let x = 0; x < state.coreData.length; x++) if (state.coreData[x].name == name) return state.coreData[x].data;
     return {};
