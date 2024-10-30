@@ -1,17 +1,5 @@
 # ThingWerks IoT Framework (TWIT)
 
-## Target Use Cases
-
-- Suitable for virtually all industrial automation and control applications requiring >=100ms response time.
-- Infrastructure monitoring and disaster reduction systems 
-- Automated industrial pump operations, water treatment and delivery systems
-- Irrigation control systems with AI and weather integration
-- Solar power and other electrical control applications such as batteries, industrial inverters, transfer switches, power factor correction systems, etc
-- Good for marine applications, fluid management and electrical systems
-- Control lighting and other Home type automations
-
-This system has been tested and used in various commercial and municipal industrial control systems. It is simple and reliable and straightforward. 
-
 ## Preamble
 The TWIT project was created with the sole purpose of making a highly reliable, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while making use of Home Assistants GUI if desired. 
 
@@ -20,6 +8,17 @@ The TWIT framework is a NodeJS Core-Client system with template-based client-sid
 TWIT is also perfect for those who want to use Home Assistant but doesn't want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns and TWIT directly alleviates.
 
 If you want to use Home Assistant with TWIT, DO NOT use Home Assistant Supervised. It is unstable and seriously lags and had noticeable issues with TWIT during development. We only recommend using Home Assistant Core with TWIT.  
+
+## Target Use Cases
+- Suitable for virtually all industrial automation and control applications requiring >=100ms response time.
+- Infrastructure monitoring and disaster reduction systems 
+- Automated industrial pump operations, water treatment and delivery systems
+- Irrigation control systems with AI and weather integration
+- Solar power and other electrical control applications such as batteries, industrial inverters, transfer switches, power factor correction systems, etc
+- Marine applications, fluid management, electrical systems and lighting control
+- Home type automations, lighting control and HVAC 
+
+This system has been tested and used in various commercial and municipal industrial control systems. It is simple, reliable and straightforward. 
 
 ## TWIT Principal of Operation
 
