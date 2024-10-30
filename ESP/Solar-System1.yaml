@@ -1,0 +1,161 @@
+esphome:
+  name: power1
+  friendly_name: Power1
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+api:
+  encryption:
+    key: "myKey"
+ota:
+  platform: esphome
+  password: "myPass"
+#  num_attempts: 3
+#  safe_mode: no
+wifi:
+  networks:
+  - ssid: WiFi-Battery
+  manual_ip:
+    static_ip: 10.20.0.96
+    gateway: 10.20.0.1
+    subnet: 255.255.252.0 
+    dns1: 10.20.0.1
+  output_power: 20dB
+  power_save_mode: none
+captive_portal:
+uart: # setup the two UARTs used by the two pzem-004 modules
+  - rx_pin: GPIO22
+    tx_pin: GPIO16
+    baud_rate: 9600
+    id: uart_1
+  - rx_pin: GPIO21
+    tx_pin: GPIO17
+    baud_rate: 9600
+    id: uart_2
+modbus: # The pzem-004 modules use Modbus over UART
+  - uart_id: uart_1
+    send_wait_time: 200ms
+    id: modbus_1
+  - uart_id: uart_2
+    send_wait_time: 200ms
+    id: modbus_2
+sensor:
+  - platform: wifi_signal # so we can see the wifi signal strength in Home Assistant
+    name: "wifi-power1"
+    update_interval: 60s
+  - platform: pzemac      # Pzem-004 Module for 8kw inverter
+    id: pzemac_1
+    modbus_id: modbus_1
+    current:
+      name: "8kw-Current"
+      accuracy_decimals: 1
+    voltage:
+      name: "8kw-Voltage"
+      accuracy_decimals: 0
+      force_update: true
+    energy:
+      name: "8kw-Energy"
+      unit_of_measurement: Wh
+      device_class: "energy"
+      state_class: "total_increasing"
+    power:
+      name: "8kw-Power"
+      accuracy_decimals: 0
+    frequency:
+      name: "8kw-Hz"
+    power_factor:
+      name: "8kw-PF"
+    update_interval: 1s
+  - platform: pzemac      # Pzem-004 Module for Grid
+    modbus_id: modbus_2
+    id: pzemac_2
+    current:
+      name: "Grid-Current"
+      accuracy_decimals: 1
+    voltage:
+      name: "Grid-Voltage"
+      accuracy_decimals: 0
+    energy:
+      name: "Grid-Energy"
+      unit_of_measurement: Wh
+      device_class: "energy"
+      state_class: "total_increasing"
+    power:
+      name: "Grid-Power"
+      accuracy_decimals: 0
+    update_interval: 1s
+    frequency:
+      name: "Grid-Hz"
+    power_factor:
+      name: "Grid-PF"
+  - platform: adc           # Sensor input for battery pack voltage divider
+    name: "Battery-Voltage"
+    pin: GPIO35
+    id: battery_voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    attenuation: auto
+    force_update: true
+    update_interval: 100ms
+    filters:
+      - sliding_window_moving_average:
+            window_size: 500
+            send_every: 10
+  - platform: adc           # Sensor input for sunlight level 
+    name: "Sun-Level"
+    pin: GPIO32
+    id: sun
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    attenuation: auto
+    force_update: true
+    update_interval: 100ms
+    filters:
+      - sliding_window_moving_average:
+            window_size: 500
+            send_every: 10
+  - platform: adc           # Sensor input for tempurature
+    name: "Temp-Battery"
+    pin: GPIO33
+    id: temp
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    attenuation: auto
+    force_update: true
+    update_interval: 10ms
+    filters:
+      - sliding_window_moving_average:
+            window_size: 100
+            send_every: 100
+switch:
+  - platform: uart
+    uart_id: uart_1
+    name: "8kw-Reset" 
+    data: [0x01, 0x42, 0x80, 0x11]
+  - platform: uart
+    uart_id: uart_2
+    name: "Grid-Reset" 
+    data: [0x01, 0x42, 0x80, 0x11]
+  - platform: gpio
+    name: "power1-relay1"
+    pin:
+      number: 04
+      inverted: false
+  - platform: gpio
+    name: "power1-relay2"
+    pin:
+      number: 18
+      inverted: false
+  - platform: gpio
+    name: "power1-relay3"
+    pin:
+      number: 19
+      inverted: false
+  - platform: gpio
+    name: "power1-relay4"
+    pin:
+      number: 23
+      inverted: false
+    
