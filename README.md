@@ -2,7 +2,7 @@
 
 ## Uses
 
-- Suitable for virtually all industrial automation and control applications needing 100ms or greater response time.
+- Suitable for virtually all industrial automation and control applications requiring >=100ms response time.
 - Infrastructure monitoring and disaster reduction systems 
 - Automated industrial pump operations, water treatment and delivery systems
 - Irrigation control systems with weather AI integration
