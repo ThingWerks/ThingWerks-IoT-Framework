@@ -4,7 +4,7 @@ The TWIT project was created with the sole purpose of making a highly reliable, 
 
 The TWIT framework is a NodeJS Core-Client system with template-based client-side extensible modules. After years of industrial system development and having few options for a smartphone/web monitoring and control interface, Home Assistant is the perfect addition. Using TWIT with Home Assistant allows for rapid development of systems that look pleasing and are highly functional; this also significantly reduces development costs. 
 
-TWIT is also perfect for those who want to use Home Assistant but doesn't want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns and TWIT directly alleviates.
+TWIT is also perfect for those who want to use Home Assistant but dont want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns and TWIT directly alleviates.
 
 If you want to use Home Assistant with TWIT, DO NOT use Home Assistant Supervised. It is unstable and seriously lags and had noticeable issues with TWIT during development. We only recommend using Home Assistant Core with TWIT.  
 
