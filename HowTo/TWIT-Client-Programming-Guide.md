@@ -110,4 +110,4 @@
 ### User / Telegram Code Block:
 - remove the entire `user.telegram` object if you do not use Telegram for TWIT Client automation remote control, this will not effect Telegram notification of Core if you use that.
 - refer to the TWIT Client Telegram guide if you want to use Telegram for TWIT Client remote control.
-- https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Telegram-Guide.md   
+- [Client Telegram guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Telegram-Guide.md) 
