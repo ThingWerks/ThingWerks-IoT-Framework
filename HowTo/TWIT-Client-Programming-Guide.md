@@ -83,34 +83,34 @@
         ],
         },
     ```
-- when an incoming even arrives, it will update the `state.ha[element]` or `state.esp[element]` with the incoming data from HA or ESPHome device.
+- when an incoming event arrives, it will update the `state.ha[element]` or `state.esp[element]` with the incoming data from HA or ESPHome device.
 - the `element` number corresponds with the array position of that same entity in `cfg.ha` or `cfg.esp`
 - you must still create an emitter for each HA or ESP entity if you need specific code to execute upon arrival of an event update.
-  - call function and access state via `state.ha[number]` or `state.esp[number]` with `em.on("input_button.test", () => myFunc.test());`
+  - call a function and directly access the entity state via `state.ha[number]` or `state.esp[number]` with `em.on("input_button.test", () => log("ESP Entity 0 State is: " + state.esp[0], index, 1 );`
   - or call a function and directly pass the new state
   - ```
       em.on("power1-relay1", (newState) => {
         log("my esp toggle function, new state: " + newState, index, 1);
       });
     ```
-- you can check all available HA and ESPHome entities available to the core here:
+- you can check all available HA and ESPHome entities available from the TWIT Core here:
   - use Firefox to show in pretty JSON
   - 127.0.0.1 or the ip address of the system running TWIT Core
   - http://127.0,0.1:20000/esp
   - http://127.0.0.1:20000/ha
-- send output to ESP or HA entity with
-  - identifying with `cfg.ha` or `cfg.esp` array position: `ha.send(0, false);` or `esp.send(0, true);`
-  - identifying with entity name `ha.send("switch.fan_exhaust_switch", false);` or `esp.send("myEspEntity", true);`
+- send output to ESP or HA entity like so:
+  - identifying entity by using the `cfg.ha` or `cfg.esp` array position: `ha.send(0, false);` or `esp.send(0, true);`
+  - identifying by entity name: `ha.send("switch.fan_exhaust_switch", false);` or `esp.send("myEspEntity", true);`
   - send sensor data or float to Home Assistant
    - `ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");`
-   - use array position or entity name
+   - use `cfg` object array position or entity name
    - if the sensor doesn't exist in HA, its will be created with first send
    - `ha.send("entityName",floatOrValue, "unitOfMeasurement")`
 ### Home Assistant Helpers
-- Create Helpers in Home Assistant to control or manage your automations or process.
-- "Toggle" or `input_boolean` is useful with emitters (example given) to control operational states of your automations.
+- Create Helpers in Home Assistant to control or manage your automations or processes.
+- "Toggle" or `input_boolean` is useful with emitters (example previously given) to control operational states of your automations.
 - "Number" or `input_number` is useful to set or adjust automation parameters.
-- "Button" or `input_button` is useful to for initiating processes inside your automation, use emiters or read states.
+- "Button" or `input_button` is useful to for initiating processes inside your automation, use emiters or read entity state directly.
 ### System Logging
 - to generate a log event, call the log function `log("system started", index, 1);`
  - `index` must not be changed
