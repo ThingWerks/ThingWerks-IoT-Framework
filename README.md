@@ -18,7 +18,7 @@ If you want to use Home Assistant with TWIT, DO NOT use Home Assistant Supervise
 
 This system has been tested and used in various commercial and municipal industrial control systems. It is simple, reliable and straightforward. 
 
-## TWIT Principal of Operation
+## Principal of Operation
 
 #### The Core
 Acts as a communication hub between PLCs, IoT and ESPHome devices, Home Assistant, and the TWIT Automation Clients. It has centralized communication, logging and notification of all devices and TWIT Clients.   
