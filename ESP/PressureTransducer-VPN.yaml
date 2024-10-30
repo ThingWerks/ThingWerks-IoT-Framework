@@ -64,11 +64,11 @@ sensor:
     accuracy_decimals: 2
     unit_of_measurement: "m"
     icon: "mdi:ruler"
-    update_interval: 1s 
+    update_interval: 100ms 
     filters:
-      - exponential_moving_average:
-          alpha: 0.3
-          send_every: 1
+      - median:
+          window_size: 25
+          send_every: 10
       - lambda: |-
           const float psi_rating = 5.0;
           float psi_value = (psi_rating / 4.0) * (x - id(zero_calibration));
@@ -81,11 +81,11 @@ sensor:
     id: pressure_raw
     accuracy_decimals: 4
     unit_of_measurement: "v"
-    update_interval: 1s 
+    update_interval: 100ms
     filters:
-      - exponential_moving_average:
-          alpha: 0.08
-          send_every: 1
+      - median:
+          window_size: 50
+          send_every: 10
 switch:
   - platform: gpio
     name: "led"
@@ -106,5 +106,3 @@ switch:
           ESP_LOGD("calibrate", "New zero calibration set to: %.4f", current_raw);
       - delay: 500ms  
       - switch.turn_off: calibration_switch  
-
-
