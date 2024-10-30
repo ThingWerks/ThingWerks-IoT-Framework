@@ -12,7 +12,7 @@ If you want to use Home Assistant with TWIT, DO NOT use Home Assistant Supervise
 - Infrastructure monitoring and disaster reduction systems 
 - Automated industrial pump operations, water treatment and delivery systems
 - Irrigation control systems with AI and weather integration
-- Solar power and other electrical control applications such as batteries systems, axillary power, generators, industrial inverters, transfer switches, power factor correction systems, etc
+- Solar power and other electrical control applications such as battery systems, axillary power, generators, industrial inverters, transfer switches, power factor correction systems, etc
 - Marine applications, fluid management, electrical systems and lighting control
 - Home type automations, lighting control and HVAC 
 
