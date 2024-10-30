@@ -1,10 +1,9 @@
 # ThingWerks IoT Framework (TWIT)
-
 The TWIT project was created with the sole purpose of making a highly reliable, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while having the ability to leverage Home Assistants for its Graphcal Interface. 
 
 The TWIT framework is a NodeJS Core-Client system with template-based client-side extensible modules. After years of industrial system development and having few options for a smartphone/web monitoring and control interface, Home Assistant is the perfect addition. Using TWIT with Home Assistant allows for rapid development of systems that look pleasing and are highly functional; this also significantly reduces development costs. 
 
-TWIT is also perfect for those who want to use Home Assistant but dont want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns and TWIT directly alleviates.
+TWIT is also perfect for those who want to use Home Assistant but dont want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns that TWIT directly alleviates.
 
 If you want to use Home Assistant with TWIT, DO NOT use Home Assistant Supervised. It is unstable and seriously lags and had noticeable issues with TWIT during development. We only recommend using Home Assistant Core with TWIT.  
 
@@ -33,17 +32,18 @@ The TWIT Clients consist of the TWIT boiler plate code. You insert your automati
 ##### Client Installation Guide: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Client.md
 ##### Client Example:  https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client-example.js
 ##### Client Programming Guide: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Programming-Guide.md 
-##### Telegram Remote Access Guide: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Telegram-Guide.md
+##### Telegram Remote Control Guide: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Telegram-Guide.md
 
 ## Features
-- Supports multiple Home Assistant servers and can synchronize them
 - Powerful logging, debugging and notification
 - immune to network, power and connectivity interruptions 
-- Extremely lightweight an easy to start, setup your own automation in a few minutes
+- Extremely lightweight an easy to start; setup your own automation in a few minutes
 - Has been developed with high reliability and compartmentalization
+- Supports multiple Home Assistant servers and can synchronize them
 
 ## IoT Device Integration
+PLC and other industrial control systems can connect via RS485 or UART IP gateway, UART interface or the UDP API. General purpose IoT devices such as ST Micro Controllers, PIC, Arduino etc, connect to TWIT via a the UDP based TWIT API.
 
 TWIT has mainly been developed to interact with IoT devices either by using the ESPHome API or by connecting to devices via Home Assistant as a gateway for devices like Zigbee, or other communication methods supported by Home Assistant like Zigbee2MQTT, etc. 
 
-General purpose IoT devices such as Arduino, ST Micro Controllers, PIC etc, that cannot or should not be dependent on Home Assistant nor support the ESPHome API would connect to TWIT via a the UDP based TWIT API. PLC and other industrial control systems can connect via RS485 or UART IP gateway, UART interface or the UDP API. 
+
