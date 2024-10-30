@@ -4,7 +4,7 @@
 
 - Suitable for virtually all industrial automation and control applications needing 100ms or greater response time.
 - Infrastructure monitoring and disaster reduction systems 
-- Automate industrial pump operations, water treatment and delivery systems
+- Automated industrial pump operations, water treatment and delivery systems
 - Irrigation control systems with weather AI integration
 - Solar power and other electrical control applications such as batteries, transfer switches, power factor correction systems, etc
 - Good for marine applications, fluid management and electrical systems
