@@ -8,16 +8,16 @@ cd /apps/twit
 ```
 
 ### Install Packages: 
-To install packages, you must have build-essential: ```sudo apt install build-essential```
-- ```npm i express```
-- ```npm i websocket```
-- ```sudo npm i nodemon -g``` Used for service 
+To install packages, you must have build-essential: `sudo apt install build-essential`
+- needed only if `webDiag` is enables - `npm i express`
+- `sudo npm i nodemon -g` Used for service 
 #### For Telegram Notification:
-- ```npm i node-telegram-bot-api```
+- `npm i node-telegram-bot-api`
 #### For Home Assistant Integration
-- ```npm i homeassistant```
+- `npm i homeassistant`
+- `npm i websocket`
 #### For ESPHome Integration
-- ```npm i @2colors/esphome-native-api```
+- `npm i @2colors/esphome-native-api`
 
 ### Setup Core config.json File: 
 - [Get config.json template](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/confg.json)
