@@ -57,7 +57,7 @@
     ```
 - every automation is called with each incoming HA or ESP event. If your TWIT Client has no HA or ESP entities or you want to additionally call your automation at a specific interval, call `setInterval(() => { automation[index](index); }, 1e3);` inside the `init()` function.
 ### Non-Volatile Memory
-- `nv` is the global object for non-V memory
+- `nv` is the global object for non-volatile memory
 - the physical location of this JSON file is `/apps/twit/nv-nameOfClient.json`,
 - the NV JSON file is read once when the TWIT Client Boots. If it doesn't exist, its created automatically.
 - the NV JSON file must be in the same folder as the TWIT Client
