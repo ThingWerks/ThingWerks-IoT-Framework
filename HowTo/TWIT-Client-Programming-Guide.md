@@ -34,7 +34,7 @@
     },
     ```
 - call `init()` function and assign `st` for volatile memory for each automation.
-  - the `init()` function i called once at the first start of each automation by the `if (!state.auto[index]) init();` call.
+  - the `init()` function is called once at the first start of each automation by the `if (!state.auto[index]) init();` call.
   - you must use `state.auto.push({ })` inside the `init()` function to create all the V mem/variables needed for this automation.
   - inside the `state.auto.push({ })` you must have at least the `name:` property, the rest is up to your design.
   - later in your automation, you will access your variable by using `st` ie `st.example.started`
