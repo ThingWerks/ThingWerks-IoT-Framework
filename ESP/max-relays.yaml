@@ -1,0 +1,116 @@
+esphome:
+  name: esp-relay-test
+  friendly_name: ESP-Relay-Test
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Avoid Pins: 0, 2, 5, 15,12,
+# non GPO pins 34-39
+# 15 relays max
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "myKey"
+
+ota:
+  platform: esphome
+  password: "myPass"
+
+wifi:
+  networks:
+  - ssid: WiFi-LTH
+  - ssid: WiFi-Couryard
+  - ssid: "Ugyon-Sipalay❤️Free-WiFi"
+  manual_ip:
+    static_ip: 10.10.1.245
+    gateway: 10.10.0.1
+    subnet: 255.255.224.0 
+  output_power: 20dB
+  power_save_mode: none
+switch:
+  - platform: gpio
+    name: "led"
+    pin:
+      number: 2
+      inverted: false
+  - platform: gpio
+    name: "lth-relay1"
+    pin:
+      number: 4
+      inverted: false
+  - platform: gpio
+    name: "lth-relay2"
+    pin:
+      number: 16
+      inverted: false
+  - platform: gpio
+    name: "lth-relay3"
+    pin:
+      number: 17
+      inverted: false
+  - platform: gpio
+    name: "lth-relay4"
+    pin:
+      number: 18
+      inverted: false
+  - platform: gpio
+    name: "lth-relay5"
+    pin:
+      number: 19
+      inverted: false
+  - platform: gpio
+    name: "lth-relay6"
+    pin:
+      number: 21
+      inverted: false
+  - platform: gpio
+    name: "lth-relay7"
+    pin:
+      number: 22
+      inverted: false
+  - platform: gpio
+    name: "lth-relay8"
+    pin:
+      number: 23
+      inverted: false
+  - platform: gpio
+    name: "lth-relay9"
+    pin:
+      number: 13
+      inverted: false
+  - platform: gpio
+    name: "lth-relay10"
+    pin:
+      number: 14
+      inverted: false
+  - platform: gpio
+    name: "lth-relay11"
+    pin:
+      number: 25
+      inverted: false
+  - platform: gpio
+    name: "lth-relay12"
+    pin:
+      number: 26
+      inverted: false
+  - platform: gpio
+    name: "lth-relay13"
+    pin:
+      number: 27
+      inverted: false
+  - platform: gpio
+    name: "lth-relay14"
+    pin:
+      number: 32
+      inverted: false
+  - platform: gpio
+    name: "lth-relay15"
+    pin:
+      number: 33
+      inverted: false
+
