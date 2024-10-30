@@ -1,0 +1,86 @@
+esphome:
+  name: lth
+  friendly_name: LTH
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+api:
+  encryption:
+    key: "myKey"
+ota:
+  platform: esphome
+  password: "myPass"
+wifi:
+  networks:
+  - ssid: WiFi-LTH-Inside
+  manual_ip:
+    static_ip: 10.20.0.98
+    gateway: 10.20.0.1
+    subnet: 255.255.252.0 
+    dns1: 10.20.0.1
+captive_portal:
+sensor:
+  - platform: adc
+    name: "lth-tank"
+    pin: GPIO35
+    attenuation: 11db
+    filters:
+      - median:
+            window_size: 60
+            send_every: 1
+    accuracy_decimals: 3
+    update_interval: 1s
+  - platform: wifi_signal
+    name: "wifi-lth"
+    update_interval: 60s
+  - platform: pulse_counter     # example flow meter
+    name: "Flow-LTH-Submersible"
+    pin: GPIO34
+    update_interval: 1s
+    filters:
+    - lambda: return x;
+    unit_of_measurement: "pps"  # send data as pulses per second or hz
+    accuracy_decimals:  0 
+switch:
+  - platform: gpio
+    name: "lth-relay1"
+    pin:
+      number: 4
+      inverted: false
+  - platform: gpio
+    name: "lth-relay2"
+    pin:
+      number: 16
+      inverted: false
+  - platform: gpio
+    name: "lth-relay3"
+    pin:
+      number: 17
+      inverted: false
+  - platform: gpio
+    name: "lth-relay4"
+    pin:
+      number: 18
+      inverted: false
+  - platform: gpio
+    name: "lth-relay5"
+    pin:
+      number: 19
+      inverted: false
+  - platform: gpio
+    name: "lth-relay6"
+    pin:
+      number: 21
+      inverted: false
+  - platform: gpio
+    name: "lth-relay7"
+    pin:
+      number: 22
+      inverted: false
+  - platform: gpio
+    name: "lth-relay8"
+    pin:
+      number: 23
+      inverted: false
