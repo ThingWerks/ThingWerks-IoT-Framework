@@ -42,8 +42,16 @@ The TWIT Clients consist of the TWIT boiler plate code. You insert your automati
 - Supports multiple Home Assistant servers and can synchronize them
 
 ## IoT Device Integration
+
 PLC and other industrial control systems can connect via RS485 or UART IP gateway, UART interface or the UDP API. General purpose IoT devices such as ST Micro Controllers, PIC, Arduino etc, connect to TWIT via a the UDP based TWIT API.
 
 TWIT has mainly been developed to interact with IoT devices either by using the ESPHome API or by connecting to devices via Home Assistant as a gateway for devices like Zigbee, or other communication methods supported by Home Assistant like Zigbee2MQTT, etc. 
 
+## Example Industrial Systems
 
+### Solar Power Station
+
+<img src="https://github.com/user-attachments/assets/264c2f16-12da-41d9-bb0f-9260f0d84ce4" width="300">
+<img src="https://github.com/user-attachments/assets/0b80fde8-d1a7-4d58-98ca-a836f914912e" width="300">
+<img src="https://github.com/user-attachments/assets/d5f32293-0004-486a-8dee-9622bf420f2a" width="300">
+<img src="https://github.com/user-attachments/assets/6d3d4195-6c3c-49d4-a901-f01e1f75553c" width="1200">
