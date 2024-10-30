@@ -14,11 +14,11 @@ This system has been tested and used in various commercial and municipal industr
 
 ## Preamble
 
-TWIT is Core-Client framework with template-based client-side extensible modules. This project was created after extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns. TWIT is a standalone industrial control and IoT automation framework and has no reliance on Home Assistant, though it integrates seamlessly with Home Assistant and ESPHome. 
+TWIT is Core-Client framework with template-based client-side extensible modules written for NodeJS. After years of industrial systems development and having few options for a smartphone/web monitoring and control interface, Home Assistant is the obvious choice. 
 
-Home Assistant has an excellent GUI for PC and mobile devices and is a completely acceptable monitoring and supplemental control interface for industrial systems however it cannot be relied on for automation and logic. Data processing and manipulation, state control and automation logic are far better suited in NodeJS and specialized frameworks such as TWIT.
+The TWIT project was created with the sole purpose of making a highly reliable, standalone, general purpose industrial automation framework that can integrate with PLCs, IoT devices and general purpose microcontrollers while making use of Home Assistants GUI without having any reliance on it. 
 
-If you are going to use TWIT with Home Assistant for industrial automation, DO NOT use Home Assistant Supervised. It is unstable and seriously lags and had noticeable issues with TWIT during development. We only recommend using Home Assistant Core with TWIT.  
+TWIT is also perfect for someone who wants to use Home Assistant but doesnt want to rely on it for automation or if you prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns. If you wantt to use Home Assistant with TWIT, DO NOT use Home Assistant Supervised. It is unstable and seriously lags and had noticeable issues with TWIT during development. We only recommend using Home Assistant Core with TWIT.  
 
 ## TWIT Principal of Operation
 
