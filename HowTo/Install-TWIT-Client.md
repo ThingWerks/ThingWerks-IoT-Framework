@@ -10,7 +10,7 @@ cd /apps/twit
 - [download TWIT client-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client-example.js)
 - [Review the TWIT Client Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Programming-Guide)
 - Edit the client-example.js and remove the automation example.
-- Enter in all of the ESPHome or Home Assistant entity names into your new TWIT client.js file (ie, client-myCleitnName.js) and save into ```/apps/twit/```
+- Enter in all of the ESPHome or Home Assistant entity names into your new TWIT client.js file (ie, `client-myCleitnName.js`) and save into ```/apps/twit/```
 
 ```
 let
