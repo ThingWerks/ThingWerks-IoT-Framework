@@ -1,7 +1,7 @@
 ## TWIT Client Programming Guide
 
 ### Automation Template Setup
-- Configure module name, Home Assistant and ESPHome entities.
+- Configure module name, Home Assistant and ESPHome entities within the `cfg` object.
   - ```
     let
     cfg = {
