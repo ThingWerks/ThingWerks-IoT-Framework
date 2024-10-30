@@ -49,9 +49,11 @@ TWIT has mainly been developed to interact with IoT devices either by using the 
 
 ## Example Industrial Systems
 
-### Solar Power Station
+### Industrial System Examples
 
 <img src="https://github.com/user-attachments/assets/264c2f16-12da-41d9-bb0f-9260f0d84ce4" width="300">
 <img src="https://github.com/user-attachments/assets/0b80fde8-d1a7-4d58-98ca-a836f914912e" width="300">
 <img src="https://github.com/user-attachments/assets/d5f32293-0004-486a-8dee-9622bf420f2a" width="300">
 <img src="https://github.com/user-attachments/assets/6d3d4195-6c3c-49d4-a901-f01e1f75553c" width="1200">
+<img src="https://github.com/user-attachments/assets/50aceccb-7a6b-4e8d-a04a-ec38846355c9" width="1200">
+
