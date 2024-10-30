@@ -113,9 +113,10 @@
 - "Button" or `input_button` is useful to for initiating processes inside your automation, use emiters or read entity state directly.
 ### System Logging
 - to generate a log event, call the log function `log("system started", index, 1);`
- - `index` must not be changed
+ - `index` must not be changed.
  - the number after `index` is the logging level. 0 = debug, 1 = event, 2 = warning, 3 = error
- - this will be logged to the console, to the TWIT Core console/log and to Telegram if configured in the Core
+ - if logging level is omitted, its assumed to be an event.
+ - this will be logged to the console, to the TWIT Core console/log and to Telegram if configured in the Core and matches the logging level specified in the Core `config.json` file.
 ### Debugging
 - you can view all automation, HA and ESP entity and Core states using the web debugger. You must use FireFox for pretty JSON.
 - 127.0.0.1 or the IP of TWIT Core
