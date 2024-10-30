@@ -35,7 +35,8 @@ The TWIT Clients consist of the TWIT boiler plate code. You insert your automati
 ##### Telegram Remote Control Guide: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Telegram-Guide.md
 
 ## Features
-- Powerful logging, debugging and notification
+- Centralized logging, debugging and notification
+- Remote control and notification with Telegram
 - immune to network, power and connectivity interruptions 
 - Extremely lightweight an easy to start; setup your own automation in a few minutes
 - Has been developed with high reliability and compartmentalization
