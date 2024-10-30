@@ -1,9 +1,9 @@
 # ThingWerks IoT Framework (TWIT)
-The TWIT project was created with the sole purpose of making a highly reliable, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while having the ability to leverage Home Assistant for its Graphcal Interface. 
+The TWIT project was created with the sole purpose of making a highly reliable, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while having the ability to leverage Home Assistant for its Graphical Interface. 
 
 The TWIT framework is a NodeJS Core-Client system with template-based client-side extensible modules. After years of industrial system development and having few options for a smartphone/web monitoring and control interface, Home Assistant is the perfect addition. Using TWIT with Home Assistant allows for rapid development of systems that look pleasing and are highly functional; this also significantly reduces development costs. 
 
-TWIT is also perfect for those who want to use Home Assistant but dont want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns that TWIT directly alleviates.
+TWIT is also perfect for those who want to use Home Assistant but don't want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns that TWIT directly alleviates.
 
 If you want to use Home Assistant with TWIT, DO NOT use Home Assistant Supervised. It is unstable and seriously lags and had noticeable issues with TWIT during development. We only recommend using Home Assistant Core with TWIT.  
 
@@ -40,6 +40,7 @@ The TWIT Clients consist of the TWIT boiler plate code. You insert your automati
 - Extremely lightweight an easy to start; setup your own automation in a few minutes
 - Has been developed with high reliability and compartmentalization
 - Supports multiple Home Assistant servers and can synchronize them
+- Cross-integrate multiple systems, for example, solar system influencing pump operations 
 
 ## IoT Device Integration
 
