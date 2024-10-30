@@ -86,7 +86,7 @@
     ```
 - when an incoming even arrives, it will update the `state.ha[element]` or `state.esp[element]` with the incoming data from HA or ESPHome device.
 - the `element` number corresponds with the array position of that same entity in `cfg.ha` or `cfg.esp`
-- you must still create an emitter for each HA or ESP entity if you need specific core to execute upon arrival of an event update.
+- you must still create an emitter for each HA or ESP entity if you need specific code to execute upon arrival of an event update.
   - call function and access state via `state.ha[number]` or `state.esp[number]` with `em.on("input_button.test", () => myFunc.test());`
   - or call a function and directly pass the new state
   - ```
