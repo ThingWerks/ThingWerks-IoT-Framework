@@ -49,7 +49,7 @@ let
                     ha.send(0, false);                                      // you can call by the entity number as listed in the order in cfg.ha
                     ha.send(2, true);                                       // or you can call my the entity's ID name as listed in Home Assistant entity list
                     esp.send("myEspEntity", true);                          // call esp device by name or cfg.esp array element number
-                   
+                    esp.send(0, true);
                     ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");    // send sensor data to HA. your sensor name, value, unit of your choice
                     ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
                     send("coreData", { name: "myObjectName", data: { myData: "myDataOrObject" } });  // send a variable to the Core for other clients to access
