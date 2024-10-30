@@ -1,0 +1,145 @@
+esphome:
+  name: power2
+  friendly_name: Power2
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+api:
+  encryption:
+    key: "myKey"
+ota:
+  platform: esphome
+  password: "myPass"
+wifi:
+  networks:
+  - ssid: WiFi-Battery
+  manual_ip:
+    static_ip: 10.20.0.95
+    gateway: 10.20.0.1
+    subnet: 255.255.252.0 
+    dns1: 10.20.0.1
+  output_power: 20dB
+  power_save_mode: none
+uart:
+  - rx_pin: 16
+    tx_pin: 17
+    baud_rate: 9600
+    id: uart_1
+  - rx_pin: 18
+    tx_pin: 19
+    baud_rate: 9600
+    id: uart_2
+    debug:
+      direction: BOTH
+      dummy_receiver: false
+modbus:
+  - uart_id: uart_1
+    send_wait_time: 200ms
+    id: modbus_1
+  - uart_id: uart_2
+    send_wait_time: 200ms
+    id: modbus_2
+modbus_controller:
+  command_throttle: 0ms
+  id: modbus_ctrl1
+  update_interval: 100ms
+  address: 0x1
+  modbus_id: modbus_2
+i2c:
+  sda: GPIO27
+  scl: GPIO14
+  scan: true
+  id: bus_a
+ads1115:
+  - address: 0x48
+    continuous_mode: true
+sensor:
+  - platform: wifi_signal
+    name: "wifi-power2"
+    update_interval: 60s
+  - platform: ads1115
+    multiplexer: 'A2_GND'
+    gain: 6.144
+    name: "Sunlight-PV"
+    update_interval: 500ms
+    filters:
+      - exponential_moving_average:
+          alpha: 0.02  # Adjust this value based on testing
+      - throttle: 1s
+    force_update: true
+  - platform: ads1115
+    multiplexer: 'A1_A3'
+    gain: 6.144
+    name: "Battery-Current-ADS1115"
+    update_interval: 100ms
+    filters:
+      - exponential_moving_average:
+          alpha: 0.02  # Adjust this value based on testing
+      - throttle: 1s
+    force_update: true
+  - platform: modbus_controller
+    modbus_controller_id: modbus_ctrl1
+    name: "Battery-Current3"
+    register_type: holding
+    address: 0x0056
+    value_type: U_WORD
+    accuracy_decimals: 1
+    unit_of_measurement: A
+    force_update: true
+    filters:
+      - exponential_moving_average:
+          alpha: 0.1  # Adjust this value based on testing 
+      - throttle: 1s
+  - platform: pzemdc
+    modbus_id: modbus_2
+    current:
+      name: "Battery-Current"
+    voltage:
+      name: "Battery-Voltage2"
+      accuracy_decimals: 2
+      filters:
+      - sliding_window_moving_average:
+          window_size: 100
+          send_every: 2 
+    power:
+      name: "Battery-Power"
+      accuracy_decimals: 0
+    energy:
+      name: "Battery-Energy"
+      unit_of_measurement: Wh
+      device_class: "energy"
+      state_class: "total_increasing"
+    update_interval: 1s
+  - platform: pzemac
+    modbus_id: modbus_1
+    id: pzemac_3
+    current:
+      name: "10kw-Current"
+      accuracy_decimals: 1
+    voltage:
+      name: "10kw-Voltage"
+      accuracy_decimals: 0
+    energy:
+      name: "10kw-Energy"
+      unit_of_measurement: Wh
+      device_class: "energy"
+      state_class: "total_increasing"
+    power:
+      name: "10kw-Power"
+      accuracy_decimals: 0
+    frequency:
+      name: "10kw-Hz"
+    power_factor:
+      name: "10kw-PF"
+    update_interval: 1s
+switch:
+  - platform: uart
+    uart_id: uart_1
+    name: "10kw-Reset" 
+    data: [0x01, 0x42, 0x80, 0x11]
+  - platform: uart
+    uart_id: uart_2
+    name: "Battery-Reset" 
+    data: [0x01, 0x42, 0x80, 0x11]
