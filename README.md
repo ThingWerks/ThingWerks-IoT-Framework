@@ -30,6 +30,7 @@ Acts as a communication hub between PLCs, IoT and ESPHome devices, Home Assistan
 The TWIT Clients consist of the TWIT boiler plate code. You insert your automation code into the designated automation area in JavaScript format. You Follow the programming structure as defined in the TWIT-Client Example and utilize the methods explained there for logging, processing telemetry data, toggling outputs, etc.
 
 - [Client Example](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client-example.js)
+- [Client Template](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client-blank.js)
 - [Client Installation Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Client.md)
 - [Client Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Programming-Guide.md)
 - [Telegram Remote Control Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Telegram-Guide.md)
