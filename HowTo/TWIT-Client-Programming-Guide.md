@@ -64,7 +64,6 @@
 - create any objects you want inside the `nv` object like `nv.myAutomationData = {data: 100.2}`
 - write this data with `file.write.nv();`
 - data uses safe write method, a backup of the existing data is always created like `/apps/twit/nv-nameOfClient-bak.json` in the `/apps/twit` folder.
--  is non-volatile data that is read once during first boot of script and saved whenever you call file.write.nv();
 ### Interacting with Home Assistant and ESPHome Entities
 - specifying the Home Assistant or ESP entity names in `cfg` object means this TWIT Client will receive events for these entities.
   - ```
