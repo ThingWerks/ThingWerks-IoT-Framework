@@ -7,8 +7,8 @@ esp32:
   framework:
     type: arduino
 
-# Avoid Pins: 0, 2, 5, 15,12,
-# non GPO pins 34-39
+# Avoid Pins: 0, 2, 5, 15, 12
+# non GPIO pins 34-39
 # 15 relays max
 logger:
 
