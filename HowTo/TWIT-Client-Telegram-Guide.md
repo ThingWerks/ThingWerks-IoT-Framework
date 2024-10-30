@@ -9,7 +9,7 @@
             password: "password",           // password for telegram registration
         },
   ```
-- Add Telegram example code block into the User Object in TWIT Client: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/telegram-example.js
+- Add [Telegram example](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/telegram-example.js) code block into the User Object in TWIT Client: 
 
 ### Usage Guidelines
 #### Accessing Data
