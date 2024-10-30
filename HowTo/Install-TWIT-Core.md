@@ -9,7 +9,7 @@ cd /apps/twit
 
 ### Install Packages: 
 To install packages, you must have build-essential: `sudo apt install build-essential`
-- needed only if `webDiag` is enables - `npm i express`
+- `npm i express` - needed only if `cfg.webDiag` is enabled
 - `sudo npm i nodemon -g` Used for service 
 #### For Telegram Notification:
 - `npm i node-telegram-bot-api`
