@@ -22,6 +22,17 @@
         (index) => { }  // automation 2
         ]
     ```
+- create an object inside the `cfg` object to store non-volatile configuration data for your automations. Reference from inside your automation via `cfg.myAutomationConfigData.params` etc.
+  - ```
+    let
+    cfg = {
+        moduleName: "NewClientModule",      // give this NodeJS Client a name for notification
+        myAutomationConfigData: {      // create your own area for non-volatile config data for each function if needed
+            test: "a test string",
+            params: true
+        },
+    },
+    ```
 - call `init()` function and assign `st` for volatile memory for each automation.
   - the `init()` function i called once at the first start of each automation by the `if (!state.auto[index]) init();` call.
   - you must use `state.auto.push({ })` inside the `init()` function to create all the V mem/variables needed for this automation.
