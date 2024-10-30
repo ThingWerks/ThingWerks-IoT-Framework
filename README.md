@@ -1,5 +1,17 @@
 # ThingWerks IoT Framework (TWIT)
 
+## Uses
+
+- Suitable for virtually all industrial automation and control applications with 100ms or greater response time.
+- Infrastructure monitoring and disaster reduction systems 
+- Automate industrial pump operations, water treatment and delivery systems
+- Irrigation control systems with weather AI integration
+- Solar power and other electrical control applications such as batteries, transfer switches, power factor correction systems, etc
+- Good for marine applications, fluid management and electrical systems
+- Control lighting and other Home type automations
+
+This system has been tested and used in various commercial and municipal industrial control systems. It is simple and reliable and straightforward. 
+
 ## Preamble
 
 TWIT is Core-Client framework with template-based client-side extensible modules. This project was created after extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns. TWIT is a standalone industrial control and IoT automation framework and doesn't rely on Home Assistant for anything, though it integrates seamlessly with Home Assistant and ESPHome. 
@@ -18,10 +30,16 @@ Acts as a communication hub between Home Assistant, ESPHome, other IoT devices a
 The TWIT Clients consist of the TWIT boiler plate code. You insert your automation code into the designated automation area in JavaScript format. You Follow the programming structure as defined in the TWIT-Client Example and utilize the methods explained there for logging, processing telemetry data, toggling outputs, etc.
 
 ##### Client Installation Guide: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Client.md
-##### Client Exmaple:  https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client-example.js
+##### Client Example:  https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client-example.js
 ##### Client Programming Guide: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Programming-Guide.md 
 ##### Telegram Remote Access Guide: https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Telegram-Guide.md
 
+## Features
+- Supports multiple Home Assistant servers and can synchronize them
+- Powerful logging, debugging and notification
+- immune to network, power and connectivity interruptions 
+- Extremely lightweight an easy to start, setup your own automation in a few minutes
+- Has been developed with high reliability and compartmentalization
 
 ## IoT Device Integration
 
