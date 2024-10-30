@@ -37,9 +37,9 @@
   - the `init()` function is called once at the first start of each automation by the `if (!state.auto[index]) init();` call.
   - you must use `state.auto.push({ })` inside the `init()` function to store all the volatile memory or variables needed for this automation.
   - inside the `state.auto.push({ })` you must have at least the `name:` property, the rest is up to your design.
-  - later in your automation, you will access your variable by using `st` ie `st.example.started`
+  - later in your automation, you will access your volatile variables by using `st` ie `st.example.started`
   - `st` and `state` are not the same
-    - "st" is local volatile memory unique to each automation function - to store your automation data
+    - "st" is local volatile memory unique to each automation function - to store your automation volatile or state data
     - "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entity states
   - ```
         automation = [                                                         
@@ -66,7 +66,24 @@
 - data uses safe write method, a backup of the existing data is always created like `/apps/twit/nv-nameOfClient-bak.json` in the `/apps/twit` folder.
 -  is non-volatile data that is read once during first boot of script and saved whenever you call file.write.nv();
 ### Interacting with Home Assistant and ESPHome Entities
-- specifying the Home Assistant of ESP entity names in `cfg` object means this TWIT Client will receive events for these entities.
+- specifying the Home Assistant or ESP entity names in `cfg` object means this TWIT Client will receive events for these entities.
+  - ```
+        cfg = {
+        moduleName: "test",      // give this NodeJS Client a name for notification
+        telegram: {                         // delete this object if you don't use Telegram
+            password: "password",           // password for telegram registration
+        },
+        ha: [
+            "input_boolean.test",                    // add all your home assistant entities here
+            "input_number.test2",
+            "input_button.test3",
+            "input_boolean.test4"
+        ],
+        esp: [
+          "myESPentity",
+        ],
+        },
+    ```
 - when an incoming even arrives, it will update the `state.ha[element]` or `state.esp[element]` with the incoming data from HA or ESPHome device.
 - the `element` number corresponds with the array position of that same entity in `cfg.ha` or `cfg.esp`
 - you must still create an emitter for each HA or ESP entity if you need specific core to execute upon arrival of an event update.
@@ -89,7 +106,12 @@
    - `ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");`
    - use array position or entity name
    - if the sensor doesn't exist in HA, its will be created with first send
-   - `ha.send("entityName",floatOrValue, "unitOfMeasurement")` 
+   - `ha.send("entityName",floatOrValue, "unitOfMeasurement")`
+### Home Assistant Helpers
+- Create Helpers in Home Assistant to control or manage your automations or process.
+- "Toggle" or `input_boolean` is useful with emitters (example given) to control operational states of your automations.
+- "Number" or `input_number` is useful to set or adjust automation parameters.
+- "Button" or `input_button` is useful to for initiating processes inside your automation, use emiters or read states.
 ### System Logging
 - to generate a log event, call the log function `log("system started", index, 1);`
  - `index` must not be changed
