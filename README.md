@@ -1,6 +1,6 @@
 # ThingWerks IoT Framework (TWIT)
 
-## Uses
+## Target Use Cases
 
 - Suitable for virtually all industrial automation and control applications requiring >=100ms response time.
 - Infrastructure monitoring and disaster reduction systems 
