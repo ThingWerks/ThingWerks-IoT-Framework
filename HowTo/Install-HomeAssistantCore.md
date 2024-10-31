@@ -15,7 +15,7 @@ sudo service docker start
 ### Prepare Applicaiton Permissions and Directories 
 
 ```
-sudo usermod -aG docker user
+sudo usermod -aG docker $USER
 sudo service docker start
 sudo mkdir /apps/ha  -p
 sudo chown $USER /apps -R
