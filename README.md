@@ -50,6 +50,20 @@ PLC and other industrial control systems can connect via RS485 or UART IP gatewa
 
 TWIT has mainly been developed to interact with IoT devices either by using the ESPHome API or by connecting to devices via Home Assistant as a gateway for devices like Zigbee, or other communication methods supported by Home Assistant like Zigbee2MQTT, etc. 
 
+## Fully Developed TWIT Clients
+
+### SolarWerks
+SolarWerks is a solar power management and automation control system.
+- #### Features
+  - Power monitoring, blackout detection
+  - Electrical room temp monitoring and ventilation control
+  - Inverter power control
+  - Auto Transfer Switch control
+  - Battery management and charge/discharge over-cycle prevention
+  - Control other TWIT Automations based on solar power output
+
+### PumpWerks
+
 ## Example Industrial Systems
 
 ### Production Systems Using TWIT
