@@ -54,13 +54,13 @@ TWIT has mainly been developed to interact with IoT devices either by using the 
 
 ### SolarWerks
 SolarWerks is a solar power management and automation control system.
-- #### Features
-  - Power monitoring, blackout detection
-  - Electrical room temp monitoring and ventilation control
-  - Inverter power control
-  - Auto Transfer Switch control
-  - Battery management and charge/discharge over-cycle prevention
-  - Control other TWIT Automations based on solar power output
+#### Features
+ - Power monitoring, blackout detection
+ - Electrical room temp monitoring and ventilation control
+ - Inverter power control
+ - Auto Transfer Switch control
+ - Battery management and charge/discharge over-cycle prevention
+ - Control other TWIT Automations based on solar power output
 
 ### PumpWerks
 
