@@ -5,7 +5,7 @@ The TWIT framework is a NodeJS Core-Client system with template-based client-sid
 
 TWIT is also perfect for those who want to use Home Assistant but don't want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns that TWIT directly alleviates.
 
-If you want to use Home Assistant with TWIT, do not use Home Assistant Supervised unless absolutely necessary. It is unstable and can seriously lag on low powered hardware and had noticeable issues with TWIT during development; also the response time is nearly 10 times faster with Home Assistant Core. We only recommend using Home Assistant Core with TWIT.  
+If you want to use Home Assistant with TWIT, do not use Home Assistant Supervised unless absolutely necessary. It is unstable and can seriously lag on low powered hardware and had noticeable issues with TWIT during development; also the response time is nearly 10 times faster with Home Assistant Core. We only recommend using TWIT with Home Assistant Core.  
 
 ## Target Use Cases
 - Suitable for virtually all industrial automation and control applications requiring >=100ms response time.
