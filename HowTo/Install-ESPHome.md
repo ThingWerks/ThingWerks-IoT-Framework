@@ -14,7 +14,7 @@ sudo service docker start
 ### Prepare Application Permissions and Directories 
 
 ```
-sudo usermod -aG docker user
+sudo usermod -aG docker $USER
 sudo service docker start
 sudo mkdir /apps/esphome  -p
 sudo chown $USER /apps -R
