@@ -39,7 +39,7 @@ The TWIT Clients consist of the TWIT boiler plate code. You insert your automati
 - Centralized logging, debugging and notification
 - Remote control and notification with Telegram
 - immune to network, power and connectivity interruptions 
-- Extremely lightweight and easy to setupp; get your automations up and running within minutes
+- Extremely lightweight and easy to setup; get your automations up and running within minutes
 - Has been developed with high reliability and compartmentalization
 - Supports multiple Home Assistant servers and can synchronize them
 - Cross-integrate multiple systems, for example, solar system influencing pump operations 
