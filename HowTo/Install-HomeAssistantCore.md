@@ -20,7 +20,7 @@ sudo service docker start
 sudo mkdir /apps/ha  -p
 sudo chown $USER /apps -R
 cd /apps/ha
-nano ./docker-compose.yml
+nano ./docker-compose.yaml
 ```
 ### Paste Home Assistant Core into Docker Compose File
 
