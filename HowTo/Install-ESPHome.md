@@ -23,7 +23,7 @@ cd /apps/esphome
 ### Paste ESPHome into Docker Compose File
 
 - Create Docker Compose file if you want ESPHome interface to boot with PC
-- ```nano ./docker-compose.yml```
+- ```nano ./docker-compose.yaml```
 
 ```
 version: '3'
