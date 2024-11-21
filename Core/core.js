@@ -1009,7 +1009,7 @@ if (!isMainThread) {
             init: function () {
                 cfg = {};
                 client = null;
-                state = { entity: [], reconnect: false, boot: false, rssi: false, errorResetTimeout: null };
+                state = { entity: [], reconnect: false, boot: false, errorResetTimeout: null };
                 sys.lib();
             },
             lib: function () {
@@ -1063,32 +1063,35 @@ if (!isMainThread) {
             setTimeout(() => {
                 em.removeAllListeners();
                 client = null;
-                state.rssi = true;
                 setTimeout(() => { espInit(); }, 5e3);
             }, 10e3);
         }
         function clientConnect() {
             if (state.reconnect == false) {
                 log("trying to connect to esp module: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2);       // client connection function, ran for each ESP device
-             //   setTimeout(() => { state.reconnect = false; }, 10e3);  // do we need to try reconnecting after 30 secs? need to know if already connected if so
+                //   setTimeout(() => { state.reconnect = false; }, 10e3);  // do we need to try reconnecting after 30 secs? need to know if already connected if so
             }
             client.on('error', (error) => {
                 if (state.reconnect == false) {
-                    log("ESP module had a connection error, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
+                    if (cfg.telegram.logESPDisconnect == true)
+                        log("ESP module had a connection error, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 2);
+                    else log("ESP module had a connection error, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
                     state.reconnect = true;
                     espReset();
                 }
             });
             client.on('disconnected', () => {
                 if (state.reconnect == false) {
-                    log("ESP module disconnected, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
+                    if (cfg.telegram.logESPDisconnect == true)
+                        log("ESP module disconnected, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 2);
+                    else log("ESP module disconnected, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
                     espReset();
                     state.reconnect = true;
                 }
             });
             client.on('newEntity', data => {
-                if (state.reconnect == true) log("ESP module is reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
-                state.reconnect = false
+                //   if (state.reconnect == true) log("ESP module is reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
+                //  state.reconnect = false
                 let exist = 0, io = null;
                 for (let x = 0; x < state.entity.length; x++)         // scan for this entity in the entity list
                     if (state.entity[x].id == data.id) { exist++; io = x; break; };
@@ -1106,12 +1109,21 @@ if (!isMainThread) {
                 }
                 data.on('state', (update) => {
                     //   console.log("state change: ", update.key," state: ",  update.state );
-                    if (state.rssi == true || state.boot == false) {
+                    if (state.reconnect == true) {
+                        if (cfg.telegram.logESPDisconnect == true) {
+                            log("ESP Module reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
+                                + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 2);
+                        } else {
+                            log("ESP Module reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
+                                + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
+                        }
+                        state.reconnect = false;
+                    }
+                    if (state.boot == false) {
                         if (data.config.objectId.includes("wifi"))
-                            log("new entity - connected - ID: " + data.id + " - "
-                                + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2);
+                            log("ESP Module connected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
+                                + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
                         setTimeout(() => { state.boot = true; }, 20);  // indicate booted so not to show entity names again
-                        state.rssi = false;
                     }
                     for (let x = 0; x < state.entity.length; x++) {
                         //   console.log(state.entity[x])
