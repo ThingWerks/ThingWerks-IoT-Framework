@@ -392,7 +392,8 @@ if (isMainThread) {
                         }
                         if (buf.obj.telegram != undefined && buf.obj.telegram == true) {
                             log("client " + id + " - " + a.color("white", buf.name) + " - is registering as telegram agent", 3, 1);
-                            state.telegram.port = info.port;
+                            state.client[id].telegram = true;
+                            // state.telegram.port = info.port;
                         }
                         break;
                     case "coreData":    // incoming sensor state from clients
@@ -469,21 +470,6 @@ if (isMainThread) {
                             case "send":
                                 bot.sendMessage(buf.obj.id, buf.obj.data, buf.obj.obj).catch(error => { log("telegram sending error") })
                                 break;
-                            case "sub":
-                                let userExist = false;
-                                for (let x = 0; x < state.telegram.users.length; x++) {
-                                    log("checking for existing telegram users: " + state.telegram.users[x], 4, 0);
-                                    if (state.telegram.users[x] == Number(buf.obj.id)) {
-                                        log("telegram user is already registered", 4, 0);
-                                        userExist = true;
-                                        break;
-                                    }
-                                }
-                                if (userExist == false) {
-                                    log("not found, adding new user: " + buf.obj.id, 4, 0);
-                                    state.telegram.users.push(buf.obj.id);
-                                }
-                                break;
                         }
                         break;
                     default:            // default to heartbeat
@@ -499,24 +485,33 @@ if (isMainThread) {
                             break;
                         }
                     }
-                    if (registered == false)
+                    if (registered == false){
                         for (let x = 0; x < state.client.length; x++) {
                             //   console.log("udp port for client: " + x + state.client[x].port);
                             if (state.client[x].port == undefined) {
                                 log("client " + x + " is being cleared (unpopulated)", 3, 2);
-                                state.client[x] = { name: buf.name, port: port, ip: info.address, time: time.epochMil, ha: [], esp: [], udp: [] };
+                                state.client[x] = new newClient();
                                 id = x;
                                 registered = true;
                                 break;
                             }
                         }
-                    if (registered == false) {
-                        id = state.client.push({ name: buf.name, port: port, ip: info.address, time: time.epochMil, ha: [], esp: [], udp: [] }) - 1;
+                        id = state.client.push(new newClient()) - 1;
                         //diag.push([]);
                         if (buf.type == "heartBeat") {
                             log("client " + id + " is unrecognized", 3, 2);
                             udp.send(JSON.stringify({ type: "udpReRegister" }), port);
                         }
+                    }
+                    function newClient() {
+                        this.name = buf.name;
+                        this.port = port;
+                        this.ip = info.address;
+                        this.time = time.epochMil;
+                        this.telegram = false;
+                        this.ha = [];
+                        this.esp = [];
+                        this.udp = [];
                     }
                 }
             },
@@ -564,6 +559,7 @@ if (isMainThread) {
                             case "state":
                                 //   console.log("incoming state change: ", state.esp[data.esp].entity[data.obj.io]);
                                 state.esp[data.esp].entity[data.obj.io].state = data.obj.state;   // store the state locally 
+                                state.esp[data.esp].entity[data.obj.io].update = time.stamp;
                                 for (let a = 0; a < state.client.length; a++) {        // scan all the UDP clients and find which one cares about this entity
                                     for (let b = 0; b < state.client[a].esp.length; b++) {                 // scan each UDP clients registered ESP entity list
                                         if (state.client[a].esp[b] == state.esp[data.esp].entity[data.obj.io].name) {     // if there's a match, send UDP client the data
@@ -653,41 +649,6 @@ if (isMainThread) {
                                         .catch(err => { log("fetching failed", 0, 2); });
                                 }
                             });
-                            express.get("/client-old", function (request, response) {
-                                diag = [];
-                                for (let x = 0; x < state.client.length; x++) {
-                                    udp.send(JSON.stringify({ type: "diag" }), state.client[x].port);
-                                    console.log(state.client)
-                                    console.log("getting for client: " + x)
-                                }
-                                setTimeout(() => { response.send(diag); }, 100);
-                            });
-                            express.get("/all", async function (request, response) {
-                                diag = [];
-                                let diagPromises = state.client.map(client => sendDiagCommand(client, 1000)); // Timeout of 1000ms
-                                try {
-                                    let results = await Promise.all(diagPromises);
-                                    results.forEach(result => {
-                                        if (result.error) console.warn(result.error); // Log if client timed out
-                                        else diag.push(result.data.obj); // Collect successful responses
-                                    });
-                                    response.send(diag);
-                                } catch (error) {
-                                    response.status(500).send(`Error collecting diagnostic data: ${error.message}`);
-                                }
-                            });
-                            express.get("/client-num/:id", async function (request, response) {
-                                const clientId = parseInt(request.params.id, 10);  // Extract client ID from the URL
-                                const client = state.client[clientId];  // Find the client in the array by its index
-                                if (!client) return response.status(404).send({ error: `Client with ID ${clientId} not found` });
-                                try {
-                                    const result = await sendDiagCommand(client, 1000);  // Timeout of 1000ms
-                                    if (result.error) return response.status(408).send(result);
-                                    response.send(result);
-                                } catch (error) {
-                                    response.status(500).send({ error: `Error collecting diagnostic data: ${error.message}` });
-                                }
-                            });
                             express.get("/client/:name", async function (request, response) {
                                 const clientName = request.params.name;  // Extract client name from the URL
                                 const client = state.client.find(c => c.name === clientName);  // Find the client by name
@@ -725,24 +686,24 @@ if (isMainThread) {
                             } else {
                                 log("starting Telegram service...");
                                 bot = new TelegramBot(cfg.telegram.token, { polling: true });
-                                //   bot.on("polling_error", (msg) => console.log(msg));
                                 bot.on('message', (msg) => {
                                     if (logs.tg[logs.tgStep] == undefined) logs.tg.push(msg);
                                     else logs.tg[logs.tgStep] = msg;
                                     if (logs.tgStep < 100) logs.tgStep++; else logs.tgStep = 0;
-                                    // user.telegram.agent(msg);]
-                                    udp.send(JSON.stringify({ type: "telegram", obj: { class: "agent", data: msg } }), state.telegram.port);
+                                    for (let x = 0; x < state.client.length; x++)
+                                        if (state.client[x].telegram == true)
+                                            udp.send(JSON.stringify({ type: "telegram", obj: { class: "agent", data: msg } }), state.client[x].port);
+
                                 });
                                 bot.on('callback_query', (msg) => {
-                                    udp.send(JSON.stringify({ type: "telegram", obj: { class: "callback", data: msg } }), state.telegram.port);
-                                    // user.telegram.response(msg)
+                                    for (let x = 0; x < state.client.length; x++)
+                                        if (state.client[x].telegram == true)
+                                            udp.send(JSON.stringify({ type: "telegram", obj: { class: "callback", data: msg } }), state.client[x].port);
                                 });
                                 bot.on('polling_error', (error) => {
-                                    // console.log(error.code);  // => 'EFATAL'
                                     //   log("telegram sending polling error")
                                 });
                                 bot.on('webhook_error', (error) => {
-                                    // console.log(error.code);  // => 'EPARSE'
                                     log("telegram webhook error")
                                 });
                                 state.telegram.started = true;
@@ -803,7 +764,7 @@ if (isMainThread) {
                         udp.on('message', (msg, info) => { sys.udp(msg, info); });
                         udp.bind(65432, "127.0.0.1");
                         log("stating websocket service...");
-                        if (cfg.homeAssistant) ha.ws();
+                        if (cfg.homeAssistant != undefined) ha.ws();
                         setInterval(() => { sys.watchDog(); }, 1e3);
                         setTimeout(() => log("TW Core just went online", 0, 2), 20e3);
                         break;
@@ -853,16 +814,20 @@ if (isMainThread) {
                 }
                 if (cfg.esp != undefined)
                     cfg.esp.devices.forEach((_, x) => { state.esp.push({ entity: [], boot: false }); })
-                state.telegram = { started: false, users: [] };
+                state.telegram = { started: false };
             },
             lib: function () {
                 util = require('util');
                 exec = require('child_process').exec;
                 execSync = require('child_process').execSync;
-                HomeAssistant = require('homeassistant');
-                expressLib = require("express");
-                express = expressLib();
-                WebSocketClient = require('websocket').client;
+                if (cfg.webDiag == true) {
+                    expressLib = require("express");
+                    express = expressLib();
+                }
+                if (cfg.homeAssistant != undefined) {
+                    HomeAssistant = require('homeassistant');
+                    WebSocketClient = require('websocket').client;
+                }
                 events = require('events');
                 em = new events.EventEmitter();
                 udpServer = require('dgram');
@@ -913,7 +878,7 @@ if (isMainThread) {
                         case 1: ubuf += "4"; cbuf += "7"; lbuf += "|  Event  |"; break;
                         case 2: ubuf += "3"; cbuf += "3"; lbuf += "|*Warning*|"; break;
                         case 3: ubuf += "1"; cbuf += "1"; lbuf += "|!!ERROR!!|"; break;
-                        case 4: ubuf += "5"; cbuf += "5"; lbuf += "|~~DTEST~~|"; break;
+                        case 4: ubuf += "5"; cbuf += "5"; lbuf += "| Telegram|"; break;
                         default: ubuf += "4"; cbuf += "4"; lbuf += "|  Event  |"; break;
                     }
                     buf += lbuf;
@@ -940,14 +905,14 @@ if (isMainThread) {
                         if (level >= cfg.telegram.logLevel
                             || level == 0 && cfg.telegram.logDebug == true) {
                             try {
-                                for (let x = 0; x < state.telegram.users.length; x++) {
+                                for (let x = 0; x < cfg.telegram.users.length; x++) {
                                     if (cfg.telegram.logESPDisconnect == false) {
                                         if (!message.includes("ESP module went offline, resetting ESP system:")
                                             && !message.includes("ESP module is reconnected: ")
                                             && !message.includes("ESP Module has gone offline: ")) {
-                                            bot.sendMessage(state.telegram.users[x], buf).catch(error => { log("telegram sending error") })
+                                            bot.sendMessage(cfg.telegram.users[x], buf).catch(error => { log("telegram sending error") })
                                         }
-                                    } else bot.sendMessage(state.telegram.users[x], buf).catch(error => { log("telegram sending error") })
+                                    } else bot.sendMessage(cfg.telegram.users[x], buf).catch(error => { log("telegram sending error") })
                                 }
                             } catch (error) { console.log(error, "\nmessage: " + message + "  - Mod: " + mod) }
                         }
