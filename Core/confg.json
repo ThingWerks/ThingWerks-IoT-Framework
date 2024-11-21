@@ -2,7 +2,6 @@
     "webDiag": true,
     "webDiagPort": 20000,
     "debugging": true,
-    "workingDir": "/apps/twit/",
     "homeAssistant": [
         {
             "enable": true,
@@ -16,7 +15,7 @@
         "enable": true,
         "logLevel": 2,
         "logDebug": false,
-        "logESPDisconnect": false,
+        "logESPDisconnect": true,
         "token": "myTelegramIDToken"
     },
     "esp": {
