@@ -613,7 +613,6 @@ if (isMainThread) {
                         log("initializing system states done");
                         log("checking args");
                         sys.checkArgs();
-                        log("specified Working Directory: " + cfg.workingDir);
                         log("actual working directory: " + workingDir);
                         if (cfg.esp != undefined && cfg.esp.devices != undefined && cfg.esp.devices.length > 0 && cfg.esp.enable == true) { // load worker threads
                             cfg.esp.devices.forEach((_, x) => { newWorker(x, true); });
@@ -961,7 +960,7 @@ if (isMainThread) {
                 if (process.argv[3] == "-j") journal = true;
                 if (process.argv[2] == "-i") {
                     log("installing ThingWerks-Core service...");
-                    let exec = "ExecStart=nodemon " + cfg.workingDir + "core.js -w " + cfg.workingDir + "core.js -w " + cfg.workingDir + "config.json --exitcrash";
+                    let exec = "ExecStart=nodemon " + workingDir + "core.js -w " + workingDir + "core.js -w " + workingDir + "config.json --exitcrash --delay 5";
                     let service = [
                         "[Unit]",
                         "Description=",
@@ -975,7 +974,7 @@ if (isMainThread) {
                         ((journal == false) ? "StandardOutput=file:/apps/log-twit-core.txt\n Type=simple" : "Type=simple"),
                         "User=root",
                         "Group=root",
-                        "WorkingDirectory=" + cfg.workingDir,
+                        "WorkingDirectory=" + workingDir,
                         "Restart=on-failure",
                         "RestartSec=5\n",
                     ];
@@ -1069,29 +1068,24 @@ if (!isMainThread) {
         function clientConnect() {
             if (state.reconnect == false) {
                 log("trying to connect to esp module: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2);       // client connection function, ran for each ESP device
-                //   setTimeout(() => { state.reconnect = false; }, 10e3);  // do we need to try reconnecting after 30 secs? need to know if already connected if so
             }
             client.on('error', (error) => {
                 if (state.reconnect == false) {
-                    if (cfg.telegram.logESPDisconnect == true)
-                        log("ESP module had a connection error, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 2);
-                    else log("ESP module had a connection error, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
+                    log("ESP module had a connection error, resetting ESP connection: "
+                        + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
                     state.reconnect = true;
                     espReset();
                 }
             });
             client.on('disconnected', () => {
                 if (state.reconnect == false) {
-                    if (cfg.telegram.logESPDisconnect == true)
-                        log("ESP module disconnected, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 2);
-                    else log("ESP module disconnected, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
+                    log("ESP module disconnected, resetting ESP connection: "
+                        + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
                     espReset();
                     state.reconnect = true;
                 }
             });
             client.on('newEntity', data => {
-                //   if (state.reconnect == true) log("ESP module is reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
-                //  state.reconnect = false
                 let exist = 0, io = null;
                 for (let x = 0; x < state.entity.length; x++)         // scan for this entity in the entity list
                     if (state.entity[x].id == data.id) { exist++; io = x; break; };
@@ -1102,13 +1096,11 @@ if (!isMainThread) {
                 parentPort.postMessage({ type: "esp", class: "entity", esp: workerData.esp, obj: { id: data.id, io, name: data.config.objectId, type: data.type } });
                 if (data.type === "Switch") {                                 // if this is a switch, register the emitter
                     em.on(data.config.objectId, function (id, state) {        // emitter for this connection 
-                        // log("setting entity: " + id + " to " + state, 0, 0)
                         try { data.connection.switchCommandService({ key: id, state: state }); }
                         catch (e) { log("error sending command to ESP - resetting...", 2, 3); espReset(); } // reset() was removed from here
                     });
                 }
                 data.on('state', (update) => {
-                    //   console.log("state change: ", update.key," state: ",  update.state );
                     if (state.reconnect == true) {
                         if (cfg.telegram.logESPDisconnect == true) {
                             log("ESP Module reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
@@ -1126,10 +1118,7 @@ if (!isMainThread) {
                         setTimeout(() => { state.boot = true; }, 20);  // indicate booted so not to show entity names again
                     }
                     for (let x = 0; x < state.entity.length; x++) {
-                        //   console.log(state.entity[x])
                         if (state.entity[x].id == update.key) {          // identify this entity request with local object
-                            //     log("esp data: " + state.entity[x].name + " state: " + data.state, 2, 0)
-                            // console.log(state.esp.entity);
                             parentPort.postMessage({ type: "esp", class: "state", esp: workerData.esp, obj: { io: x, name: data.config.objectId, state: update.state } });
                         }
                     }
@@ -1138,8 +1127,6 @@ if (!isMainThread) {
             try { client.connect(); } catch (error) { log("client connect error: " + error) };
         }
         parentPort.on('message', (data) => {
-            //   console.log(data.obj);
-            //     log("incoming esp state request Data: " + data.obj, 2, 0);
             switch (data.type) {
                 case "config":
                     cfg = data.obj;
