@@ -1074,20 +1074,20 @@ if (!isMainThread) {
             }
             client.on('error', (error) => {
                 if (state.reconnect == false) {
-                    log("ESP module went offline, resetting ESP system: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
+                    log("ESP module had a connection error, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
                     state.reconnect = true;
                     espReset();
                 }
             });
             client.on('disconnected', () => {
                 if (state.reconnect == false) {
-                    log("ESP module went offline, resetting ESP system: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
+                    log("ESP module disconnected, resetting ESP connection: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
                     espReset();
                     state.reconnect = true;
                 }
             });
             client.on('newEntity', data => {
-                if (state.reconnect == true) log("ESP module is reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0)
+                if (state.reconnect == true) log("ESP module is reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
                 state.reconnect = false
                 let exist = 0, io = null;
                 for (let x = 0; x < state.entity.length; x++)         // scan for this entity in the entity list
