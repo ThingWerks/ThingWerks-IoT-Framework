@@ -485,7 +485,7 @@ if (isMainThread) {
                             break;
                         }
                     }
-                    if (registered == false){
+                    if (registered == false) {
                         for (let x = 0; x < state.client.length; x++) {
                             //   console.log("udp port for client: " + x + state.client[x].port);
                             if (state.client[x].port == undefined) {
@@ -623,7 +623,7 @@ if (isMainThread) {
                                 thread.esp[x] = (new Worker(__filename, { workerData: { esp: x } }));
                                 thread.esp[x].on('message', (data) => sys.ipc(data));
                                 thread.esp[x].on('error', (error) => { log("ESP worker: " + x + " crashed", 0, 3); console.log(error); newWorker(x); });
-                                thread.esp[x].on('exit', (code) => { log("ESP worker: " + x + " exited", 0, 3); newWorker(x); });
+                                //  thread.esp[x].on('exit', (code) => { log("ESP worker: " + x + " exited", 0, 3); newWorker(x); });
                                 thread.esp[x].postMessage({ type: "config", obj: cfg });
                             }
                         }
@@ -1044,18 +1044,7 @@ if (!isMainThread) {
             }
         }
         const { Client } = require('@2colors/esphome-native-api');
-        //     const { Discovery } = require('@2colors/esphome-native-api');
         sys.init();
-        function espReset() {
-            try { client.disconnect(); } catch (error) { log("ESP disconnect failed...", 2); }
-            setTimeout(() => {
-                em.removeAllListeners();
-                setTimeout(() => {
-                    client = null;
-                    espInit();
-                }, 5e3);
-            }, 10e3);
-        }
         function espInit() {
             client = new Client({
                 host: cfg.esp.devices[workerData.esp].ip,
@@ -1069,26 +1058,28 @@ if (!isMainThread) {
             });
             try { clientConnect(); } catch (error) { log(error) };
         }
+        function espReset() {
+            try { client.disconnect(); } catch (error) { log("ESP disconnect failed...", 2); }
+            setTimeout(() => {
+                em.removeAllListeners();
+                client = null;
+                state.rssi = true;
+                setTimeout(() => { espInit(); }, 5e3);
+            }, 10e3);
+        }
         function clientConnect() {
             if (state.reconnect == false) {
-                log("connecting to esp module: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2);       // client connection function, ran for each ESP device
-                setTimeout(() => { state.reconnect = false; }, 30e3);  // do we need to try reconnecting aftre 30 secs? need to know if already connected if so
+                log("trying to connect to esp module: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2);       // client connection function, ran for each ESP device
+             //   setTimeout(() => { state.reconnect = false; }, 10e3);  // do we need to try reconnecting after 30 secs? need to know if already connected if so
             }
             client.on('error', (error) => {
-                // console.log(error);
                 if (state.reconnect == false) {
                     log("ESP module went offline, resetting ESP system: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
                     state.reconnect = true;
-                    //  state.rssi = true;
                     espReset();
                 }
-                // consider removeing this line if still issues, disconnect might be enough and also it may use its own reconnect
-                // state.errorResetTimeout = setTimeout(() => { espInit(); }, 3e3); // if there's a connection problem, start reset sequence
             });
             client.on('disconnected', () => {
-                log(`Disconnected from ESP module: ${a.color("white", cfg.esp.devices[workerData.esp].ip)}`, 2);
-                // clearTimeout(state.errorResetTimeout);
-                //  espInit();
                 if (state.reconnect == false) {
                     log("ESP module went offline, resetting ESP system: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, 0);
                     espReset();
