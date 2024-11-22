@@ -518,7 +518,7 @@ if (isMainThread) {
             watchDog: function () {
                 for (let x = 0; x < state.client.length; x++) {
                     if (state.client[x].heartBeat == true && time.epochMil - state.client[x].time >= 2000) {
-                        log("Client: " + state.client[x].name + " has crashed!!", 3, 0);
+                        log("Client: " + state.client[x].name + " has crashed!!", 3, cfg.telegram.logClientCrash ? 3 : 0);
                         state.client.splice(x, 1);
                         diag.splice(x, 1);
                         log("rescanning HA inputs")
