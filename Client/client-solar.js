@@ -1195,41 +1195,6 @@ let
                             }, 3e3);
                         });
                     });
-                    /*
-                  cfg.sensor.volt.forEach((_, x) => {
-                        em.on(cfg.esp[cfg.sensor.volt[x].espID], (data) => {
-                            let voltage = parseFloat(data);
-                            if (cfg.sensor.volt[x].table != undefined) {
-                                let final = null;
-                                for (let i = 0; i < cfg.sensor.volt[x].table.length - 1; i++) {
-                                    const table = cfg.sensor.volt[x].table[i];
-                                    const next = cfg.sensor.volt[x].table[i + 1];
-                                    if (voltage <= table.adc && voltage > next.adc) {
-                                        final = next.voltage + (voltage - next.adc) * (table.voltage - next.voltage) / (table.adc - next.adc);
-                                        console.log(final)
-                                      //  ha.send("volt_" + cfg.sensor.volt[x].name, final.toFixed(2), "V");
-                                    }
-                                }
-                            } else if (cfg.sensor.volt[x].multiplier != undefined) {
-                                st.sensor.volt[x] = voltage * cfg.sensor.volt[x].multiplier;
-                                if (st.sensor.volt[x] != null)
-                                    ha.send("volt_" + cfg.sensor.volt[x].name, st.sensor.volt[x].toFixed(2), "V");
-                            }
-                            else st.sensor.volt[x] = voltage;
-                        });
-                    });
-            
-                    cfg.sensor.volt.forEach((_, x) => {
-                        em.on(cfg.esp[cfg.sensor.volt[x].espID], (data) => {
-                            if (cfg.sensor.volt[x].multiplier != undefined) {
-                                st.sensor.volt[x] = parseFloat(data) * cfg.sensor.volt[x].multiplier;
-                                if (st.sensor.volt[x] != null)
-                                    ha.send("volt_" + cfg.sensor.volt[x].name, st.sensor.volt[x].toFixed(2), "V");
-                            }
-                            else st.sensor.volt[x] = parseFloat(data);
-                        });
-                    });
-                    */
                     cfg.sensor.watt.forEach((e, x) => {
                         if (e.sensor != undefined)
                             em.on(cfg.esp[e.espID], (data) => {
@@ -1301,43 +1266,6 @@ let
                         });
                     });
                 });
-                /*
-                em.on(cfg.esp[cfg.solar.current.espID], (newState) => {
-                    let currentTemp = 0;
-                    st.current.reading[st.current.step] = newState;
-                    if (st.current.step < cfg.solar.current.samples - 1)
-                        st.current.step++
-                    else {
-             
-                        st.current.step = 0;
-                    }
-             
-             
-                    for (let x = 0; x < cfg.solar.current.samples; x++) currentTemp += st.current.reading[x];
-                    st.current.median = currentTemp / cfg.solar.current.samples;
-             
-                    if (st.current.median > cfg.solar.current.offset) {
-                        let calc1, calc2, calc3;
-                        calc1 = st.current.median - cfg.solar.current.offset;
-                        calc2 = calc1 / 0.005;
-                        //  log("POSITIVE - reading: " + st.current.median + "calc 1: " + calc1 + "  calc2: " + calc2, index, 0)
-             
-             
-                        st.current.final = calc2
-                    } else if (st.current.median < cfg.solar.current.offset) {
-                        let calc1, calc2, calc3;
-                        calc1 = st.current.median - cfg.solar.current.offset;
-                        calc2 = calc1 / 0.005;
-                        //  log("NEGATIVE - reading: " + st.current.median + "calc 1: " + calc1 + "  calc2: " + calc2, index, 0)
-             
-             
-                        st.current.final = calc2
-                    }
-             
-                    //    log("current reading: " + ((st.current.final != null) ? (st.current.final).toFixed(1) : "0") + "  step: " + st.current.step, index, 0);
-                });
-             
-                */
             }
             function init() {
                 timerSensorTimeout = { amp: [], volt: [], watt: [] };
