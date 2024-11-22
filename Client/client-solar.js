@@ -2,7 +2,6 @@
 let
     cfg = {
         moduleName: "Solar",           // give this NodeJS Client a name for notification
-        workingDir: "/apps/tw/",
         telegram: {                         // delete this object if you don't use Tekegram
             password: "password",           // password for telegram registration
         },
@@ -14,6 +13,8 @@ let
             "input_boolean.auto_solar_transfer",
             "input_boolean.auto_pump_pressure_turbo",
             "input_boolean.auto_fountain",
+            "input_boolean.inverter_8kw",
+            "input_boolean.inverter_10kw",
         ],
         esp: [                              // add all your ESP entities here
             "battery-voltage",
@@ -21,44 +22,53 @@ let
             "power1-relay2",        // fan 
             "power1-relay3",        // inverter 8kw ATS
             "power1-relay4",        // inverter 10kw ATS
-            "8kw-power",            // 8kw watts
+            "8kw-power-safe",       // 8kw watts
             "8kw-energy",           // 8kw energy
-            "grid-voltage",         // grid voltage
+            "grid-voltage-safe",    // grid voltage
             "grid-power",           // grid watts
             "grid-energy",          // grid kwh
-            "sun-level",
+            "sunlight-pv",
             "temp-battery",
             "lth-relay1",           // compressor
             "uth-relay1",           // 1/2hp pump
-            "10kw-power",           // 10kw watts
+            "10kw-power-safe",      // 10kw watts
             "10kw-energy",          // 10kw watts
-            "battery-power",        // battery amps
-            "battery-energy",       // battery amps
-            "battery-voltage2",     // power2 Pzam-017 voltage
-            "battery-current",
+            "power1-relay5",        // 10kw/8kw ATS
+            "power1-relay6",        // 10kw charger 
+            "power1-relay7",
+            "power1-relay8",
             "8kw-current",
             "10kw-current",
             "8kw-pf",
             "10kw-pf",
             "grid-pf",
-            "battery-current-ads1115",
             "battery-current3",
+            "8kw-voltage-safe",
+            "10kw-voltage-safe",
+
         ],
         grid: {
             espVoltage: 7,              // change to sensor number <-----------------------------------------
             espPower: 8,
+            voltMin: 190,
+            voltMax: 245,
+            delayRecover: 60,
         },
         solar: {
             inverterAuto: 0,            // HA Toggle automation id
-            inverterDelaySwitch: 15,    // time to wait for sensor based transfer 
-            inverterRapidSwitch: 10,    // inverter minimum switch time for fault
-            batteryReserve: 40,         // charging amps to reserve for battery charging - not implemented
+            inverterDelaySwitch: 15,    // time sensor must maintain reading before switching inverter state
+            inverterRapidSwitch: 10,    // inverter minimum switch cycle time for before faulting
             espSunlight: 10,            // sunlight sensor esp ID
+            sun: [
+                { volts: .26, watts: 700 },
+
+            ],
             fan: {
-                espPower: 2,            // relay id
+                espPower: 2,            // esp relay id
+                sensorAmp: 0,           // local amp sensor ID (cfg.sensor.amp)
                 sensorTemp: 0,          // temp sensor number (in cfg.sensor.temp)
                 disableNight: true,     // disable auto can at night
-                tempRun: 88.2,          // fan start temp
+                tempRun: 88.5,          // fan start temp
                 tempStop: 85.0,         // fan stop temp
                 tempWarn: 89.0,         // send warning at this temp
                 tempError: 90.0,        // send error at the temp
@@ -72,12 +82,12 @@ let
             },
             priority: {
                 sensorVolt: 0,      // which volt sensor to use for priority controller (in cfg.sensor.volt)
-                // sensorSun : 2,   // directly using esp sun, no need for sensor sun because no recorder yet?
-                sensorAmp: 4,
-                delaySwitch: 10,
+                battery: 0,
+                delaySwitchOn: 20,    // time to observe changes in amps/sun before toggling priorities on
+                delaySwitchOff: 5,  // time to observe changes in amps/sun before toggling priorities off
                 queue: [
                     {
-                        name: "pump transfer",
+                        name: "pump fountain",
                         //    onSun: 2.55,
                         //   offSun: 2.48,
                         onAmps: 20.0,
@@ -89,13 +99,13 @@ let
                     },
                     {
                         name: "Compressor", // name of system or entity being controlled 
-                        // onSun: 2.50,     // sunlight level to activate this system - in addition to battery level if configured
+                        onSun: 1.5,     // sunlight level to activate this system - in addition to battery level if configured. Only has effect if "offAmpsFloat" is not configured or it is configured and battery is floating 
                         // offSun: 2.35,    // sunlight level to deactivate this system - independent of battery level
-                        onAmps: 45.0,       // amp level to activate 
-                        offAmps: 20.0,      // amp level to deactivate
-                        offAmpsFloat: -5.0, // amp level while floating needed to deactivate
-                        onVolts: 53.0,      // battery level to turn on system - in addition to sunlight if configured
-                        offVolts: 52.8,     // battery level to turn off system - independent of battery level
+                        onAmps: 50.0,       // amp level to activate 
+                        offAmps: 30.0,      // amp level to deactivate
+                        offAmpsFloat: -10.0, // amp level while floating needed to deactivate
+                        onVolts: 54.0,      // battery level to turn on system - in addition to sunlight if configured
+                        offVolts: 53.7,     // battery level to turn off system - independent of battery level
                         haAuto: 3,          // optional - HA toggle helper - for syncing TW-IoT/HA state 
                         devices: ["input_boolean.auto_compressor"], // HA or ESP entities that will be toggled 
                         inverter: 0         // optional - which inverter carries the load - if not specified, inverter 0 is used
@@ -105,13 +115,13 @@ let
                     },
                     {
                         name: "pump transfer",
-                        //    onSun: 2.55,
+                        onSun: 1.5,
                         //   offSun: 2.48,
-                        onAmps: 50.0,
-                        offAmps: 20.0,
-                        offAmpsFloat: 0.0,
-                        onVolts: 53.2,
-                        offVolts: 53.0,
+                        onAmps: 80.0,
+                        offAmps: 40.0,
+                        offAmpsFloat: -10.0,
+                        onVolts: 54.2,
+                        offVolts: 53.8,
                         haAuto: 4,
                         devices: ["input_boolean.auto_pump_transfer"]
                     },
@@ -131,79 +141,88 @@ let
         inverter: [
             {
                 name: "8Kw",
-                sunSupportAmp: true,            // sunlight sensor will help during battery floating to know when to switch back
-                nightMode: true,                // optional - this inverter runs at night
-                nightModeStartHour: 16,         // hour to start night mode  
-                nightModeStartMin: 0,           // minute to start night mode
-                nightModeEndHour: 6,            // the hour that nightMode will end
-                nightModeEndAmps: 20,           // optional - amps needed to end night mode
-                nightModeVoltageMin: 52.5,      // min voltage to start (or it also will switch off) the inverter at "nightMode" start if not at least this voltage
-                espSwitchPower: undefined,      // inverter remote power switch
-                espSwitchPowerDelay: undefined, // inverter remote power delay off in seconds
-                espSwitchTransfer: 3,           // inverter transfer switch relay
-                espPower: 5,                    // unused - inverter current sensor (unused, for welder?)
-                espPowerGrid: 8,                // esp sensor ID for grid power
-                sensorVolt: 0,                  // volt sensor number (in cfg.sensor.volt)
-                sensorAmp: 4,                   // amp sensor ID number
-                sensorWattBattery: 2,           // optional - used for grid load / charge amp watt based transfer switching 
-                blackoutRecover: true,          // optional - switch to inverter on blackout if voltage is less than (voltsRun)
+                nightMode: {
+                    enable: true,               // optional - this inverter runs at night
+                    startHour: 16,              // hour to start night mode  
+                    startMin: 0,                // minute to start night mode
+                    startVoltageMin: 52.5,      // min voltage to start (or it also will switch off) the inverter at "nightMode" start if not at least this voltage       
+                    endHour: 6,                 // the hour that nightMode will end
+                    endMin: 0,
+                    endAmps: 20,                // optional - amps needed to end night mode
+                },
+                power: {
+                    id: undefined,              // optional - Power switch ESP ID
+                    type: "esp",                // optional - output type esp/udp/ha
+                    delayOff: undefined,        // optional - delay power off switch after shutdown
+                    ha: 7                       // Inverter Home Assistant Power Button ID number (in cfg.ha) 
+                },
+                transfer: {
+                    type: "esp",                // Power switch output type esp/udp/ha
+                    switchOn: [                 // transfer switch on sequence
+                        { id: 3, state: true }, // transfer elements, state is to turn on (true), or off (false)
+                    ],
+                    switchOff: [                // transfer switch off sequence
+                        { id: 3, state: false }, // transfer elements, state is to turn on (true), or off (false)
+                        // { id: 16, state: true, delay: 5 },     // delays the action for x seconds
+                    ],
+                },
+                espWattGrid: 8,                // optional - esp ID for grid watt sensor - needed to switch back fromm gid (comparing power)
+                espWatt: 5,                     // optional - used for transfer switch 
+                espVolt: 26,                    // optional - used to sense inverter output voltage fault
+                blackout: true,                 // optional - switch to inverter on blackout if voltage is less than (voltsRun)
+                blackoutVoltMin: 51.5,          // optional - minimum voltage needed to recover from blackout 
                 voltsRun: 52.0,                 // volts to start inverter - in addition to sunlight/amps if configured
                 voltsStop: 51.4,                // volts to start inverter - will stop Independent of sunlight level
                 // sunRun: 1.95,                // optional - min sunlight needed in addition to battery voltage
                 // sunStop: 1.70,               // optional - reduce battery wear, constant recharging
-                // ampsRun: 20.0,               // optional - charger amp level to transfer load to inverter - (must use espPowerGrid if not)
+                floatRetrySun: true,            // optional - retry running inverter while floating based on sunlight index in solar.sun
+                floatRetryInterval: undefined,
+                // ampsRun: 20.0,               // optional - charger amp level to transfer load to inverter - (must use espWattGrid if not)
                 ampsStop: -5.0,                 // optional - discharge amp level to transfer load to grid 
                 ampsStopFloat: -10.0,           // optional - discharge amp level to transfer load to grid when floating
+                ampsStartGridMultiplier: 1.1,   // multiple of charge power exceeding grid power needed to switch load to inverter
                 delaySwitch: 20,                // seconds to observe volt, sun or amp reading before transferring load, should be longer than priority delay
-                battery: 0,                     // optional - battery bank assigned to this inverter - requires to use ampsStopFloat
+                battery: 0,                     // optional - battery bank assigned to this inverter - required to use ampsStopFloat
                 welderWatts: 4000,              // optional - high load detection
                 welderTimeout: 240,             // optional - time in seconds to observe and reset
             },
             {
                 name: "10Kw",
-                espSwitchPower: 1,
-                espSwitchTransfer: 4,
-                espSwitchPowerDelay: 600,
-                espPower: 5,
-                sensorVolt: 0,
-                sensorAmp: 4,
+                power: {
+                    id: 1,
+                    type: "esp",
+                    delayOff: 120,
+                    ha: 8
+                },
+                transfer: {
+                    type: "esp",
+                    switchOn: [
+                        { id: 4, state: true },
+                        { id: 16, state: true, delay: 5 },
+                    ],
+                    switchOff: [
+                        { id: 16, state: false },
+                        { id: 4, state: false, delay: 5 },
+                    ],
+                },
+                espVolt: 27,
                 voltsRun: 52.5,
-                voltsStop: 52,
+                voltsStop: 52.0,
                 // sunRun: 2.4,
                 // sunStop: 2.0,
-                ampsRun: 10.0,
+                ampsRun: 20.0,
                 ampsStop: -5.0,
-                //     ampsRunFloat: 10.0,
+                // ampsRunFloat: 10.0,
                 // ampsStopFloat: -10.0,
                 delaySwitch: 20,
-                battery: 0,                     // optional - battery bank assigned to this inverter
+                battery: 0,
             },
         ],
         sensor: {
             amp: [
                 {
-                    name: "8kw_power1",
-                    espID: 20,
-                },
-                {
-                    name: "10kw_power2",
-                    espID: 21,
-                },
-                {
-                    name: "battery_power2",
-                    espID: 19,
-                    multiplier: 3.17,           // only devices with multiplier are sent to HA
-                    zero: undefined,
-                },
-                {
-                    name: "battery_analog_power2",
-                    espID: 25,
-                    multiplier: 70.0,           // only devices with multiplier are sent to HA
-                    zero: undefined,
-                },
-                {
                     name: "battery_rs485_power2",
-                    espID: 26,
+                    espID: 25,
                     multiplier: undefined,           // only devices with multiplier are sent to HA
                     zero: 5014,
                     rating: 500,
@@ -211,53 +230,35 @@ let
                     inverted: true
                 },
             ],
-            watt: [     // add grid power for recorder<---------------------------
+            watt: [
                 {
-                    name: "8kw_power1",
-                    espID: 5,                   // if undefined, use sensor amp*volt 
+                    name: "battery_power",
+                    sensorType: "esp",
+                    sensor: undefined,
                     multiplier: undefined,      // only devices with multiplier, volt/amp, or combine options are sent to HA
-                    sensorVolt: undefined,      // for power computation based of V*A
-                    sensorAmp: undefined,       // for power computation based of V*A
+                    sensorVoltType: "sensor",
+                    sensorVolt: 0,              // for power computation based of V*A
+                    sensorAmpType: "sensor",
+                    sensorAmp: [0],             // for power computation based of V*A
                     combineESP: undefined,      // all combined ESP and Sensors will be added together
                     combineSensor: undefined,   // all combined ESP and Sensors will be added together
-                    solarPower: true,           // special option to show negative power if battery reverse current is greater than inverter output current
-                    readingCap: undefined,      // sometimes inverter power-up send excessively high bogus reading, throw out the reading if above this number
-                },
-                {
-                    name: "10kw_power2",
-                    espID: 14,
-                    readingCap: 10000,
-                },
-                {
-                    name: "battery_power2",
-                    sensorVolt: 0,
-                    sensorAmp: 4,
+                    solarPower: false,          // special option to show negative power if battery reverse current is greater than inverter output current
                 },
                 {
                     name: "solar_power",
-                    combineESP: [5, 14],
-                    combineSensor: [2],
-                    solarPower: true,
-                    readingCap: 10000,
+                    combineESP: [5, 14],        // the esp IDs for inverter amps
+                    combineSensor: undefined,   // other inverter amp sensor types
+                    solarPower: true,           // this is a solar power sensor
+                    batteryWattType: "sensor",
+                    batteryWatt: [0],            // must have battery watt sensor for Solar Power Calc
+                    record: true
                 },
             ],
-            volt: [     // add grid volts for grid detection <--------------------------------------
+            volt: [
                 {
                     name: "battery_power1",
                     espID: 0,
                     multiplier: 20.33,          // only devices with multiplier are sent to HA
-                    calibrateZero: undefined,
-                    table: [
-                        { voltage: 56.50, adc: 2.779 },
-                        { voltage: 51.17, adc: 2.525 },
-                        { voltage: 50.99, adc: 2.516 },
-                        { voltage: 50.83, adc: 2.503 },
-                    ]
-                },
-                {
-                    name: "battery_power2",
-                    espID: 18,
-                    multiplier: undefined,
                     calibrateZero: undefined,
                 },
             ],
@@ -281,16 +282,6 @@ let
                     espID: 9,
                 },
             ],
-            sun: [
-                {
-                    name: "photo_resistor_power1",
-                    espID: 10,
-                },
-                {
-                    name: "3v_solar_power1",
-                    espID: 10,
-                },
-            ],
             temp: [
                 {
                     name: "battery_room_power1",
@@ -304,16 +295,40 @@ let
             {
                 name: "main",
                 installed: "2024-6-1",
+                charger: {
+                    type: "esp",
+                    switchOn: [
+                        { id: 16, state: false },
+                        { id: 4, state: false },
+                        { id: 1, state: true },
+                        { id: 17, state: true, delay: 20 },
+                    ],
+                    switchOff: [
+                        { id: 17, state: false },
+                        { id: 1, state: false, delay: 10 },
+                    ],
+                    ampExpected: 30,
+                    ampGrid: undefined,
+                    voltGrid: undefined,
+                    voltStart: 51.3,
+                    voltStop: 53.0,
+                    topOffID: undefined,
+                    sensorGrid: undefined,
+                },
+                sensorWattType: "sensor",
+                sensorWatt: 0,                  // used for recorder
+                sensorAmpType: "sensor",
+                sensorAmp: [0],                 // must be an array
+                sensorVoltType: "sensor",
                 sensorVolt: 0,
-                nominalVolts: 53,
                 voltsFullCharge: 55.5,
-                voltsFloatStop: 53.8,
+                voltsFloatStop: 54.0,
                 socTable: 0,
             },
         ],
         soc: [
             [
-                { voltage: 56.0, percent: 100 },
+                { voltage: 55.6, percent: 100 },
                 { voltage: 55.1, percent: 99.5 },
                 { voltage: 54.0, percent: 99 },
                 { voltage: 53.8, percent: 96 },
@@ -354,70 +369,66 @@ let
             let st = state.auto[index];     // set automation state object's shorthand name to "st" (state) 
             //   checkWelder();
             /*
-
-            test  sensor.voltage_grid for reading (is NaN? or null) with grid switched off
-     
-            if on grid during blackout, switch to inverter if under certain voltage
-     
             priority 2 - run pump from grid if at critical level
             runs pumps for 1hr every 24hours if at critical level 20%
      
             */
-            function solarAutomation() {
+            function priorityAuto() {
                 let volts = undefined, amps = undefined, sun = undefined;
                 let config = cfg.solar.priority;
-                if (time.epoch - st.priority.step >= 10) { pointers(); priorityCheck(); } else return;
+                if (time.epoch - st.priority.step >= 10) { pointers(); priorityCheck(); } else return;  // delay start of priority queue
                 function priorityCheck() {
-                    for (let x = config.queue.length - 1; x > -1; x--) {
+                    for (let x = config.queue.length - 1; x > -1; x--) {    // when priority is running
                         let queue = st.priority.queue[x], priority = config.queue[x];
                         if (queue.state == true || queue.state == null) {
-                            //  console.log("checking x:" + x + " amps")
-                            if (sun != undefined && priority.offSun != undefined) {
-                                if (sun <= priority.offSun) {
-                                    if (queue.delayStep == false) {
-                                        queue.delayTimer = time.epoch;
-                                        queue.delayStep = true;
-                                    } else if (time.epoch - queue.delayTimer >= cfg.solar.inverterDelaySwitch) {
-                                        log("sun is low (" + sun + "v) - stopping " + priority.name, index, 1);
-                                        send(x, false);
-                                        return;
-                                    }
-                                } else queue.delayStep = false;
-                            } else if (amps != undefined) {
-                                if (st.battery[0] == undefined || priority.offAmpsFloat == undefined || st.battery[0].floating == false) {
-                                    if (amps <= priority.offAmps) {
+                            //  console.log("checking x:" + x + " amps: " + amps);
+                            if (priority.offVolts == undefined || priority.offVolts != undefined && volts > priority.offVolts) {
+                                if (sun != undefined && priority.offSun != undefined) {
+                                    if (sun <= priority.offSun) {
                                         if (queue.delayStep == false) {
                                             queue.delayTimer = time.epoch;
                                             queue.delayStep = true;
-                                        } else if (time.epoch - queue.delayTimer >= cfg.solar.inverterDelaySwitch) {
-                                            log("charge amps is too low (" + amps + "a) - stopping " + priority.name, index, 1);
-                                            send(x, false);
+                                        } else if (time.epoch - queue.delayTimer >= config.delaySwitchOff) {
+                                            log("sun is low (" + sun + "v) - stopping " + priority.name, index, 1);
+                                            sendOutput(x, false);
                                             return;
                                         }
                                     } else queue.delayStep = false;
-                                } else if (amps <= priority.offAmpsFloat) {
-                                    if (queue.delayStep == false) {
-                                        queue.delayTimer = time.epoch;
-                                        queue.delayStep = true;
-                                    } else if (time.epoch - queue.delayTimer >= cfg.solar.inverterDelaySwitch) {
-                                        log("(floating)discharge amps is high (" + amps + "a) - stopping " + priority.name, index, 1);
-                                        send(x, false);
-                                        return;
-                                    }
+                                } else if (amps != undefined) {
+                                    if (config.battery == undefined || priority.offAmpsFloat == undefined
+                                        || nv.battery[config.battery].floating == false) {
+                                        if (amps <= priority.offAmps) {
+                                            if (queue.delayStep == false) {
+                                                queue.delayTimer = time.epoch;
+                                                queue.delayStep = true;
+                                            } else if (time.epoch - queue.delayTimer >= config.delaySwitchOff) {
+                                                log("charge amps is too low (" + amps.toFixed(1) + "a) - stopping " + priority.name, index, 1);
+                                                sendOutput(x, false);
+                                                return;
+                                            }
+                                        } else queue.delayStep = false;
+                                    } else if (amps <= priority.offAmpsFloat) {
+                                        if (queue.delayStep == false) {
+                                            queue.delayTimer = time.epoch;
+                                            queue.delayStep = true;
+                                        } else if (time.epoch - queue.delayTimer >= config.delaySwitchOff) {
+                                            log("(floating)discharge amps is high (" + amps.toFixed(1) + "a) - stopping " + priority.name, index, 1);
+                                            sendOutput(x, false);
+                                            return;
+                                        }
+                                    } else queue.delayStep = false;
                                 } else queue.delayStep = false;
-                            } else if (volts <= priority.offVolts) {
-                                if (queue.delayStep == false) {
-                                    queue.delayTimer = time.epoch;
-                                    queue.delayStep = true;
-                                } else if (time.epoch - queue.delayTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("battery is low (" + volts + "v) - stopping " + priority.name, index, 1);
-                                    send(x, false);
-                                    return;
-                                }
-                            } else queue.delayStep = false;
+                            } else if (queue.delayStep == false) {
+                                queue.delayTimer = time.epoch;
+                                queue.delayStep = true;
+                            } else if (time.epoch - queue.delayTimer >= config.delaySwitchOff) {
+                                log("battery voltage is low (" + volts + "v) - stopping " + priority.name, index, 1);
+                                sendOutput(x, false);
+                                return;
+                            }
                         }
                     }
-                    for (let x = 0; x < config.queue.length; x++) {
+                    for (let x = 0; x < config.queue.length; x++) {         // when priority is stopped
                         let queue = st.priority.queue[x], priority = config.queue[x];
                         if (priority.haAuto == undefined || state.ha[priority.haAuto] == true) {
                             if (queue.state == false || queue.state == null) {
@@ -426,24 +437,30 @@ let
                                         || priority.inverter == undefined && st.inverter[0].state == true) {
                                         if (volts >= priority.onVolts) {
                                             if (sun != undefined && priority.onSun != undefined) {
-                                                if (sun >= priority.onSun) {
-                                                    if (queue.delayStep == false) {
-                                                        queue.delayTimer = time.epoch;
-                                                        queue.delayStep = true;
-                                                    } else if (time.epoch - queue.delayTimer >= cfg.solar.inverterDelaySwitch) {
-                                                        log("sun is high (" + sun + "v) - starting " + priority.name, index, 1);
-                                                        send(x, true);
-                                                        return;
-                                                    }
-                                                } else if (sun >= priority.onSun) queue.delayStep = false;
-                                            } else if (amps != undefined) {
+                                                if (priority.offAmpsFloat == undefined || priority.offAmpsFloat != undefined
+                                                    && nv.battery[config.battery].floating == true) {
+                                                    //  console.log("checking sun: " + sun + " float:" + nv.battery[config.battery].floating)
+                                                    if (sun >= priority.onSun) {
+                                                        console.log("checking sun: " + sun + " float:" + nv.battery[config.battery].floating)
+                                                        if (queue.delayStepSun == false) {
+                                                            queue.delayTimerSun = time.epoch;
+                                                            queue.delayStepSun = true;
+                                                        } else if (time.epoch - queue.delayTimerSun >= config.delaySwitchOn) {
+                                                            log("sun is high (" + sun + "v) - starting " + priority.name, index, 1);
+                                                            sendOutput(x, true);
+                                                            return;
+                                                        }
+                                                    } else queue.delayStepSun = false;
+                                                }
+                                            }
+                                            if (amps != undefined) {
                                                 if (amps >= priority.onAmps) {
                                                     if (queue.delayStep == false) {
                                                         queue.delayTimer = time.epoch;
                                                         queue.delayStep = true;
-                                                    } else if (time.epoch - queue.delayTimer >= cfg.solar.inverterDelaySwitch) {
-                                                        log("charge amps is high (" + amps + "a) - starting " + priority.name, index, 1);
-                                                        send(x, true);
+                                                    } else if (time.epoch - queue.delayTimer >= config.delaySwitchOn) {
+                                                        log("charge amps is high (" + amps.toFixed(1) + "a) - starting " + priority.name, index, 1);
+                                                        sendOutput(x, true);
                                                         return;
                                                     }
                                                 } else if (amps < priority.onAmps) queue.delayStep = false;
@@ -451,19 +468,20 @@ let
                                                 if (queue.delayStep == false) {
                                                     queue.delayTimer = time.epoch;
                                                     queue.delayStep = true;
-                                                } else if (time.epoch - queue.delayTimer >= cfg.solar.inverterDelaySwitch) {
-                                                    log("battery volts is enough (" + volts + "v) - starting " + priority.name, index, 1);
-                                                    send(x, true);
+                                                } else if (time.epoch - queue.delayTimer >= config.delaySwitchOn) {
+                                                    log("battery volts is enough (" + volts.toFixed(1) + "v) - starting " + priority.name, index, 1);
+                                                    sendOutput(x, true);
                                                     return;
                                                 }
                                             }
-                                        } else if (volts >= priority.onVolts) queue.delayStep = false;
+                                        } else queue.delayStep = false;
+                                        // } else if (volts >= priority.onVolts) queue.delayStep = false;
                                     }
                                 }
                             }
                         }
                     }
-                    function send(x, newState) {
+                    function sendOutput(x, newState) {
                         let queue = st.priority.queue[x], priority = config.queue[x];
                         for (let y = 0; y < priority.devices.length; y++) {
                             if (priority.devices[y].includes("input_boolean"))
@@ -471,218 +489,256 @@ let
                             else esp.send(priority.devices[y], newState);
                         }
                         cfg.inverter.forEach((_, y) => { st.inverter[y].delaySwitchStep = false });
-                        config.queue.forEach((_, y) => { st.priority.queue[y].delayStep = false });
-                        queue.delayStep = false
+                        config.queue.forEach((_, y) => { st.priority.queue[y].delayStep = false; queue.delayStepSun = false; });
+
                         queue.state = newState;
                         st.priority.step = time.epoch;
                     }
                 }
                 function pointers() {
-                    volts = st.sensor.volt[config.sensorVolt].toFixed(2);
+                    volts = parseFloat(st.sensor.volt[cfg.battery[config.battery].sensorVolt]).toFixed(2);
                     if (cfg.solar.espSunlight != undefined)
                         sun = parseFloat(state.esp[cfg.solar.espSunlight]).toFixed(2);
-                    if (config.sensorAmp != undefined)
-                        amps = parseFloat(st.sensor.amp[config.sensorAmp]).toFixed(1);
+                    if (config.battery != undefined) {
+                        if (Array.isArray(cfg.battery[config.battery].sensorAmp)) {
+                            let tamp = 0;
+                            for (let y = 0; y < cfg.battery[config.battery].sensorAmp.length; y++) {
+                                tamp += parseFloat(st.sensor.amp[cfg.battery[config.battery].sensorAmp[y]]);
+                                amps = tamp;
+                            }
+                        } else amps = parseFloat(st.sensor.amp[cfg.battery[config.battery].sensorAmp]);
+                    }
                 }
             }
             function inverterAuto() {
                 for (let x = 0; x < cfg.inverter.length; x++) {         // initialize all inverter states
+                    let { config, inverter } = pointers(x);
                     if (st.inverter[x].state == null) {
                         //  console.log("x is: " + x + " sensor is: " + cfg.inverter[x].sensorVolt + " object is: ", st.sensor)
-                        if (st.sensor.volt[cfg.inverter[x].sensorVolt] != undefined)
-                            log("initializing " + cfg.inverter[x].name + " inverter state - current state: " + state.esp[cfg.inverter[x].espSwitchTransfer], index, 1);
-                        st.inverter[x].state = state.esp[cfg.inverter[x].espSwitchTransfer];
-                        st.inverter[x].step = time.epoch - 20;
-                        if (state.ha[cfg.solar.inverterAuto] == true) log("inverter: " + cfg.inverter[x].name + " - automation is on", index, 1);
-                        else log("inverter: " + cfg.inverter[x].name + " - automation is off", index, 1);
-                    }
+                        if (st.sensor.volt[config.sensorVolt] != undefined)
+                            log("initializing " + config.name + " inverter state - current state: " + state.esp[config.transfer.switchOn[0].id], index, 1);
+                        inverter.state = state.esp[config.transfer.switchOn[0].id];
+                        inverter.step = time.epoch - 20;
+                        if (state.ha[cfg.solar.inverterAuto] == true) log("inverter: " + config.name + " - automation is on", index, 1);
+                        else log("inverter: " + config.name + " - automation is off", index, 1);
+                        if (state.ha[config.power.ha] != inverter.state)
+                            ha.send(cfg.ha[config.power.ha], inverter.state);
+                    } else if (inverter.state == "faulted" && voltsInverter > 20) { }   // nothing here yet
                 }
                 for (let x = cfg.inverter.length - 1; x > -1; x--) {    // if inverter is running 
-                    let volts, amps, sun, config = cfg.inverter[x], inverter = st.inverter[x];
-                    if (st.sensor.volt[config.sensorVolt] != undefined) {
-                        volts = st.sensor.volt[config.sensorVolt].toFixed(2);
-                        // checkBattery(x, volts);
-                        if (cfg.solar.espSunlight != undefined)
-                            sun = parseFloat(state.esp[cfg.solar.espSunlight]).toFixed(2);
-                        if (config.sensorAmp != undefined)
-                            amps = parseFloat(st.sensor.amp[config.sensorAmp]).toFixed(1);
-                        if (inverter.state == true) {
-                            if (inverterNightMode(x) == true) {
-                                if (volts < config.nightModeVoltageMin) {
-                                    log("Battery is too low to make it through the night: " + volts + ", " + config.name + " switching off", index, 1);
-                                    inverterPower(x, false);
-                                    return;
-                                }
-                            } else if (st.grid.state != false) {
-                                if (inverter.nightMode != true) {
-                                    if (config.sunStop != undefined) {
-                                        if (sun <= config.sunStop) {
-                                            if (inverter.delaySwitchStep == false) {
-                                                inverter.delaySwitchTimer = time.epoch;
-                                                inverter.delaySwitchStep = true;
-                                            } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                                log("Sun is low: " + sun + "  Volts: " + volts
-                                                    + ", " + config.name + " is switching to grid ", index, 1);
-                                                inverterPower(x, false);
-                                                return;
-                                            }
-                                        } else inverter.delaySwitchStep = false;
-                                    } else if (config.ampsStop != undefined) {
-                                        if (amps <= config.ampsStop || config.battery != undefined && st.battery[config.battery].floating == true
-                                            && amps <= inverter.ampsStopFloat) {
-                                            if (st.battery[config.battery].floating == true && amps <= inverter.ampsStopFloat) {
-                                                if (amps < inverter.switchAmps) inverter.switchAmps = amps;
-                                                if (config.sunSupportAmp == true && sun > inverter.switchSun) inverter.switchSun = sun;
-                                            }
-                                            if (inverter.delaySwitchStep == false) {
-                                                inverter.switchAmpsSample = [];
-                                                inverter.switchAmpsSample.push(amps)
-                                                inverter.delaySwitchTimer = time.epoch;
-                                                inverter.delaySwitchStep = true;
-                                            } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                                if (st.battery[config.battery].floating == true && amps <= inverter.ampsStopFloat) {
-                                                    log("charge current too low, lowest power point: " + inverter.switchAmps + "a  Volts: " + volts
-                                                        + ", " + config.name + " is switching to grid ", index, 1);
-                                                } else log("charge current is too low: " + amps + "a  Volts: " + volts
-                                                    + ", " + config.name + " is switching to grid ", index, 1);
-                                                inverterPower(x, false);
-                                                return;
-                                            }
-                                        } else inverter.delaySwitchStep = false;
-                                    }
-                                }
+                    let { voltsBat, voltsInverter, ampsBat, sun, wattsInverter, config, inverter } = pointers(x);
+                    if (inverter.state == true) {
+                        if (inverterNightMode(x) == true) {
+                            if (voltsBat < config.nightMode.startVoltageMin) {
+                                log("Battery is too low to make it through the night: " + voltsBat + ", " + config.name + " switching off", index, 1);
+                                inverterPower(x, false);
+                                return;
                             }
-                            if (volts <= config.voltsStop) {  // when battery is low
-                                if (inverter.delaySwitchVoltsStep == false) {
-                                    inverter.delaySwitchVoltsTimer = time.epoch;
-                                    inverter.delaySwitchVoltsStep = true;
-                                } else if (time.epoch - inverter.delaySwitchVoltsTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("Battery is low: " + volts + ", " + config.name + " is switching to grid ", index, 1);
-                                    inverterPower(x, false);
-                                    return;
-                                }
-                            } else inverter.delaySwitchVoltsStep = false;
-                            if (inverter.nightMode == true && time.hour >= config.nightModeEndHour
-                                && time.hour < config.nightModeStartHour) {
-                                if (config.nightModeEndAmps != undefined) {
-                                    if (amps >= config.nightModeEndAmps) {
-                                        log("Battery is charging, current is high: " + amps + "a  " + volts + "v, " + config.name + " exiting night mode", index, 1);
-                                        st.inverter[x].nightMode = false;
+                        } else if (st.grid.state != false) {
+                            if (inverter.nightMode != true) {
+                                if (config.sunStop != undefined) {
+                                    if (sun <= config.sunStop) {
+                                        if (inverter.delaySwitchStep == false) {
+                                            inverter.delaySwitchTimer = time.epoch;
+                                            inverter.delaySwitchStep = true;
+                                        } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
+                                            log("Sun is low: " + sun + "  voltsBat: " + voltsBat
+                                                + ", " + config.name + " is switching to grid ", index, 1);
+                                            inverterPower(x, false);
+                                            return;
+                                        }
+                                    } else inverter.delaySwitchStep = false;
+                                } else if (config.ampsStop != undefined) {
+                                    if (nv.battery[config.battery].floating == false) {
+                                        if (ampsBat <= config.ampsStop) ampStop();
+                                        else inverter.delaySwitchStep = false;
+                                    } else {
+                                        if (ampsBat <= inverter.ampsStopFloat) ampStop();
+                                        else inverter.delaySwitchStep = false;
                                     }
-                                } else checkCharging(x, false, volts); // inverter only exits night mode only when there is sufficient charging
+                                }
+                                function ampStop() {
+                                    if (inverter.delaySwitchStep == false) {
+                                        inverter.delaySwitchTimer = time.epoch;
+                                        inverter.delaySwitchStep = true;
+                                    } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
+                                        log("inverter: " + config.name + " - solar power too low: " + ampsBat.toFixed(1) + "a  voltsBat: " + voltsBat
+                                            + "v  Floating: " + nv.battery[config.battery].floating + " Sun: " + sun + "v  Watts: " + wattsInverter + ", " + config.name
+                                            + " is switching to grid ", index, 1);
+                                        inverterPower(x, false);
+                                        inverter.switchWatts = wattsInverter;
+                                        inverter.switchSun = sun;
+                                        return;
+                                    }
+                                }
                             }
                         }
+                        if (voltsBat <= config.voltsStop) {  // when battery is low
+                            if (inverter.delaySwitchVoltsStep == false) {
+                                inverter.delaySwitchVoltsTimer = time.epoch;
+                                inverter.delaySwitchVoltsStep = true;
+                            } else if (time.epoch - inverter.delaySwitchVoltsTimer >= cfg.solar.inverterDelaySwitch) {
+                                log("Battery is low: " + voltsBat + ", " + config.name + " is switching to grid ", index, 1);
+                                inverterPower(x, false);
+                                return;
+                            }
+                        } else inverter.delaySwitchVoltsStep = false;
+                        if (inverter.nightMode == true && time.hour >= config.nightMode.endHour
+                            && time.hour < config.nightMode.startHour) {
+                            if (config.nightMode.endAmps != undefined) {
+                                if (ampsBat >= config.nightMode.endAmps) {
+                                    log("Battery is charging, current is high: " + ampsBat.toFixed(1) + "a  " + voltsBat + "v, " + config.name + " exiting night mode", index, 1);
+                                    inverter.nightMode = false;
+                                }
+                            } else checkCharging(x, false, voltsBat); // inverter only exits night mode only when there is sufficient charging
+                        }
+                        if (voltsInverter < 20) {
+                            if (inverter.delaySwitchFaultStep == false) {
+                                inverter.delaySwitchFaultTimer = time.epoch;
+                                inverter.delaySwitchFaultStep = true;
+                            } else if (time.epoch - inverter.delaySwitchFaultTimer >= 10) {
+                                //   log("inverter: " + config.name + " has faulted - no output - Inverter Auto is shutting down ", index, 3);
+                                //    if (cfg.solar.inverterAuto != undefined) ha.send(cfg.ha[cfg.solar.inverterAuto], false);
+                                log("inverter: " + config.name + " has faulted - no output - Inverter is going offline ", index, 3);
+                                inverter.state = "faulted";
+                                inverterPower(x, false);
+                                return;
+                            }
+                        } else inverter.delaySwitchFaultStep = false;
                     }
                 }
                 for (let x = 0; x < cfg.inverter.length; x++) {         // when inverter is off
-                    let volts, config = cfg.inverter[x];
-                    if (st.sensor.volt[config.sensorVolt] != undefined) {
-                        volts = st.sensor.volt[config.sensorVolt].toFixed(2);
-                        // checkBattery(x, volts);
-                        if (st.inverter[x].state == false) {
-                            checkCharging(x, true, volts);
+                    let { voltsBat, voltsInverter, config, inverter } = pointers(x);
+                    if (cfg.battery[config.battery].sensorVolt != undefined) {
+                        if (inverter.state == false) {
+                            checkCharging(x, true);
                             if (inverterNightMode(x) == true) {
-                                if (volts >= config.nightModeVoltageMin) {
-                                    log("Battery is enough to make it through the night: " + volts + ", " + config.name + " switching on", index, 1);
+                                if (voltsBat >= config.nightMode.startVoltageMin) {
+                                    log("Battery is enough to make it through the night: " + voltsBat + ", " + config.name + " switching on", index, 1);
                                     inverterPower(x, true);
-                                } else log("Battery is too low to make it through the night: " + volts + ", " + config.name + " staying off", index, 1);
+                                } else log("Battery is too low to make it through the night: " + voltsBat + ", " + config.name + " staying off", index, 1);
                             }
-                            if (config.blackoutRecover == true && st.grid.state == false && volts >= config.voltsRun && st.inverter[x].nightMode == false) {
-                                log("Blackout detected, volts is enough to run: " + volts + ", " + config.name + " switching on", index, 1);
+                            if (config.blackout == true && st.grid.state == false && voltsBat >= config.blackoutVoltMin) {
+                                log("Blackout detected, volts is enough to run: " + voltsBat + ", " + config.name + " switching on", index, 2);
                                 inverterPower(x, true);
+                            }
+                            if (config.power.id != undefined && state.esp[config.power.id] == false && inverter.delayOffTimer == null
+                                && time.epoch - inverter.timeShutdown > 10 && inverter.warn.manualPowerOn == false && voltsInverter > 20.0) {
+                                log("inverter: " + config.name + " is still on but should be off - manual power on??", index, 2);
+                                inverter.warn.manualPowerOn = true;
                             }
                         }
                     }
                 }
-                function checkCharging(x, power, volts) {
-                    let amps, sun, config = cfg.inverter[x];
-                    if (cfg.solar.espSunlight != undefined)
-                        sun = parseFloat(state.esp[cfg.solar.espSunlight]).toFixed(2);
-                    if (config.sensorAmp != undefined)
-                        amps = parseFloat(st.sensor.amp[config.sensorAmp]).toFixed(1);
-                    if (volts >= config.voltsRun) {
+                function checkCharging(x, power) {
+                    let { voltsBat, ampsBat, wattsGrid, wattsSolar, sun, config, inverter } = pointers(x);
+                    if (voltsBat >= config.voltsRun) {
+                        if (nv.battery[config.battery].floating == true && config.floatRetrySun == true) {
+                            let match = false;
+                            for (let y = 0; y < cfg.solar.sun.length; y++)
+                                if (sun >= cfg.solar.sun[y].volts && wattsGrid < cfg.solar.sun[y].watts) {
+                                    if (inverter.delaySwitchSunStep == false) {
+                                        inverter.delaySwitchSunTimer = time.epoch;
+                                        inverter.delaySwitchSunStep = true;
+                                    } else if (time.epoch - inverter.delaySwitchSunTimer >= cfg.solar.inverterDelaySwitch) {
+                                        log("battery is floating, sun is enough: " + sun + "v  Power: " + wattsGrid + ", " + config.name + " switching on", index, 1);
+                                        finish();
+                                        return;
+                                    }
+                                    match = true;
+                                } else match = false;
+                            if (match == false) inverter.delaySwitchSunStep = false;
+                        }
                         if (config.sunRun != undefined) {
-                            if (sun >= config.sunRun) {  // when battery begins to charge
-                                if (st.inverter[x].delaySwitchStep == false) {
-                                    st.inverter[x].delaySwitchTimer = time.epoch;
-                                    st.inverter[x].delaySwitchStep = true;
-                                } else if (time.epoch - st.inverter[x].delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("Battery is charging, sun is high: " + volts + ", " + config.name + " switching on", index, 1);
+                            if (sun >= config.sunRun) {     // sunlight detection 
+                                if (inverter.delaySwitchStep == false) {
+                                    inverter.delaySwitchTimer = time.epoch;
+                                    inverter.delaySwitchStep = true;
+                                } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
+                                    log("battery is charging, sun is high: " + voltsBat + ", " + config.name + " switching on", index, 1);
                                     finish();
                                 }
-                            } else if (sun < config.sunRun) st.inverter[x].delaySwitchStep = false;
+                            } else if (sun < config.sunRun) inverter.delaySwitchStep = false;
                         } else if (config.ampsRun != undefined) {
-                            if (amps >= config.ampsRun) {
-                                if (st.inverter[x].delaySwitchStep == false) {
-                                    st.inverter[x].delaySwitchTimer = time.epoch;
-                                    st.inverter[x].delaySwitchStep = true;
-                                } else if (time.epoch - st.inverter[x].delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("Battery is charging, current is high: " + amps + "a  " + volts + "v, " + config.name + " switching on", index, 1);
+                            // console.log("checking amps for: " + x + "  ampsBat: " + ampsBat.toFixed(1), " voltsBat: " + voltsBat)
+                            if (ampsBat >= config.ampsRun) {   // current detection 
+                                if (inverter.delaySwitchStep == false) {
+                                    inverter.delaySwitchTimer = time.epoch;
+                                    inverter.delaySwitchStep = true;
+                                } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
+                                    log("battery is charging, current is high: " + ampsBat.toFixed(1) + "a  " + voltsBat + "v, " + config.name + " switching on", index, 1);
                                     finish();
                                 }
-                            } else if (amps < config.ampsRun) st.inverter[x].delaySwitchStep = false;
-                        } else if (config.espPowerGrid != undefined && config.sensorWattBattery != undefined) {
-                            if (st.battery[config.battery].floating == true) {
-                                if (state.esp[config.espPowerGrid] < inverter.switchAmps) {
-                                    if (st.inverter[x].delaySwitchStep == false) {
-                                        st.inverter[x].delaySwitchTimer = time.epoch;
-                                        st.inverter[x].delaySwitchStep = true;
-                                    } else if (time.epoch - st.inverter[x].delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                        log("circuit current is less than before switch, Before: " + inverter.switchAmps.toFixed(0) + "  Now: " + amps.toFixed(0) + "w  " + volts + "v, " + config.name + " switching on", index, 1);
-                                        inverter.switchAmps = 100000;
-                                        finish();
-                                    }
-                                } else if (sun > inverter.switchSun) {
-                                    if (st.inverter[x].delaySwitchStep == false) {
-                                        st.inverter[x].delaySwitchTimer = time.epoch;
-                                        st.inverter[x].delaySwitchStep = true;
-                                    } else if (time.epoch - st.inverter[x].delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                        log("Sun is higher now than before switch, Before: " + inverter.switchSun + "  Now: " + sun + "w  " + volts + "v, " + config.name + " switching on", index, 1);
-                                        inverter.switchSun = 0;
-                                        finish();
-                                    }
-                                }
-                            }
-                            if (st.sensor.watt[config.sensorWattBattery] > state.esp[config.espPowerGrid]) {
-                                if (st.inverter[x].delaySwitchStep == false) {
-                                    st.inverter[x].delaySwitchTimer = time.epoch;
-                                    st.inverter[x].delaySwitchStep = true;
-                                } else if (time.epoch - st.inverter[x].delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("charge current is higher than grid power: " + (amps * volts).toFixed(0) + "w  " + volts + "v, " + config.name + " switching on", index, 1);
+                            } else if (ampsBat < config.ampsRun) inverter.delaySwitchStep = false;
+                        } else if (config.espWattGrid != undefined) {
+                            if (wattsSolar > ((wattsGrid * config.ampsStartGridMultiplier))) {
+                                if (inverter.delaySwitchStep == false) {
+                                    inverter.delaySwitchTimer = time.epoch;
+                                    inverter.delaySwitchStep = true;
+                                } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
+                                    log("charge current is higher than grid power: " + (ampsBat.toFixed(1) * voltsBat).toFixed(0) + "w  " + voltsBat + "v, " + config.name + " switching on", index, 1);
                                     finish();
                                 }
                             }
-                            if (st.sensor.watt[config.sensorWattBattery] <= state.esp[config.espPowerGrid]) st.inverter[x].delaySwitchStep = false;
+                            if (wattsSolar <= (wattsGrid
+                                + (wattsGrid * config.ampsStartGridMultiplier))) { inverter.delaySwitchStep = false; }
                         } else {
-                            if (st.inverter[x].delaySwitchStep == false) {
-                                st.inverter[x].delaySwitchTimer = time.epoch;
-                                st.inverter[x].delaySwitchStep = true;
-                            } else if (time.epoch - st.inverter[x].delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                log("Battery is charging: " + volts + ", " + config.name + " switching on", index, 1);
+                            if (inverter.delaySwitchStep == false) {
+                                inverter.delaySwitchTimer = time.epoch;
+                                inverter.delaySwitchStep = true;
+                            } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
+                                log("battery is charging: " + voltsBat + ", " + config.name + " switching on", index, 1);
                                 finish();
                             }
                         }
-                    } else if (volts < config.voltsRun) st.inverter[x].delaySwitchStep = false;
+                    } else if (voltsBat < config.voltsRun) inverter.delaySwitchStep = false;
                     function finish() {
-                        if (st.inverter[x].nightMode == true) {
+                        if (inverter.nightMode == true) {
                             log(config.name + " exiting night mode", index, 1);
-                            st.inverter[x].nightMode = false;
+                            inverter.nightMode = false;
                         }
                         if (power == true) inverterPower(x, true);
                     }
                 }
+                function pointers(x) {
+                    let voltsBat, voltsInverter, ampsBat, sun, wattsInverter, wattsGrid, wattsSolar, config = cfg.inverter[x];
+                    if (config.battery != undefined) {
+                        if (cfg.battery[config.battery].sensorVolt != undefined)
+                            voltsBat = parseFloat(st.sensor.volt[cfg.battery[config.battery].sensorVolt]).toFixed(2);
+                        if (cfg.battery[config.battery].sensorAmp != undefined) {
+                            if (Array.isArray(cfg.battery[config.battery].sensorAmp)) {
+                                let temp = 0;
+                                for (let y = 0; y < cfg.battery[config.battery].sensorAmp.length; y++) {
+                                    temp += parseFloat(st.sensor.amp[cfg.battery[config.battery].sensorAmp[y]]);
+                                    ampsBat = temp;
+                                }
+                            } else ampsBat = parseFloat(st.sensor.amp[cfg.battery[config.battery].sensorAmp]);
+                        }
+                        if (cfg.battery[config.battery].sensorWatt != undefined)
+                            wattsSolar = parseFloat(st.sensor.watt[cfg.battery[config.battery].sensorWatt]).toFixed(0);
+                    }
+                    if (config.espWattGrid != undefined)
+                        wattsGrid = state.esp[config.espWattGrid];
+                    if (config.espVolt != undefined)
+                        voltsInverter = parseFloat(state.esp[config.espVolt]).toFixed(0);
+                    if (config.espWatt != undefined)
+                        wattsInverter = parseFloat(state.esp[config.espWatt]).toFixed(0);
+                    if (cfg.solar.espSunlight != undefined)
+                        sun = parseFloat(state.esp[cfg.solar.espSunlight]).toFixed(2);
+                    return { voltsBat, voltsInverter, ampsBat, sun, wattsInverter, wattsGrid, wattsSolar, config, inverter: st.inverter[x] };
+                }
             }
             function inverterNightMode(x) {
                 let nightMode = null, config = cfg.inverter[x];
-                if (config.nightMode == true) {    // undefined config returns false
-                    if (time.hour == config.nightModeStartHour) {                   // if nightMode match
-                        if (config.nightModeStartMin != undefined) {
-                            if (time.min >= config.nightModeStartMin) { nightMode = true; }
+                if (config.nightMode != undefined && config.nightMode.enable == true) {                     // undefined config returns false
+                    if (time.hour == config.nightMode.startHour) {   // if nightMode match
+                        if (config.nightMode.startMin != undefined) {
+                            if (time.min >= config.nightMode.startMin) { nightMode = true; }
                         } else { nightMode = true; }
                     }
-                    else if (time.hour > config.nightModeStartHour || time.hour < config.nightModeEndHour) { nightMode = true; }
+                    else if (time.hour > config.nightMode.startHour || time.hour < config.nightMode.endHour) { nightMode = true; }
                     else nightMode = false;
-                } else nightMode = false;       // if sun is low and not nightMode - switch the inverter off  -- save battery wear
+                } else nightMode = false;
                 if (nightMode == true) {
                     if (st.inverter[x].nightMode == false) {
                         log("night mode is activated for inverter: " + config.name, index, 1);
@@ -693,26 +749,36 @@ let
             }
             function inverterPower(x, run) {
                 let config = cfg.inverter[x];
+                function toggle() {
+                    let list;
+                    if (run) list = config.transfer.switchOn; else list = config.transfer.switchOff;
+                    for (let y = 0; y < list.length; y++) {
+                        setTimeout(() => {
+                            log("inverter: " + config.name + ", transferring ATS switch " + y, index, 1);
+                            esp.send(cfg.esp[list[y].id], list[y].state);
+                        }, ((list[y].delay == undefined) ? 0 : (list[y].delay * 1e3)));
+                    }
+                    ha.send(cfg.ha[cfg.inverter[x].power.ha], run);
+                }
                 if (run == true) {
                     if (time.epoch - st.inverter[x].step >= cfg.solar.inverterRapidSwitch) {
-                        if (config.espSwitchPower == undefined) {
+                        if (config.power.id == undefined) {
                             log("inverter: " + config.name + ", transfer switch to inverter", index, 1);
-                            esp.send(cfg.esp[config.espSwitchTransfer], run);
-                        }
-                        else {
-                            if (st.inverter[x].delayOffTimer == undefined || st.inverter[x].delayOffTimer == null) {
-                                esp.send(cfg.esp[config.espSwitchPower], run);
+                            toggle(run);
+                        } else {
+                            if (state.esp[config.power.id] == false) {
+                                esp.send(cfg.esp[config.power.id], run);
                                 log("inverter: " + config.name + ", power on, delaying transfer switch 10 secs", index, 1);
                                 setTimeout(() => {
                                     log("inverter: " + config.name + ", transfer switch to inverter", index, 1);
-                                    esp.send(cfg.esp[config.espSwitchTransfer], run);
+                                    toggle(run);
                                 }, 10e3);
                             } else {
                                 log("inverter: " + config.name + ", already on - clearing shutdown delay", index, 1);
                                 clearTimeout(st.inverter[x].delayOffTimer);
-                                log("inverter: " + config.name + ", transfer switch to inverter", index, 1);
-                                esp.send(cfg.esp[config.espSwitchTransfer], run);
                                 st.inverter[x].delayOffTimer = null;
+                                log("inverter: " + config.name + ", transfer switch to inverter", index, 1);
+                                toggle(run);
                             }
                         }
                         st.inverter[x].state = run;
@@ -724,38 +790,45 @@ let
                         inverterPower(x, false);
                     }
                 } else {
-                    if (config.espSwitchPower == undefined) {
+                    if (config.power.id == undefined) {
                         log("inverter: " + config.name + ", transfer switch to grid", index, 1);
-                        esp.send(cfg.esp[config.espSwitchTransfer], run);
+                        toggle(run);
                     } else {
                         log("inverter: " + config.name + ", transfer switch to grid", index, 1);
-                        esp.send(cfg.esp[config.espSwitchTransfer], run);
-                        if (config.espSwitchPowerDelay == undefined) {
+                        toggle(run);
+                        if (config.power.delayOff == undefined) {
                             log("inverter: " + config.name + ", power off", index, 1);
-                            st.inverter[x].delayOffTimer = setTimeout(() => { esp.send(cfg.esp[config.espSwitchPower], run); }, 3e3);
+                            st.inverter[x].delayOffTimer = setTimeout(() => {
+                                esp.send(cfg.esp[config.power.id], run);
+                                t.inverter[x].delayOffTimer = null;
+                            }, 10e3);
                         } else {
-                            log("inverter: " + config.name + ", shutdown will delay by:" + config.espSwitchPowerDelay + " seconds", index, 1);
+                            log("inverter: " + config.name + ", shutdown will delay by:" + config.power.delayOff + " seconds", index, 1);
                             st.inverter[x].delayOffTimer = setTimeout(() => {
                                 log("inverter: " + config.name + " shutdown was delayed, now powering off", index, 1);
-                                esp.send(cfg.esp[config.espSwitchPower], run);
-                                st.inverter[x].delayOffTimer = null
-                            }, config.espSwitchPowerDelay * 1000);
+                                esp.send(cfg.esp[config.power.id], run);
+                                st.inverter[x].delayOffTimer = null;
+                                st.inverter[x].timeShutdown = time.epoch;
+                            }, config.power.delayOff * 1000);
                         }
                     }
                     st.inverter[x].state = false;
                     st.inverter[x].step = time.epoch;
                 }
                 st.inverter[x].delaySwitchStep = false;
+                st.inverter[x].delaySwitchVoltsStep = false;
+                st.inverter[x].delaySwitchFaultStep = false;
+                st.inverter[x].delaySwitchSunStep = false;
                 cfg.inverter.forEach((_, y) => { st.inverter[y].delaySwitchStep = false });
                 cfg.solar.priority.queue.forEach((_, y) => { st.priority.queue[y].delayStep = false });
             }
-            function checkRoomTemp() {      // called by setTimeout every 1 sec 
+            function checkRoomTemp() {  // called by setTimeout every 1 sec 
                 if (cfg.solar.fan.espPower != undefined) {
                     if (cfg.solar.fan.sensorTemp != undefined) {
-                        let fan = cfg.solar.fan, timeWait = 5;
+                        let fan = cfg.solar.fan, timeWait = 10;
                         let amps, temp = st.sensor.temp[fan.sensorTemp];
-                        if (cfg.inverter[0].sensorAmp != undefined)
-                            amps = parseFloat(st.sensor.amp[cfg.inverter[0].sensorAmp]).toFixed(1);
+                        if (cfg.solar.fan.sensorAmp != undefined)
+                            amps = parseFloat(st.sensor.amp[cfg.solar.fan.sensorAmp]).toFixed(1);
                         switch (st.fan.run) {
                             case false:
                                 if (temp >= fan.tempRun) {
@@ -809,7 +882,8 @@ let
                                         }
                                     } else st.fan.delayStep = false;
                                 } else if (fan.offAmps != undefined) {
-                                    if (amps <= fan.offAmps && amps >= fan.offAmpsDischarge && temp <= (fan.tempStop)) {
+
+                                    if (amps <= fan.offAmps && amps >= fan.offAmpsDischarge && temp <= fan.tempStop) {
                                         if (st.fan.delayStep == false) {
                                             st.fan.delayTimer = time.epoch;
                                             st.fan.delayStep = true;
@@ -842,12 +916,14 @@ let
                         if (temp >= fan.tempWarn && st.fan.warn == false) {
                             log("room is starting to overheat: " + temp.toFixed(2)
                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 2);
+                            fanSwitch(true);
                             st.fan.warn = true;
                             st.fan.faultStep = time.epochMin;
                         }
                         if (temp >= fan.tempError && st.fan.error == false) {
                             log("room is overheating!!!: " + temp.toFixed(2)
                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 3);
+                            fanSwitch(true);
                             st.fan.error = true;
                             st.fan.faultStep = time.epochMin;
                         }
@@ -869,34 +945,39 @@ let
                     }
                 }
             }
-            function checkGrid() {   // if grid is only offline for a few secs, dont count as blackout
-                if (st.grid.state == null && time.boot > 10) {
-                    if (time.epoch - st.grid.step >= 4) {
-                        st.grid.state = true;
-                        blackout();
-                    } else {
-                        log("grid is online: " + parseFloat(state.esp[cfg.grid.espVoltage]).toFixed(0) + "V", index, 1);
-                        ha.send("voltage_grid", parseFloat(state.esp[cfg.grid.espVoltage]).toFixed(0), "V");
-                        st.grid.state = true;
-                    }
-                }
-                else if (state.esp[cfg.grid.espVoltage] == null) blackout();
-                else if (time.epoch - st.grid.step >= 3) blackout();
-                else if (st.grid.state == false) {
-                    // global function to give h m s?
-                    // log grid blackout statistics
-                    // log sunlight daily index
-                    // grid statistics , save to nv
-                    log("grid back online, offline for: " + (time.epoch - st.grid.timerBlackout) + "s", index, 2);
-                    st.grid.state = true;
-                    ha.send("voltage_grid", parseFloat(state.esp[cfg.grid.espVoltage]).toFixed(0), "V");
-                }
-                function blackout() {
-                    if (st.grid.state == true) {
-                        log("grid blackout", index, 2);
-                        st.grid.state = false;
-                        st.grid.timerBlackout = time.epoch;
-                        ha.send("voltage_grid", 0, "V");
+            function checkGrid() {
+                // global function to give h m s?
+                // log grid blackout statistics
+                // log sunlight daily index
+                // grid statistics , save to nv
+                let volts = parseFloat(state.esp[cfg.grid.espVoltage]).toFixed(0), config = cfg.grid, grid = st.grid;
+                if (time.boot > 10) {
+                    if (volts >= config.voltMax) {
+                        if (grid.state != false) {
+                            log("grid over-voltage: " + volts + "v", index, 3);
+                            st.grid.timerBlackout = time.epoch;
+                            grid.state = false;
+                        } else grid.delayOn = time.epoch;
+                    } else if (volts < config.voltMin && volts > 20.0) {
+                        if (grid.state != false) {
+                            log("grid under-voltage: " + volts + "v", index, 3);
+                            st.grid.timerBlackout = time.epoch;
+                            grid.state = false;
+                        } else grid.delayOn = time.epoch;
+                    } else if (volts < 20.0) {
+                        if (grid.state != false) {
+                            log("grid blackout", index, 3);
+                            st.grid.timerBlackout = time.epoch;
+                            grid.state = false;
+                        } else grid.delayOn = time.epoch;
+                    } else if (grid.state == null) {
+                        log("grid is online: " + volts + "v", index, 1);
+                        grid.state = true;
+                    } else if (grid.state == false) {
+                        if (time.epoch - grid.delayOn >= config.delayRecover) {
+                            log("grid back online: " + volts + "v,  offline for: " + (time.epoch - st.grid.timerBlackout) + "s", index, 2);
+                            grid.state = true;
+                        }
                     }
                 }
             }
@@ -922,19 +1003,54 @@ let
             }
             function checkBattery() {
                 for (let x = 0; x < cfg.battery.length; x++) {
-                    batState = st.battery[x];
-                    let config = cfg.battery[x];
-                    let volts = st.sensor.volt[config.sensorVolt].toFixed(2);
-                    if (volts >= config.voltsFullCharge && batState.floating == false) {
-                        log("Battery is charger is floating: " + volts + "v", index, 1);
-                        batState.floating = true;
+                    let config = cfg.battery[x], bat = st.battery[x];
+                    volts = st.sensor.volt[config.sensorVolt].toFixed(2);
+                    if (nv.battery[x].floating == null) {
+                        if (volts <= config.voltsFullCharge && volts > config.voltsFloatStop) {
+                            log("battery charger is floating: " + volts + "v", index, 1);
+                            nv.battery[x].cycle++;
+                            nv.battery[x].floating = true;
+                        }
+                        else nv.battery[x].floating = false
                     }
-                    if (volts <= config.voltsFloatStop && batState.floating == true) {
-                        log("Battery charger is no longer floating: " + volts + "v", index, 1);
-                        batState.floating = false;
+                    if (nv.battery[x].floating == false && volts >= config.voltsFullCharge) {
+                        log("battery charger is floating: " + volts + "v", index, 1);
+                        nv.battery[x].cycle++;
+                        nv.battery[x].floating = true;
                     }
-                    batState.percent = voltPercent(volts, config);
-                    ha.send("battery_" + config.name, batState.percent, "%");
+                    if (nv.battery[x].floating == true) {
+                        if (volts <= config.voltsFloatStop) {
+                            log("battery charger is no longer floating: " + volts + "v", index, 1);
+                            nv.battery[x].floating = false;
+                        }
+                    }
+                    bat.percent = voltPercent(volts, config);
+                    ha.send("battery_" + config.name, bat.percent, "%");
+                    if (config.sensorWatt != undefined) {
+                        if (Number.isFinite(st.sensor.watt[x])) {
+                            if (Math.sign(st.sensor.watt[x]) == -1) bat.whNeg += st.sensor.watt[x];
+                            else bat.whPos += st.sensor.watt[x];
+                        }
+                        if (bat.min == null) {
+                            log("starting recorder for battery - " + config.name, index, 1);
+                            bat.min = time.min;
+                        }
+                        if (nv.battery[x].kwhTotal.lastDay == undefined) nv.battery[x].kwhTotal.lastDay = time.day;
+                        if (time.min != bat.min) {
+                            let charge = (bat.whPos / 60 / 60), discharge = (bat.whNeg / 60 / 60);
+                            recorder(nv.battery[x].kwhTotal.charge, charge, "battery_" + config.name + "_charge");
+                            recorder(nv.battery[x].kwhTotal.discharge, discharge, "battery_" + config.name + "_discharge");
+                            nv.battery[x].kwhToday.charge += charge;
+                            nv.battery[x].kwhToday.discharge += discharge;
+                            nv.battery[x].total.charge.total += charge;
+                            nv.battery[x].total.discharge.total += discharge;
+                            bat.whPos = 0;
+                            bat.whNeg = 0;
+                            bat.min = time.min;
+                            if (time.hour == 4 && time.min == 0) nv.battery[x].kwhToday.charge = 0;
+                            if (time.hour == 16 && time.min == 0) nv.battery[x].kwhToday.discharge = 0;
+                        }
+                    }
                 }
                 function voltPercent(voltage, config) {
                     let percent = null;
@@ -950,23 +1066,53 @@ let
                     }
                 }
             }
-            function calcSensor() {
+            function calcSensor() {     // calc watts based on amp/volt sensors 
                 for (let x = 0; x < cfg.sensor.watt.length; x++) {
                     let sumESP = 0, sumSensor = 0, config = cfg.sensor.watt[x];
                     if (config.espID == undefined && config.sensorAmp != undefined && config.sensorVolt != undefined) {
-                        st.sensor.watt[x] = st.sensor.volt[config.sensorVolt] * st.sensor.amp[config.sensorAmp];
+                        let amps = 0, volts = 0;
+                        if (config.sensorAmpType == "sensor")
+                            for (let y = 0; y < config.sensorAmp.length; y++) amps += st.sensor.amp[config.sensorAmp[y]];
+                        if (config.sensorVoltType == "sensor") volts = st.sensor.volt[config.sensorVolt];
+                        if (Number.isFinite(volts * amps)) st.sensor.watt[x] = volts * amps;
+                        else (st.sensor.watt[x] = 0.0);
                         ha.send("watt_" + config.name, st.sensor.watt[x].toFixed(0), "W");
                     } else {
                         if (config.combineESP != undefined)
-                            for (let y = 0; y < config.combineESP.length; y++)
-                                sumESP += state.esp[config.combineESP[y]];
+                            for (let y = 0; y < config.combineESP.length; y++) {
+                                if (Number.isFinite(state.esp[config.combineESP[y]]))
+                                    sumESP += state.esp[config.combineESP[y]]
+                            }
                         if (config.combineSensor != undefined)
                             for (let y = 0; y < config.combineSensor.length; y++)
                                 sumSensor += st.sensor.watt[config.combineSensor[y]];
-                        if (config.combineESP != undefined || config.combineSensor != undefined) {
-                            if (config.solarPower == true && Math.sign(sumSensor) == -1 && sumSensor <= (sumESP * -1))
+                        if (config.solarPower == true) {
+                            let batWatts = 0;
+                            if (config.batteryWattType == "sensor")
+                                for (let y = 0; y < config.batteryWatt.length; y++) batWatts += st.sensor.watt[config.batteryWatt[y]];
+                            if (Math.sign(batWatts) == -1 && batWatts <= ((sumESP + sumSensor) * -1)) {
                                 ha.send("watt_" + config.name, 0, "W");
-                            else ha.send("watt_" + config.name, Math.round(sumSensor + sumESP), "W");
+                            } else {
+                                if (Number.isFinite(batWatts)) st.sensor.watt[x] = batWatts + sumSensor + sumESP;
+                                ha.send("watt_" + config.name, Math.round(batWatts + sumSensor + sumESP), "W");
+                            }
+                        } else {
+                            if (Number.isFinite(batWatts)) st.sensor.watt[x] = sumSensor + sumESP;
+                            ha.send("watt_" + config.name, Math.round(sumSensor + sumESP), "W");
+                        }
+                    }
+                    if (config.record == true) {
+                        if (Number.isFinite(st.sensor.watt[x]) && Math.sign(st.sensor.watt[x]) != -1)
+                            st.sensor.recorder.watt[x].wh += st.sensor.watt[x];
+                        if (st.sensor.recorder.watt[x].min == null) {
+                            log("starting recorder for watt sensor - " + config.name, index, 1);
+                            st.sensor.recorder.watt[x].min = time.min;
+                        } else if (time.min != st.sensor.recorder.watt[x].min) {
+                            let wh = ((st.sensor.recorder.watt[x].wh / 60) / 60);
+                            nv.sensor.watt[x].kwh += wh;
+                            recorder(nv.sensor.watt[x], wh, config.name);
+                            st.sensor.recorder.watt[x].wh = 0;
+                            st.sensor.recorder.watt[x].min = time.min;
                         }
                     }
                 }
@@ -988,73 +1134,6 @@ let
                     }
                 }
             }
-            function init() {
-                state.auto.push({                                           // create object for this automation, 
-                    name: "Solar",                                          // give this automation a name 
-                    priority: { step: time.epoch, queue: [], },
-                    inverter: [],
-                    battery: [],
-                    grid: { state: null, step: time.epoch, timerBlackout: time.epoch },
-                    fan: { run: null, delayStep: false, delayTimer: time.epoch, warn: false, error: false, faultStep: time.epochMin },
-                    sensor: { amp: [], volt: [], watt: [], temp: [] },
-                    welder: { detect: false, step: null },
-                });
-                initNV();
-                cfg.inverter.forEach(_ => {
-                    state.auto[index].inverter.push({
-                        state: null, step: time.epoch - 20, nightMode: false, delayOffTimer: undefined, switchAmps: 100000, switchSun: 0,
-                        delaySwitchTimer: time.epoch, delaySwitchStep: false, delaySwitchVoltsTimer: time.epoch, delaySwitchVoltsStep: false
-                    });
-                });
-                cfg.solar.priority.queue.forEach(_ => {
-                    state.auto[index].priority.queue.push({ state: null, delayStep: false, delayTimer: time.epoch, })
-                });
-                cfg.battery.forEach(_ => {
-                    state.auto[index].battery.push({ floating: false, percent: null })
-                });
-                setInterval(() => {
-                    calcSensor(); checkBattery(); checkGrid();
-                    if (state.ha != undefined && state.ha[cfg.solar.inverterAuto] == true) {
-                        inverterAuto();
-                        if (st.welder.detect == false) solarAutomation();
-                    }
-                }, 1e3);      // set minimum rerun time, otherwise this automation function will only on ESP and HA events
-                setInterval(() => { timer(); file.write.nv(); }, 60e3);
-                if (cfg.solar.fan != undefined) setInterval(() => { checkRoomTemp(); }, 1e3);
-                emitters();
-                log("automation system started", index, 1);                 // log automation start with index number and severity 
-                send("coreData", { register: true, name: ["tank_lth"] });      // register with core to receive sensor data
-                function initNV() {
-                    if (nv.sensor == undefined) nv.sensor = { watt: [], kwh: [] };
-                    // if (nv.solar == undefined) nv.solar = {};
-                    if (nv.grid == undefined) nv.grid = { power: false, blackout: [], sec: undefined };
-                    if (nv.battery == undefined) nv.battery = [];
-                    for (let x = 0; x < cfg.sensor.watt.length; x++)
-                        if (nv.sensor.watt[x] == undefined) {
-                            log("initializing Amp sensor: " + cfg.sensor.watt[x].name + " NV memory...", index, 1);
-                            nv.sensor.watt.push({
-                                name: cfg.sensor.watt[x].name, kwh: 0, min: [], hour: [], day: [], month: [],
-                            });
-                        }
-                    for (let x = 0; x < cfg.sensor.kwh.length; x++) {
-                        if (nv.sensor.kwh[x] == undefined) {
-                            log("initializing kwh sensor: " + cfg.sensor.kwh[x].name + " NV memory...", index, 1);
-                            nv.sensor.kwh.push({
-                                name: cfg.sensor.kwh[x].name, total: 0, min: [], hour: [], day: [], month: [],
-                                lastMin: null, lastHour: null,
-                            });
-                        }
-                    }
-                    for (let x = 0; x < cfg.battery.length; x++)
-                        if (nv.battery[x] == undefined) {
-                            log("initializing Battery: " + cfg.battery[x].name + " NV memory...", index, 1);
-                            nv.battery.push({
-                                name: cfg.battery[x].name, cycles: 0, kwh: 0,
-                            });
-                        }
-                }
-                file.write.nv();
-            }
             function emitters() {
                 let st = state.auto[index];
                 sensors();
@@ -1072,11 +1151,15 @@ let
                                 else st.sensor.amp[x] = final;
                             } else st.sensor.amp[x] = parseFloat(data);
                             if (st.sensor.amp[x] != null)
-                                ha.send("amp_" + cfg.sensor.amp[x].name, st.sensor.amp[x].toFixed(1), "A");
+                                if (st.sensor.amp[x] != null && Number.isFinite(st.sensor.amp[x])) {
+                                    ha.send("amp_" + cfg.sensor.amp[x].name, st.sensor.amp[x].toFixed(1), "A");
+                                }
+
                         });
                     });
                     cfg.sensor.volt.forEach((_, x) => {
                         em.on(cfg.esp[cfg.sensor.volt[x].espID], (data) => {
+                            clearTimeout(timerSensorTimeout.volt[x]);
                             let final = null, voltage = parseFloat(data); // Initialize the final interpolated or extrapolated value
                             const table = cfg.sensor.volt[x].table;
                             if (table !== undefined) {  // Piecewise Linear Interpolation:
@@ -1099,12 +1182,17 @@ let
                                     }
                                 }
                                 st.sensor.volt[x] = final;
-                                ha.send("volt_" + cfg.sensor.volt[x].name, final.toFixed(2), "V");
-                            } else if (cfg.sensor.volt[x].multiplier != undefined) {
+                                if (st.sensor.volt[x] != null && Number.isFinite(st.sensor.volt[x]))
+                                    ha.send("volt_" + cfg.sensor.volt[x].name, final.toFixed(2), "V");
+                            } else if (cfg.sensor.volt[x].multiplier != undefined) {    // standard multiplies
                                 st.sensor.volt[x] = voltage * cfg.sensor.volt[x].multiplier;
-                                if (st.sensor.volt[x] != null)
+                                if (st.sensor.volt[x] != null && Number.isFinite(st.sensor.volt[x]))
                                     ha.send("volt_" + cfg.sensor.volt[x].name, st.sensor.volt[x].toFixed(2), "V");
-                            } else st.sensor.volt[x] = voltage;
+                            } else st.sensor.volt[x] = voltage;                         // no multiplier
+                            timerSensorTimeout.volt[x] = setTimeout(() => {
+                                log("volt sensor " + cfg.sensor.volt[x].name + " is offline", index, 2);
+                                //    ha.send("volt_" + cfg.sensor.volt[x].name, null, "V");
+                            }, 3e3);
                         });
                     });
                     /*
@@ -1130,7 +1218,7 @@ let
                             else st.sensor.volt[x] = voltage;
                         });
                     });
-
+            
                     cfg.sensor.volt.forEach((_, x) => {
                         em.on(cfg.esp[cfg.sensor.volt[x].espID], (data) => {
                             if (cfg.sensor.volt[x].multiplier != undefined) {
@@ -1143,26 +1231,26 @@ let
                     });
                     */
                     cfg.sensor.watt.forEach((e, x) => {
-                        if (e.espID != undefined)
+                        if (e.sensor != undefined)
                             em.on(cfg.esp[e.espID], (data) => {
-                                let reading;
-                                if (e.multiplier != undefined) reading = parseFloat(data) * e.multiplier;
-                                else reading = parseFloat(data);
-                                if (reading != null) {
-                                    if (e.readingCap != undefined) {
-                                        if (reading < e.readingCap) st.sensor.watt[x] = reading;
-                                    } else st.sensor.watt[x] = reading;
-                                    ha.send("watt_" + e.name, st.sensor.watt[x].toFixed(0), "W");
+                                let newData;
+                                if (e.multiplier != undefined) newData = parseFloat(data) * e.multiplier;
+                                else newData = parseFloat(data);
+                                if (newData != null) {
+                                    st.sensor.watt[x] = newData;
+                                    if (st.sensor.watt[x] != undefined && Number.isFinite(st.sensor.watt[x]))
+                                        ha.send("watt_" + e.name, st.sensor.watt[x].toFixed(0), "W");
                                 }
                             });
                     });
                     cfg.sensor.kwh.forEach((_, x) => {
                         em.on(cfg.esp[cfg.sensor.kwh[x].espID], (data) => {
-                            if (!isNaN(state.esp[cfg.sensor.kwh[x].espID])) {
-                                let diff = state.esp[cfg.sensor.kwh[x].espID] - nv.sensor.kwh[x].total;
-                                if (state.esp[cfg.sensor.kwh[x].espID] != nv.sensor.kwh[x].total) {
+                            let newData = parseInt(data);
+                            if (Number.isFinite(newData)) {
+                                let diff = newData - nv.sensor.kwh[x].total;
+                                if (newData != nv.sensor.kwh[x].total) {
                                     if (nv.sensor.kwh[x].total == 0) log("sensor: " + cfg.sensor.kwh[x].name + " first time recording", index, 1);
-                                    else recorder(nv.sensor.kwh[x], diff, cfg.sensor.kwh[x]);
+                                    else recorder(nv.sensor.kwh[x], diff, cfg.sensor.kwh[x].name);
                                     nv.sensor.kwh[x].total = state.esp[cfg.sensor.kwh[x].espID];
                                 }
                             }
@@ -1172,7 +1260,7 @@ let
                         em.on(cfg.esp[cfg.sensor.temp[x].espID], (data) => {
                             if (cfg.sensor.temp[x].multiplier != undefined) {
                                 st.sensor.temp[x] = parseFloat(data) * cfg.sensor.temp[x].multiplier;
-                                if (st.sensor.temp[x] != null)
+                                if (st.sensor.temp[x] != null && Number.isFinite(st.sensor.temp[x]))
                                     ha.send("temp_" + cfg.sensor.temp[x].name, st.sensor.temp[x].toFixed(1), cfg.sensor.temp[x].unit);
                             }
                             else st.sensor.temp[x] = parseFloat(data);
@@ -1184,23 +1272,13 @@ let
                     else log("inverter auto going offline", index, 1);
                 });
                 for (let x = 0; x < cfg.inverter.length; x++) {
-                    em.on(cfg.esp[cfg.inverter[x].espSwitchTransfer], (newState) => {   // keep inverter state synced to automation state
-                        log("inverter " + cfg.inverter[x].name + " ESP state changed - new state: " + newState, index, 1);
-                        st.inverter[x].state = newState;
-                        inverterNightMode(x);
-                        // inverterPower(x, newState);
-                        if (newState == true) {
-                            if (cfg.inverter[x].espSwitchPower != undefined) {
-                                log("inverter " + cfg.inverter[x].name + " powering on", index, 1);
-                                esp.send(cfg.esp[cfg.inverter[x].espSwitchPower], newState);
-                            }
-                        } else {
-                            if (cfg.inverter[x].espSwitchPower != undefined) {
-                                setTimeout(() => {
-                                    log("inverter " + cfg.inverter[x].name + " powering off", index, 1);
-                                    esp.send(cfg.esp[cfg.inverter[x].espSwitchPower], newState);
-                                }, 10e3);
-                            }
+                    em.on(cfg.ha[cfg.inverter[x].power.ha], (newState) => {   // keep inverter state synced to automation state
+                        if (st.inverter[x].state != newState) {
+                            log("inverter " + cfg.inverter[x].name + " state switching to " + newState, index, 1);
+                            st.inverter[x].state = newState;
+                            inverterNightMode(x);
+                            inverterPower(x, newState);
+                            st.inverter[x].warn.manualPowerOn = false;
                         }
                     });
                 }
@@ -1223,7 +1301,6 @@ let
                         });
                     });
                 });
-                em.on("grid-voltage", (newState) => { st.grid.step = time.epoch; });
                 /*
                 em.on(cfg.esp[cfg.solar.current.espID], (newState) => {
                     let currentTemp = 0;
@@ -1231,36 +1308,113 @@ let
                     if (st.current.step < cfg.solar.current.samples - 1)
                         st.current.step++
                     else {
-     
+             
                         st.current.step = 0;
                     }
-     
-     
+             
+             
                     for (let x = 0; x < cfg.solar.current.samples; x++) currentTemp += st.current.reading[x];
                     st.current.median = currentTemp / cfg.solar.current.samples;
-     
+             
                     if (st.current.median > cfg.solar.current.offset) {
                         let calc1, calc2, calc3;
                         calc1 = st.current.median - cfg.solar.current.offset;
                         calc2 = calc1 / 0.005;
                         //  log("POSITIVE - reading: " + st.current.median + "calc 1: " + calc1 + "  calc2: " + calc2, index, 0)
-     
-     
+             
+             
                         st.current.final = calc2
                     } else if (st.current.median < cfg.solar.current.offset) {
                         let calc1, calc2, calc3;
                         calc1 = st.current.median - cfg.solar.current.offset;
                         calc2 = calc1 / 0.005;
                         //  log("NEGATIVE - reading: " + st.current.median + "calc 1: " + calc1 + "  calc2: " + calc2, index, 0)
-     
-     
+             
+             
                         st.current.final = calc2
                     }
-     
+             
                     //    log("current reading: " + ((st.current.final != null) ? (st.current.final).toFixed(1) : "0") + "  step: " + st.current.step, index, 0);
                 });
-     
+             
                 */
+            }
+            function init() {
+                timerSensorTimeout = { amp: [], volt: [], watt: [] };
+                state.auto.push({                                           // create object for this automation, 
+                    name: "Solar",                                          // give this automation a name 
+                    priority: { step: time.epoch, queue: [], },
+                    inverter: [],
+                    battery: [],
+                    grid: { state: null, delayOn: time.epoch, timerBlackout: time.epoch, voltOver: false, },
+                    fan: { run: null, delayStep: false, delayTimer: time.epoch, warn: false, error: false, faultStep: time.epochMin },
+                    sensor: { amp: [], volt: [], watt: [], temp: [], timer: { amp: [], volt: [], watt: [], temp: [] }, recorder: { watt: [] } },
+                    welder: { detect: false, step: null },
+                });
+                initNV();
+                cfg.inverter.forEach(_ => {
+                    state.auto[index].inverter.push({
+                        state: null, step: time.epoch - 20, nightMode: false, delayOffTimer: undefined, switchWatts: 0, switchSun: 0,
+                        delaySwitchTimer: time.epoch, delaySwitchStep: false, delaySwitchVoltsTimer: time.epoch, delaySwitchVoltsStep: false,
+                        delaySwitchSunTimer: time.epoch, delaySwitchSunStep: false, delaySwitchFaultStep: false, delaySwitchFaultTimer: time.epoch,
+                        timeShutdown: null,
+                        warn: {
+                            manualPowerOn: false,
+                        }
+                    });
+                });
+                cfg.solar.priority.queue.forEach(_ => {
+                    state.auto[index].priority.queue.push({ state: null, delayStep: false, delayStepSun: false, delayTimer: time.epoch, delayTimerSun: time.epoch })
+                });
+                cfg.battery.forEach(_ => {
+                    state.auto[index].battery.push({ percent: null, min: null, whPos: 0, whNeg: 0, floatLast: null })
+                });
+                setInterval(() => {
+                    calcSensor(); checkBattery(); checkGrid();
+                    if (state.ha != undefined && state.ha[cfg.solar.inverterAuto] == true) {
+                        inverterAuto();
+                        if (st.welder.detect == false) priorityAuto();
+                    }
+                }, 1e3);      // set minimum rerun time, otherwise this automation function will only on ESP and HA events
+                setInterval(() => { timer(); file.write.nv(); }, 60e3);
+                if (cfg.solar.fan != undefined) setInterval(() => { checkRoomTemp(); }, 1e3);
+                emitters();
+                log("automation system started", index, 1);                 // log automation start with index number and severity 
+                send("coreData", { register: true, name: ["tank_lth"] });      // register with core to receive sensor data
+                function initNV() {
+                    if (nv.sensor == undefined) nv.sensor = { watt: [], kwh: [] };
+                    // if (nv.solar == undefined) nv.solar = {};
+                    if (nv.grid == undefined) nv.grid = { power: false, blackout: [], sec: undefined };
+                    if (nv.battery == undefined) nv.battery = [];
+                    for (let x = 0; x < cfg.sensor.watt.length; x++) {
+                        state.auto[index].sensor.recorder.watt.push({ min: null, wh: 0 });
+                        if (nv.sensor.watt[x] == undefined) {
+                            log("initializing watt sensor: " + cfg.sensor.watt[x].name + " NV memory...", index, 1);
+                            nv.sensor.watt.push({
+                                name: cfg.sensor.watt[x].name, kwh: 0, min: [], hour: [], day: [], month: [],
+                            });
+                        }
+                    }
+                    for (let x = 0; x < cfg.sensor.kwh.length; x++) {
+                        if (nv.sensor.kwh[x] == undefined) {
+                            log("initializing kwh sensor: " + cfg.sensor.kwh[x].name + " NV memory...", index, 1);
+                            nv.sensor.kwh.push({
+                                name: cfg.sensor.kwh[x].name, total: 0, min: [], hour: [], day: [], month: [],
+                            });
+                        }
+                    }
+                    for (let x = 0; x < cfg.battery.length; x++)
+                        if (nv.battery[x] == undefined) {
+                            log("initializing Battery: " + cfg.battery[x].name + " NV memory...", index, 1);
+                            nv.battery.push({
+                                name: cfg.battery[x].name, cycles: 0, floating: null,
+                                kwhToday: { charge: 0, discharge: 0 },
+                                total: { charge: 0, discharge: 0 },
+                                kwhTotal: { charge: {}, discharge: {} },
+                            });
+                        }
+                }
+                file.write.nv();
             }
             function timer() {
                 if (time.hour == 8 && time.min == 0) {
@@ -1270,12 +1424,13 @@ let
                     //   esp.send("power1-relay2", false); // fan
                 }
             }
-            function recorder(obj, diff, cfg) {
+            function recorder(obj, diff, name) {  // nv is written every 60 seconds
                 let calcHour = 0, calcDay = 0, calcMonth = 0, lastHour = 0, lastDay = 0, last30Days = 0, lastMonth;
                 if (!Array.isArray(obj.min) || obj.min.length != 60) obj.min = new Array(60).fill(0);
                 if (!Array.isArray(obj.hour) || obj.hour.length != 24) obj.hour = new Array(24).fill(0);
                 if (!Array.isArray(obj.day) || obj.day.length != 31) obj.day = new Array(31).fill(0);
                 if (!Array.isArray(obj.month) || obj.month.length != 12) obj.month = new Array(12).fill(0);
+                if (obj.total == undefined) obj.total = 0;
                 if (obj.lastMin != time.min) { obj.min[time.min] = 0; obj.lastMin = time.min; }
                 obj.min[time.min] += diff;
                 for (let x = 0; x <= time.min; x++) calcHour += obj.min[x];
@@ -1290,10 +1445,10 @@ let
                 for (let x = 0; x < obj.day.length; x++) last30Days += obj.day[x];
                 for (let x = 0; x < obj.month.length; x++) lastMonth += obj.month[x];
 
-                ha.send("kwh_" + cfg.name + "_hour", (lastHour / 1000).toFixed(2), "kWh");
-                ha.send("kwh_" + cfg.name + "_day", (lastDay / 1000).toFixed(2), "kWh");
-                ha.send("kwh_" + cfg.name + "_30days", (last30Days / 1000).toFixed(2), "kWh");
-                ha.send("kwh_" + cfg.name + "_12months", (last30Days / 1000).toFixed(2), "kWh");
+                ha.send("kwh_" + name + "_hour", (lastHour / 1000).toFixed(2), "kWh");
+                ha.send("kwh_" + name + "_day", (lastDay / 1000).toFixed(2), "kWh");
+                ha.send("kwh_" + name + "_30days", (last30Days / 1000).toFixed(2), "kWh");
+                ha.send("kwh_" + name + "_12months", (last30Days / 1000).toFixed(2), "kWh");
             }
         }
     ];
@@ -1301,7 +1456,7 @@ let
     user = {        // user configurable block - Telegram 
         telegram: { // enter a case matching your desireable input
             agent: function (msg) {
-                //  log("incoming telegram message: " + msg, 0, 0);
+                //  log("incoming telegram message: " + msg,  0);
                 //  console.log("incoming telegram message: ", msg);
                 if (telegram.auth(msg)) {
                     switch (msg.text) {
@@ -1311,14 +1466,14 @@ let
                         case "r":
                             bot(msg.from.id, "Test Menu:");
                             setTimeout(() => {      // delay to ensure menu Title gets presented first in Bot channel
-                                telegram.buttonToggle(msg, "t1", "Test Button");
+                                telegram.buttonToggle(msg, "TestToggle", "Test Button");
                                 setTimeout(() => {      // delay to ensure menu Title gets presented first in Bot channel
-                                    telegram.buttonMulti(msg, "t2", "Test Choices", ["test1", "test2", "test3"]);
+                                    telegram.buttonMulti(msg, "TestMenu", "Test Choices", ["test1", "test2", "test3"]);
                                 }, 200);
                             }, 200);
                             break;
                         default:
-                            log("incoming telegram message - unknown command - " + JSON.stringify(msg.text), 0, 0);
+                            log("incoming telegram message - unknown command - " + JSON.stringify(msg.text), 0);
                             break;
                     }
                 }
@@ -1327,24 +1482,24 @@ let
                 else bot(msg.chat.id, "i don't know you, go away");
 
             },
-            response: function (msg) {  // enter a two character code to identify your callback "case" 
+            callback: function (msg) {  // enter a two character code to identify your callback "case" 
                 let code = msg.data.slice(0, 2);
                 let data = msg.data.slice(2);
                 switch (code) {
-                    case "t1":  // read button input and toggle corresponding function
+                    case "TestToggle":  // read button input and toggle corresponding function
                         if (data == "true") { myFunction(true); break; }
                         if (data == "false") { myFunction(false); break; }
                         break;
-                    case "t2":  // read button input and perform actions
+                    case "TestMenu":  // read button input and perform actions
                         switch (data) {
-                            case "test1": bot.sendMessage(msg.from.id, log("test1", "Telegram", 0)); break;
-                            case "test2": bot.sendMessage(msg.from.id, log("test2", "Telegram", 0)); break;
-                            case "test3": bot.sendMessage(msg.from.id, log("test3", "Telegram", 0)); break;
+                            case "test1": bot(msg.from.id, "Telegram " + data); log("Telegram test1", 0); break;
+                            case "test2": bot(msg.from.id, "Telegram " + data); log("Telegram test2", 0); break;
+                            case "test3": bot(msg.from.id, "Telegram " + data); log("Telegram test3", 0); break;
                         }
                         break;
                 }       // create a function for use with your callback
                 function myFunction(newState) {    // function that reads the callback input and toggles corresponding boolean in Home Assistant
-                    bot.sendMessage(msg.from.id, "Test State: " + newState);
+                    bot(msg.from.id, "Test State: " + newState);
                 }
             },
         },
@@ -1382,7 +1537,6 @@ let
                             automation.forEach((func, index) => { func(index) });
                             break;
                         case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
-                            state.ha = (buf.obj);
                             log("Core has reconnected to HA, fetching again");
                             send("espFetch");
                             break;
@@ -1412,12 +1566,16 @@ let
                             }
                             break;
                         case "diag":                // incoming diag refresh request, then reply object
-                            send("diag", { state: state, nv: nv });
+                            send("diag", { state, nv });
                             break;
                         case "telegram":
+                            // console.log("receiving telegram message: " + buf.obj);
                             switch (buf.obj.class) {
                                 case "agent":
                                     user.telegram.agent(buf.obj.data);
+                                    break;
+                                case "callback":
+                                    user.telegram.callback(buf.obj.data);
                                     break;
                             }
                             break;
@@ -1427,14 +1585,14 @@ let
             });
         },
         register: function () {
-            log("registering with TW-Core");
+            log("registering with TWIT-Core");
             let obj = {};
             if (cfg.ha != undefined) obj.ha = cfg.ha;
             if (cfg.esp != undefined) obj.esp = cfg.esp;
             if (cfg.telegram != undefined) obj.telegram = true;
             send("register", obj, cfg.moduleName);
-            if (nv.telegram != undefined) {
-                log("registering telegram users with TW-Core");
+            if (cfg.telegram != undefined) {
+                log("registering telegram users with TWIT-Core");
                 for (let x = 0; x < nv.telegram.length; x++) {
                     send("telegram", { class: "sub", id: nv.telegram[x].id });
                 }
@@ -1442,7 +1600,7 @@ let
         },
         init: function () {
             nv = {};
-            state = { auto: [], ha: [], esp: [], coreData: [], onlineHA: false, onlineESP: false, online: false };
+            state = { auto: [], ha: [], esp: [], udp: [], coreData: [], onlineHA: false, onlineESP: false, online: false };
             time = {
                 boot: null,
                 get epochMil() { return Date.now(); },
@@ -1494,7 +1652,7 @@ let
             udp = udpClient.createSocket('udp4');
             if (process.argv[2] == "-i") {
                 moduleName = cfg.moduleName.toLowerCase();
-                log("installing TW-Client-" + cfg.moduleName + " service...");
+                log("installing TWIT-Client-" + cfg.moduleName + " service...");
                 let service = [
                     "[Unit]",
                     "Description=",
@@ -1504,32 +1662,32 @@ let
                     "WantedBy=multi-user.target\n",
                     "[Service]",
                     "ExecStartPre=/bin/bash -c 'uptime=$(awk \\'{print int($1)}\\' /proc/uptime); if [ $uptime -lt 300 ]; then sleep 70; fi'",
-                    "ExecStart=nodemon " + cfg.workingDir + "client-" + moduleName + ".js -w " + cfg.workingDir + "client-" + moduleName + ".js --exitcrash",
+                    "ExecStart=nodemon " + workingDir + "client-" + moduleName + ".js -w " + workingDir + "client-" + moduleName + ".js --exitcrash",
                     "Type=simple",
                     "User=root",
                     "Group=root",
-                    "WorkingDirectory=" + cfg.workingDir,
+                    "WorkingDirectory=" + workingDir,
                     "Restart=on-failure",
                     "RestartSec=10\n",
                 ];
-                fs.writeFileSync("/etc/systemd/system/tw-client-" + moduleName + ".service", service.join("\n"));
+                fs.writeFileSync("/etc/systemd/system/twit-client-" + moduleName + ".service", service.join("\n"));
                 // execSync("mkdir /apps/ha -p");
                 // execSync("cp " + process.argv[1] + " /apps/ha/");
                 execSync("systemctl daemon-reload");
-                execSync("systemctl enable tw-client-" + moduleName + ".service");
-                execSync("systemctl start tw-client-" + moduleName);
-                execSync("service tw-client-" + moduleName + " status");
+                execSync("systemctl enable twit-client-" + moduleName + ".service");
+                execSync("systemctl start twit-client-" + moduleName);
+                execSync("service twit-client-" + moduleName + " status");
                 log("service installed and started");
-                console.log("type: journalctl -fu tw-client-" + moduleName);
+                console.log("type: journalctl -fu twit-client-" + moduleName);
                 process.exit();
             }
             if (process.argv[2] == "-u") {
                 moduleName = cfg.moduleName.toLowerCase();
-                log("uninstalling TW-Client-" + cfg.moduleName + " service...");
-                execSync("systemctl stop tw-client-" + moduleName);
-                execSync("systemctl disable tw-client-" + moduleName + ".service");
-                fs.unlinkSync("/etc/systemd/system/tw-client-" + moduleName + ".service");
-                console.log("TW-Client-" + cfg.moduleName + " service uninstalled");
+                log("uninstalling TWIT-Client-" + cfg.moduleName + " service...");
+                execSync("systemctl stop twit-client-" + moduleName);
+                execSync("systemctl disable twit-client-" + moduleName + ".service");
+                fs.unlinkSync("/etc/systemd/system/twit-client-" + moduleName + ".service");
+                console.log("TWIT-Client-" + cfg.moduleName + " service uninstalled");
                 process.exit();
             }
             file = {
@@ -1594,7 +1752,7 @@ let
                     fs.readFile(workingDir + "/nv-" + scriptName + ".json", function (err, data) {
                         if (err) {
                             log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
-                                + ", nv-clientName.json file should be in same folder as client.js file");
+                                + ", nv-" + scriptName + ".json file should be in same folder as client.js file (" + workingDir + ")");
                             nv = { telegram: [] };
                         }
                         else { nv = JSON.parse(data); }
@@ -1609,12 +1767,24 @@ let
                 case 2:
                     state.online = true;
                     setInterval(() => { send("heartBeat"); time.boot++; }, 1e3);
-                    if (cfg.ha) { send("haFetch"); confirmHA(); }
+                    if (cfg.ha != undefined && cfg.ha.length > 0) {
+                        log("Starting Home Assistant", 1);
+                        send("haFetch");
+                        confirmHA();
+                    }
                     else setTimeout(() => { automation.forEach((func, index) => { func(index) }); }, 1e3);
-                    if (cfg.esp) {
-                        if (!cfg.ha) confirmESP();
+                    if (cfg.esp != undefined && cfg.esp.length > 0) {
+                        log("Starting ESPHome", 1);
+                        if (cfg.ha == undefined && cfg.ha.length < 0) confirmESP();
                         send("espFetch");
                     }
+                    /*
+                    if (cfg.udp != undefined && cfg.udp.length > 0) {
+                        log("Starting UDP", 1);
+                        if (cfg.ha == undefined && cfg.ha.length < 0) confirmESP();
+                        send("espFetch");
+                    }
+                    */
                     function confirmHA() {
                         setTimeout(() => {
                             if (state.onlineHA == false) {
@@ -1639,8 +1809,8 @@ let
         },
     };
 setTimeout(() => { sys.init(); }, 1e3);
-function bot(id, data, obj) { send("telegram", { class: "send", id: id, data: data, obj: obj }) }
-function send(type, obj, name) { udp.send(JSON.stringify({ type: type, obj: obj, name: name }), 65432, '127.0.0.1') }
+function bot(id, data, obj) { send("telegram", { class: "send", id, data, obj }) }
+function send(type, obj, name) { udp.send(JSON.stringify({ type, obj, name }), 65432, '127.0.0.1') }
 function coreData(name) {
     for (let x = 0; x < state.coreData.length; x++) if (state.coreData[x].name == name) return state.coreData[x].data;
     return {};
