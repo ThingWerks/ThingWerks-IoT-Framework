@@ -17,11 +17,12 @@ ota:
 wifi:
   networks:
   - ssid: WiFi-Battery
+    hidden: true
   manual_ip:
-    static_ip: 10.20.0.96
-    gateway: 10.20.0.1
-    subnet: 255.255.252.0 
-    dns1: 10.20.0.1
+    static_ip: 10.21.55.32
+    gateway: 10.21.55.1
+    subnet: 255.255.255.0 
+    dns1: 10.21.55.1
   output_power: 20dB
   power_save_mode: none
 captive_portal:
@@ -48,13 +49,20 @@ sensor:
   - platform: pzemac      # Pzem-004 Module for 8kw inverter
     id: pzemac_1
     modbus_id: modbus_1
+    update_interval: 1s
     current:
       name: "8kw-Current"
+      id: pzem_8kw_current
       accuracy_decimals: 1
     voltage:
       name: "8kw-Voltage"
+      id: pzem_8kw_voltage
       accuracy_decimals: 0
       force_update: true
+      filters:
+        - lambda: |-
+            id(last_update_8kw) = millis();
+            if (x > 270.0) { return 0.0; } else { return x; }
     energy:
       name: "8kw-Energy"
       unit_of_measurement: Wh
@@ -62,21 +70,34 @@ sensor:
       state_class: "total_increasing"
     power:
       name: "8kw-Power"
+      id: pzem_8kw_power
       accuracy_decimals: 0
+      filters:
+        - lambda: |-
+            if (x > 31000.0) { return 0.0; } else { return x; }
     frequency:
       name: "8kw-Hz"
     power_factor:
       name: "8kw-PF"
-    update_interval: 1s
   - platform: pzemac      # Pzem-004 Module for Grid
     modbus_id: modbus_2
+    update_interval: 1s
     id: pzemac_2
     current:
       name: "Grid-Current"
+      id: pzem_grid_current
       accuracy_decimals: 1
+      filters:
+        - lambda: |-
+            if (x > 120.0) { return 0.0; } else { return x; }
     voltage:
       name: "Grid-Voltage"
+      id: pzem_grid_voltage
       accuracy_decimals: 0
+      filters:
+        - lambda: |-
+            id(last_update_grid) = millis();
+            if (x > 270.0) { return 0.0; } else { return x; }
     energy:
       name: "Grid-Energy"
       unit_of_measurement: Wh
@@ -84,8 +105,11 @@ sensor:
       state_class: "total_increasing"
     power:
       name: "Grid-Power"
+      id: pzem_grid_power
       accuracy_decimals: 0
-    update_interval: 1s
+      filters:
+        - lambda: |-
+            if (x > 31000.0) { return 0.0; } else { return x; }
     frequency:
       name: "Grid-Hz"
     power_factor:
@@ -129,6 +153,77 @@ sensor:
       - sliding_window_moving_average:
             window_size: 100
             send_every: 100
+  - platform: template
+    name: "8kw-Voltage-Safe"
+    lambda: |-
+      const int timeout_ms = 1000; 
+      if ((millis() - id(last_update_8kw)) < timeout_ms) {
+      return id(pzem_8kw_voltage).state; 
+      } else { return NAN; }
+    accuracy_decimals: 0
+    update_interval: 1s
+    unit_of_measurement: V
+  - platform: template
+    name: "8kw-Current-Safe"
+    lambda: |-
+      const int timeout_ms = 1000; 
+      if ((millis() - id(last_update_8kw)) < timeout_ms) {
+      return id(pzem_8kw_current).state; 
+      } else { return NAN; }
+    accuracy_decimals: 1
+    update_interval: 1s
+    unit_of_measurement: A
+  - platform: template
+    name: "8kw-Power-Safe"
+    lambda: |-
+      const int timeout_ms = 1000; 
+      if ((millis() - id(last_update_8kw)) < timeout_ms) {
+      return id(pzem_8kw_power).state; 
+      } else { return NAN; }
+    accuracy_decimals: 0
+    update_interval: 1s
+    unit_of_measurement: W
+  - platform: template
+    name: "Grid-Voltage-Safe"
+    lambda: |-
+      const int timeout_ms = 1000; 
+      if ((millis() - id(last_update_grid)) < timeout_ms) {
+      return id(pzem_grid_voltage).state; 
+      } else { return NAN; }
+    accuracy_decimals: 0
+    update_interval: 1s
+    unit_of_measurement: V
+  - platform: template
+    name: "Grid-Current-Safe"
+    lambda: |-
+      const int timeout_ms = 1000; 
+      if ((millis() - id(last_update_grid)) < timeout_ms) {
+      return id(pzem_grid_current).state; 
+      } else { return NAN; }
+    accuracy_decimals: 1
+    update_interval: 1s
+    unit_of_measurement: A
+  - platform: template
+    name: "Grid-Power-Safe"
+    lambda: |-
+      const int timeout_ms = 1000; 
+      if ((millis() - id(last_update_grid)) < timeout_ms) {
+      return id(pzem_grid_power).state; 
+      } else { return NAN; }
+    accuracy_decimals: 0
+    update_interval: 1s
+    unit_of_measurement: W
+
+globals:
+  - id: last_update_8kw
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: last_update_grid
+    type: int
+    restore_value: no
+    initial_value: "0"
+
 switch:
   - platform: uart
     uart_id: uart_1
@@ -158,4 +253,23 @@ switch:
     pin:
       number: 23
       inverted: false
-    
+  - platform: gpio
+    name: "power1-relay5"
+    pin:
+      number: 13
+      inverted: false
+  - platform: gpio
+    name: "power1-relay6"
+    pin:
+      number: 14
+      inverted: false
+  - platform: gpio
+    name: "power1-relay7"
+    pin:
+      number: 25
+      inverted: false
+  - platform: gpio
+    name: "power1-relay8"
+    pin:
+      number: 26
+      inverted: false
