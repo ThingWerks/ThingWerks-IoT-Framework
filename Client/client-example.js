@@ -26,7 +26,7 @@ let
 
             function init() {                                               // the init() function is called only once at the start of each automation
                 state.auto.push({                                           // create object for this automation in local state
-                    name: "Auto-System",                                    // give this automation a name 
+                    name: "My-Auto-System1",                                // give this automation a name 
                     example: { started: false, step: time.sec }             // initialize an object for each of this automation's devices or features (volatile data) 
                 });
                 setInterval(() => { automation[index](index); }, 1e3);      // set minimum rerun time, otherwise this automation function will only run on ESP and HA push events
@@ -37,7 +37,8 @@ let
                 em.on("power1-relay1", (newState) => {                      // an event emitter for HA or ESP device that directly performs a function
                     log("my esp toggle function", index, 1);
                 });
-                send("coreData", { register: true, name: ["myObject", "obj2"] });     // optional - register with core to receive data from other client
+                send("coreData", { register: true, name: ["myObject1", "myObject2"] });     // optional - register with core to receive data from other clients
+
             }
 
 
@@ -52,10 +53,11 @@ let
                     esp.send(0, true);
                     ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");    // send sensor data to HA. your sensor name, value, unit of your choice
                     ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
-                    send("coreData", { name: "myObjectName", data: { myData: "myDataOrObject" } });  // send a variable to the Core for other clients to access
-                    nv.myAutomation = { myVar: "test" };                    // create data structure for your non-volatile data           
+                    send("coreData", { name: "coreDataName", data: { myData: "data" } });  // broadcast data to the Core for other clients to receive
+
+                    nv.myAutomation = { myVar: "test" };                    // create non-volatile data structure           
                     log("writing NV data to disk...", index, 1);            // example log event
-                    file.write.nv();       // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directoy
+                    file.write.nv();       // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
                 }
             };
 
@@ -109,7 +111,6 @@ let
             /*
                 ---Debugging web server---
                 http://127.0.0.1:20000/client/nameOfClient -----show all volatile and non-volatile memory of a specific TWIT client
-                http://127.0.0.1:20000/all -----show all client volatile and non-volatile memory
                 http://127.0.0.1:20000/ha ------show all entities available from Home Assistant
                 http://127.0.0.1:20000/esp -----show all discovered ESP Home modules
                 http://127.0.0.1:20000/tg ------last 100 received Telegram messages
@@ -123,58 +124,7 @@ let
 
         }
     ];
-    let
-    user = {        // user configurable block - Telegram 
-        telegram: { // enter a case matching your desireable input
-            agent: function (msg) {
-                //  log("incoming telegram message: " + msg,  0);
-                //  console.log("incoming telegram message: ", msg);
-                if (telegram.auth(msg)) {
-                    switch (msg.text) {
-                        case "?": console.log("test help menu"); break;
-                        case "/start": bot(msg.chat.id, "you are already registered"); break;
-                        case "R":   // to include uppercase letter in case match, we put no break between upper and lower cases
-                        case "r":
-                            bot(msg.from.id, "Test Menu:");
-                            setTimeout(() => {      // delay to ensure menu Title gets presented first in Bot channel
-                                telegram.buttonToggle(msg, "TestToggle", "Test Button");
-                                setTimeout(() => {      // delay to ensure menu Title gets presented first in Bot channel
-                                    telegram.buttonMulti(msg, "TestMenu", "Test Choices", ["test1", "test2", "test3"]);
-                                }, 200);
-                            }, 200);
-                            break;
-                        default:
-                            log("incoming telegram message - unknown command - " + JSON.stringify(msg.text), 0);
-                            break;
-                    }
-                }
-                else if (msg.text == cfg.telegram.password) telegram.sub(msg);
-                else if (msg.text == "/start") bot(msg.chat.id, "give me the passcode");
-                else bot(msg.chat.id, "i don't know you, go away");
-
-            },
-            callback: function (msg) {  // enter a two character code to identify your callback "case" 
-                let code = msg.data.slice(0, 2);
-                let data = msg.data.slice(2);
-                switch (code) {
-                    case "TestToggle":  // read button input and toggle corresponding function
-                        if (data == "true") { myFunction(true); break; }
-                        if (data == "false") { myFunction(false); break; }
-                        break;
-                    case "TestMenu":  // read button input and perform actions
-                        switch (data) {
-                            case "test1": bot(msg.from.id, "Telegram " + data); log("Telegram test1", 0); break;
-                            case "test2": bot(msg.from.id, "Telegram " + data); log("Telegram test2", 0); break;
-                            case "test3": bot(msg.from.id, "Telegram " + data); log("Telegram test3", 0); break;
-                        }
-                        break;
-                }       // create a function for use with your callback
-                function myFunction(newState) {    // function that reads the callback input and toggles corresponding boolean in Home Assistant
-                    bot(msg.from.id, "Test State: " + newState);
-                }
-            },
-        },
-    },
+let
     sys = {         // ______________________system area, don't need to touch anything below this line__________________________________
         com: function () {
             udp.on('message', function (data, info) {
@@ -333,11 +283,11 @@ let
                     "WantedBy=multi-user.target\n",
                     "[Service]",
                     "ExecStartPre=/bin/bash -c 'uptime=$(awk \\'{print int($1)}\\' /proc/uptime); if [ $uptime -lt 300 ]; then sleep 70; fi'",
-                    "ExecStart=nodemon " + cfg.workingDir + "client-" + moduleName + ".js -w " + cfg.workingDir + "client-" + moduleName + ".js --exitcrash",
+                    "ExecStart=nodemon " + workingDir + "client-" + moduleName + ".js -w " + workingDir + "client-" + moduleName + ".js --exitcrash",
                     "Type=simple",
                     "User=root",
                     "Group=root",
-                    "WorkingDirectory=" + cfg.workingDir,
+                    "WorkingDirectory=" + workingDir,
                     "Restart=on-failure",
                     "RestartSec=10\n",
                 ];
