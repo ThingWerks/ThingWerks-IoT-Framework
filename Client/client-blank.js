@@ -15,7 +15,7 @@ let
 
         },
     ];
-    let
+let
     sys = {         // ______________________system area, don't need to touch anything below this line__________________________________
         com: function () {
             udp.on('message', function (data, info) {
@@ -174,11 +174,11 @@ let
                     "WantedBy=multi-user.target\n",
                     "[Service]",
                     "ExecStartPre=/bin/bash -c 'uptime=$(awk \\'{print int($1)}\\' /proc/uptime); if [ $uptime -lt 300 ]; then sleep 70; fi'",
-                    "ExecStart=nodemon " + cfg.workingDir + "client-" + moduleName + ".js -w " + cfg.workingDir + "client-" + moduleName + ".js --exitcrash",
+                    "ExecStart=nodemon " + workingDir + "client-" + moduleName + ".js -w " + workingDir + "client-" + moduleName + ".js --exitcrash",
                     "Type=simple",
                     "User=root",
                     "Group=root",
-                    "WorkingDirectory=" + cfg.workingDir,
+                    "WorkingDirectory=" + workingDir,
                     "Restart=on-failure",
                     "RestartSec=10\n",
                 ];
