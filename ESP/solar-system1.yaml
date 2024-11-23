@@ -6,6 +6,7 @@ esp32:
   framework:
     type: arduino
 logger:
+  level: WARN
 api:
   encryption:
     key: "myKey"
@@ -23,7 +24,7 @@ wifi:
     gateway: 10.21.55.1
     subnet: 255.255.255.0 
     dns1: 10.21.55.1
-  output_power: 20dB
+  output_power: 17dB
   power_save_mode: none
 captive_portal:
 uart: # setup the two UARTs used by the two pzem-004 modules
