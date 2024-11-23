@@ -8,10 +8,10 @@ esp32:
 logger:
 api:
   encryption:
-    key: "5D3K/r+a5sVIDN3A4tflgP9QZLvJ4mnkfSqqwBHgI9g="
+    key: "myKey"
 ota:
   platform: esphome
-  password: "b4c8dd7550c637b1ccafcc9017b09fba"
+  password: "myPass"
 #  num_attempts: 3
 #  safe_mode: no
 wifi:
