@@ -13,17 +13,19 @@ api:
 ota:
   platform: esphome
   password: "myPass"
+safe_mode:
+  disabled: true
 wifi:
   networks:
   - ssid: WiFi-Battery
     hidden: true
-  fast_connect: true
   manual_ip:
     static_ip: 10.21.55.31
     gateway: 10.21.55.1
     subnet: 255.255.255.0 
     dns1: 10.21.55.1
-  output_power: 17dB
+  output_power: 17dB  # lower power to reduce heat
+  fast_connect: true
   power_save_mode: none
 uart:
   - rx_pin: 16
@@ -84,9 +86,12 @@ sensor:
             if (x > 270.0) { return 0.0; } else { return x; }
     energy:
       name: "10kw-Energy"
-      unit_of_measurement: Wh
+      unit_of_measurement: KWh
       device_class: "energy"
       state_class: "total_increasing"
+      accuracy_decimals: 1
+      filters:
+        - lambda: return x / 1000.0;  # Convert Wh to kWh
     power:
       name: "10kw-Power"
       id: pzem_power
