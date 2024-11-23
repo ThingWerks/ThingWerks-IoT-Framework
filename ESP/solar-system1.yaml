@@ -67,9 +67,12 @@ sensor:
             if (x > 270.0) { return 0.0; } else { return x; }
     energy:
       name: "8kw-Energy"
-      unit_of_measurement: Wh
+      unit_of_measurement: KWh
       device_class: "energy"
       state_class: "total_increasing"
+      accuracy_decimals: 1
+      filters:
+        - lambda: return x / 1000.0;  # Convert Wh to kWh
     power:
       name: "8kw-Power"
       id: pzem_8kw_power
@@ -106,7 +109,7 @@ sensor:
       unit_of_measurement: KWh
       device_class: "energy"
       state_class: "total_increasing"
-      accuracy_decimals: 2
+      accuracy_decimals: 1
       filters:
         - lambda: return x / 1000.0;  # Convert Wh to kWh
     power:
