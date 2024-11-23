@@ -8,10 +8,10 @@ esp32:
 logger:
 api:
   encryption:
-    key: "myKey"
+    key: "5D3K/r+a5sVIDN3A4tflgP9QZLvJ4mnkfSqqwBHgI9g="
 ota:
   platform: esphome
-  password: "myPass"
+  password: "b4c8dd7550c637b1ccafcc9017b09fba"
 #  num_attempts: 3
 #  safe_mode: no
 wifi:
@@ -87,6 +87,7 @@ sensor:
       name: "Grid-Current"
       id: pzem_grid_current
       accuracy_decimals: 1
+      force_update: true
       filters:
         - lambda: |-
             if (x > 120.0) { return 0.0; } else { return x; }
@@ -156,7 +157,7 @@ sensor:
   - platform: template
     name: "8kw-Voltage-Safe"
     lambda: |-
-      const int timeout_ms = 1000; 
+      const int timeout_ms = 1500; 
       if ((millis() - id(last_update_8kw)) < timeout_ms) {
       return id(pzem_8kw_voltage).state; 
       } else { return NAN; }
@@ -166,7 +167,7 @@ sensor:
   - platform: template
     name: "8kw-Current-Safe"
     lambda: |-
-      const int timeout_ms = 1000; 
+      const int timeout_ms = 1500; 
       if ((millis() - id(last_update_8kw)) < timeout_ms) {
       return id(pzem_8kw_current).state; 
       } else { return NAN; }
@@ -176,7 +177,7 @@ sensor:
   - platform: template
     name: "8kw-Power-Safe"
     lambda: |-
-      const int timeout_ms = 1000; 
+      const int timeout_ms = 1500; 
       if ((millis() - id(last_update_8kw)) < timeout_ms) {
       return id(pzem_8kw_power).state; 
       } else { return NAN; }
@@ -186,7 +187,7 @@ sensor:
   - platform: template
     name: "Grid-Voltage-Safe"
     lambda: |-
-      const int timeout_ms = 1000; 
+      const int timeout_ms = 1500; 
       if ((millis() - id(last_update_grid)) < timeout_ms) {
       return id(pzem_grid_voltage).state; 
       } else { return NAN; }
@@ -196,7 +197,7 @@ sensor:
   - platform: template
     name: "Grid-Current-Safe"
     lambda: |-
-      const int timeout_ms = 1000; 
+      const int timeout_ms = 1500; 
       if ((millis() - id(last_update_grid)) < timeout_ms) {
       return id(pzem_grid_current).state; 
       } else { return NAN; }
@@ -206,7 +207,7 @@ sensor:
   - platform: template
     name: "Grid-Power-Safe"
     lambda: |-
-      const int timeout_ms = 1000; 
+      const int timeout_ms = 1500; 
       if ((millis() - id(last_update_grid)) < timeout_ms) {
       return id(pzem_grid_power).state; 
       } else { return NAN; }
