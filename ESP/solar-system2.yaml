@@ -17,12 +17,13 @@ wifi:
   networks:
   - ssid: WiFi-Battery
     hidden: true
+  fast_connect: true
   manual_ip:
     static_ip: 10.21.55.31
     gateway: 10.21.55.1
     subnet: 255.255.255.0 
     dns1: 10.21.55.1
-  output_power: 20dB
+  output_power: 17dB
   power_save_mode: none
 uart:
   - rx_pin: 16
@@ -46,14 +47,6 @@ modbus_controller:
   update_interval: 200ms
   address: 0x1
   modbus_id: modbus_2
-i2c:
-  sda: GPIO27
-  scl: GPIO14
-  scan: true
-  id: bus_a
-ads1115:
-  - address: 0x48
-    continuous_mode: true
 sensor:
   - platform: wifi_signal
     name: "wifi-power2"
@@ -106,20 +99,10 @@ sensor:
     power_factor:
       name: "10kw-PF"
     update_interval: 1s
-  - platform: ads1115
-    multiplexer: 'A2_GND'
-    gain: 6.144
-    name: "Sunlight-PV"
-    update_interval: 500ms
-    filters:
-      - exponential_moving_average:
-          alpha: 0.02  # Adjust this value based on testing
-      - throttle: 1s
-    force_update: true
   - platform: template
     name: "10kw-Voltage-Safe"
     lambda: |-
-      const int timeout_ms = 1500; 
+      const int timeout_ms = 2500; 
       if ((millis() - id(last_update_time)) < timeout_ms) {
       return id(pzem_voltage).state; 
       } else { return NAN; }
@@ -129,7 +112,7 @@ sensor:
   - platform: template
     name: "10kw-Current-Safe"
     lambda: |-
-      const int timeout_ms = 1500; 
+      const int timeout_ms = 2500; 
       if ((millis() - id(last_update_time)) < timeout_ms) {
       return id(pzem_current).state; 
       } else { return NAN; }
@@ -139,13 +122,26 @@ sensor:
   - platform: template
     name: "10kw-Power-Safe"
     lambda: |-
-      const int timeout_ms = 1500; 
+      const int timeout_ms = 2500; 
       if ((millis() - id(last_update_time)) < timeout_ms) {
       return id(pzem_power).state; 
       } else { return NAN; }
     accuracy_decimals: 0
     update_interval: 1s
     unit_of_measurement: W
+  - platform: adc           # Sensor input for sunlight level 
+    name: "Sunlight-PV"
+    pin: GPIO35
+    id: sun
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    attenuation: 12db
+    force_update: true
+    update_interval: 500ms
+    filters:
+      - exponential_moving_average:
+          alpha: 0.02  # Adjust this value based on testing
+      - throttle: 1s
 globals:
   - id: last_update_time
     type: int
