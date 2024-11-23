@@ -42,7 +42,7 @@ let
             "8kw-pf",
             "10kw-pf",
             "grid-pf",
-            "battery-current3",
+            "battery-current",
             "8kw-voltage-safe",
             "10kw-voltage-safe",
 
@@ -57,6 +57,8 @@ let
         solar: {
             inverterAuto: 0,            // HA Toggle automation id
             inverterDelaySwitch: 15,    // time sensor must maintain reading before switching inverter state
+            inverterDelaySwitchOff: 15,
+
             inverterRapidSwitch: 10,    // inverter minimum switch cycle time for before faulting
             espSunlight: 10,            // sunlight sensor esp ID
             sun: [
@@ -180,6 +182,7 @@ let
                 // ampsRun: 20.0,               // optional - charger amp level to transfer load to inverter - (must use espWattGrid if not)
                 ampsStop: -5.0,                 // optional - discharge amp level to transfer load to grid 
                 ampsStopFloat: -10.0,           // optional - discharge amp level to transfer load to grid when floating
+                ampsStopVoltsMin: 52.5,         // optional - minimum voltage needed to enable amps switching 
                 ampsStartGridMultiplier: 1.1,   // multiple of charge power exceeding grid power needed to switch load to inverter
                 delaySwitch: 20,                // seconds to observe volt, sun or amp reading before transferring load, should be longer than priority delay
                 battery: 0,                     // optional - battery bank assigned to this inverter - required to use ampsStopFloat
@@ -197,7 +200,7 @@ let
                 transfer: {
                     type: "esp",
                     switchOn: [
-                        { id: 4, state: true },
+                        { id: 4, state: true, delay: 10 },
                         { id: 16, state: true, delay: 5 },
                     ],
                     switchOff: [
@@ -402,7 +405,7 @@ let
                                                 queue.delayTimer = time.epoch;
                                                 queue.delayStep = true;
                                             } else if (time.epoch - queue.delayTimer >= config.delaySwitchOff) {
-                                                log("charge amps is too low (" + amps.toFixed(1) + "a) - stopping " + priority.name, index, 1);
+                                                log("charge amps is too low (" + amps + "a) - stopping " + priority.name, index, 1);
                                                 sendOutput(x, false);
                                                 return;
                                             }
@@ -412,7 +415,7 @@ let
                                             queue.delayTimer = time.epoch;
                                             queue.delayStep = true;
                                         } else if (time.epoch - queue.delayTimer >= config.delaySwitchOff) {
-                                            log("(floating)discharge amps is high (" + amps.toFixed(1) + "a) - stopping " + priority.name, index, 1);
+                                            log("(floating)discharge amps is high (" + amps + "a) - stopping " + priority.name, index, 1);
                                             sendOutput(x, false);
                                             return;
                                         }
@@ -459,7 +462,7 @@ let
                                                         queue.delayTimer = time.epoch;
                                                         queue.delayStep = true;
                                                     } else if (time.epoch - queue.delayTimer >= config.delaySwitchOn) {
-                                                        log("charge amps is high (" + amps.toFixed(1) + "a) - starting " + priority.name, index, 1);
+                                                        log("charge amps is high (" + amps + "a) - starting " + priority.name, index, 1);
                                                         sendOutput(x, true);
                                                         return;
                                                     }
@@ -469,7 +472,7 @@ let
                                                     queue.delayTimer = time.epoch;
                                                     queue.delayStep = true;
                                                 } else if (time.epoch - queue.delayTimer >= config.delaySwitchOn) {
-                                                    log("battery volts is enough (" + volts.toFixed(1) + "v) - starting " + priority.name, index, 1);
+                                                    log("battery volts is enough (" + volts + "v) - starting " + priority.name, index, 1);
                                                     sendOutput(x, true);
                                                     return;
                                                 }
@@ -496,17 +499,17 @@ let
                     }
                 }
                 function pointers() {
-                    volts = parseFloat(st.sensor.volt[cfg.battery[config.battery].sensorVolt]).toFixed(2);
+                    volts = Math.round(st.sensor.volt[cfg.battery[config.battery].sensorVolt] / 100) * 100;
                     if (cfg.solar.espSunlight != undefined)
-                        sun = parseFloat(state.esp[cfg.solar.espSunlight]).toFixed(2);
+                        sun = Math.round(state.esp[cfg.solar.espSunlight] * 100) / 100;
                     if (config.battery != undefined) {
                         if (Array.isArray(cfg.battery[config.battery].sensorAmp)) {
                             let tamp = 0;
                             for (let y = 0; y < cfg.battery[config.battery].sensorAmp.length; y++) {
-                                tamp += parseFloat(st.sensor.amp[cfg.battery[config.battery].sensorAmp[y]]);
+                                tamp += Math.round(st.sensor.amp[cfg.battery[config.battery].sensorAmp[y]] / 100) * 100;
                                 amps = tamp;
                             }
-                        } else amps = parseFloat(st.sensor.amp[cfg.battery[config.battery].sensorAmp]);
+                        } else amps = Math.round(st.sensor.amp[cfg.battery[config.battery].sensorAmp] / 100) * 100;
                     }
                 }
             }
@@ -550,10 +553,18 @@ let
                                     } else inverter.delaySwitchStep = false;
                                 } else if (config.ampsStop != undefined) {
                                     if (nv.battery[config.battery].floating == false) {
-                                        if (ampsBat <= config.ampsStop) ampStop();
+                                        if (ampsBat <= config.ampsStop) {
+                                            if (config.ampsStopVoltsMin != undefined) {
+                                                if (voltsBat < config.ampsStopVoltsMin) ampStop();
+                                            } else ampStop();
+                                        }
                                         else inverter.delaySwitchStep = false;
                                     } else {
-                                        if (ampsBat <= inverter.ampsStopFloat) ampStop();
+                                        if (ampsBat <= inverter.ampsStopFloat) {
+                                            if (config.ampsStopVoltsMin != undefined) {
+                                                if (voltsBat < config.ampsStopVoltsMin) ampStop();
+                                            } else ampStop();
+                                        }
                                         else inverter.delaySwitchStep = false;
                                     }
                                 }
@@ -562,7 +573,7 @@ let
                                         inverter.delaySwitchTimer = time.epoch;
                                         inverter.delaySwitchStep = true;
                                     } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                        log("inverter: " + config.name + " - solar power too low: " + ampsBat.toFixed(1) + "a  voltsBat: " + voltsBat
+                                        log("inverter: " + config.name + " - solar power too low: " + ampsBat + "a  voltsBat: " + voltsBat
                                             + "v  Floating: " + nv.battery[config.battery].floating + " Sun: " + sun + "v  Watts: " + wattsInverter + ", " + config.name
                                             + " is switching to grid ", index, 1);
                                         inverterPower(x, false);
@@ -587,7 +598,7 @@ let
                             && time.hour < config.nightMode.startHour) {
                             if (config.nightMode.endAmps != undefined) {
                                 if (ampsBat >= config.nightMode.endAmps) {
-                                    log("Battery is charging, current is high: " + ampsBat.toFixed(1) + "a  " + voltsBat + "v, " + config.name + " exiting night mode", index, 1);
+                                    log("Battery is charging, current is high: " + ampsBat + "a  " + voltsBat + "v, " + config.name + " exiting night mode", index, 1);
                                     inverter.nightMode = false;
                                 }
                             } else checkCharging(x, false, voltsBat); // inverter only exits night mode only when there is sufficient charging
@@ -660,13 +671,13 @@ let
                                 }
                             } else if (sun < config.sunRun) inverter.delaySwitchStep = false;
                         } else if (config.ampsRun != undefined) {
-                            // console.log("checking amps for: " + x + "  ampsBat: " + ampsBat.toFixed(1), " voltsBat: " + voltsBat)
+                            // console.log("checking amps for: " + x + "  ampsBat: " + ampsBat, " voltsBat: " + voltsBat)
                             if (ampsBat >= config.ampsRun) {   // current detection 
                                 if (inverter.delaySwitchStep == false) {
                                     inverter.delaySwitchTimer = time.epoch;
                                     inverter.delaySwitchStep = true;
                                 } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("battery is charging, current is high: " + ampsBat.toFixed(1) + "a  " + voltsBat + "v, " + config.name + " switching on", index, 1);
+                                    log("battery is charging, current is high: " + ampsBat + "a  " + voltsBat + "v, " + config.name + " switching on", index, 1);
                                     finish();
                                 }
                             } else if (ampsBat < config.ampsRun) inverter.delaySwitchStep = false;
@@ -676,7 +687,7 @@ let
                                     inverter.delaySwitchTimer = time.epoch;
                                     inverter.delaySwitchStep = true;
                                 } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("charge current is higher than grid power: " + (ampsBat.toFixed(1) * voltsBat).toFixed(0) + "w  " + voltsBat + "v, " + config.name + " switching on", index, 1);
+                                    log("charge current is higher than grid power: " + wattsSolar + "w  " + voltsBat + "v, " + config.name + " switching on", index, 1);
                                     finish();
                                 }
                             }
@@ -704,27 +715,27 @@ let
                     let voltsBat, voltsInverter, ampsBat, sun, wattsInverter, wattsGrid, wattsSolar, config = cfg.inverter[x];
                     if (config.battery != undefined) {
                         if (cfg.battery[config.battery].sensorVolt != undefined)
-                            voltsBat = parseFloat(st.sensor.volt[cfg.battery[config.battery].sensorVolt]).toFixed(2);
+                            voltsBat = Math.round(st.sensor.volt[cfg.battery[config.battery].sensorVolt] * 10) / 10;
                         if (cfg.battery[config.battery].sensorAmp != undefined) {
                             if (Array.isArray(cfg.battery[config.battery].sensorAmp)) {
                                 let temp = 0;
                                 for (let y = 0; y < cfg.battery[config.battery].sensorAmp.length; y++) {
                                     temp += parseFloat(st.sensor.amp[cfg.battery[config.battery].sensorAmp[y]]);
-                                    ampsBat = temp;
+                                    ampsBat = Math.round(temp * 10) / 10;
                                 }
-                            } else ampsBat = parseFloat(st.sensor.amp[cfg.battery[config.battery].sensorAmp]);
+                            } else ampsBat = Math.round(st.sensor.amp[cfg.battery[config.battery].sensorAmp] * 10) / 10;
                         }
                         if (cfg.battery[config.battery].sensorWatt != undefined)
-                            wattsSolar = parseFloat(st.sensor.watt[cfg.battery[config.battery].sensorWatt]).toFixed(0);
+                            wattsSolar = ~~parseFloat(st.sensor.watt[cfg.battery[config.battery].sensorWatt]);
                     }
                     if (config.espWattGrid != undefined)
                         wattsGrid = state.esp[config.espWattGrid];
                     if (config.espVolt != undefined)
-                        voltsInverter = parseFloat(state.esp[config.espVolt]).toFixed(0);
+                        voltsInverter = ~~parseFloat(state.esp[config.espVolt]);
                     if (config.espWatt != undefined)
-                        wattsInverter = parseFloat(state.esp[config.espWatt]).toFixed(0);
+                        wattsInverter = ~~parseFloat(state.esp[config.espWatt]);
                     if (cfg.solar.espSunlight != undefined)
-                        sun = parseFloat(state.esp[cfg.solar.espSunlight]).toFixed(2);
+                        sun = Math.round(state.esp[cfg.solar.espSunlight] * 100) / 100;
                     return { voltsBat, voltsInverter, ampsBat, sun, wattsInverter, wattsGrid, wattsSolar, config, inverter: st.inverter[x] };
                 }
             }
@@ -769,10 +780,7 @@ let
                             if (state.esp[config.power.id] == false) {
                                 esp.send(cfg.esp[config.power.id], run);
                                 log("inverter: " + config.name + ", power on, delaying transfer switch 10 secs", index, 1);
-                                setTimeout(() => {
-                                    log("inverter: " + config.name + ", transfer switch to inverter", index, 1);
-                                    toggle(run);
-                                }, 10e3);
+                                toggle(run);
                             } else {
                                 log("inverter: " + config.name + ", already on - clearing shutdown delay", index, 1);
                                 clearTimeout(st.inverter[x].delayOffTimer);
@@ -782,6 +790,8 @@ let
                             }
                         }
                         st.inverter[x].state = run;
+                        st.inverter[x].delaySwitchFaultStep = false;
+                        setTimeout(() => { st.inverter[x].delaySwitchFaultStep = false }, 5e3);
                     } else {
                         log("inverter: " + config.name + ", cycling too frequently, epoch: "
                             + time.epoch + " step:" + st.inverter[x].step + " - inverter auto shutting down", index, 3);
@@ -800,7 +810,7 @@ let
                             log("inverter: " + config.name + ", power off", index, 1);
                             st.inverter[x].delayOffTimer = setTimeout(() => {
                                 esp.send(cfg.esp[config.power.id], run);
-                                t.inverter[x].delayOffTimer = null;
+                                st.inverter[x].delayOffTimer = null;
                             }, 10e3);
                         } else {
                             log("inverter: " + config.name + ", shutdown will delay by:" + config.power.delayOff + " seconds", index, 1);
@@ -826,9 +836,9 @@ let
                 if (cfg.solar.fan.espPower != undefined) {
                     if (cfg.solar.fan.sensorTemp != undefined) {
                         let fan = cfg.solar.fan, timeWait = 10;
-                        let amps, temp = st.sensor.temp[fan.sensorTemp];
+                        let amps, temp = Math.round(st.sensor.temp[fan.sensorTemp] * 10) / 10;
                         if (cfg.solar.fan.sensorAmp != undefined)
-                            amps = parseFloat(st.sensor.amp[cfg.solar.fan.sensorAmp]).toFixed(1);
+                            amps = Math.round(st.sensor.amp[cfg.solar.fan.sensorAmp] * 10) / 10;
                         switch (st.fan.run) {
                             case false:
                                 if (temp >= fan.tempRun) {
@@ -836,7 +846,7 @@ let
                                         st.fan.delayTimer = time.epoch;
                                         st.fan.delayStep = true;
                                     } else if (time.epoch - st.fan.delayTimer >= timeWait) {
-                                        log("room is too warm, fan turning on: " + temp.toFixed(1)
+                                        log("room is too warm, fan turning on: " + temp
                                             + cfg.sensor.temp[fan.sensorTemp].unit, index, 1);
                                         fanSwitch(true);
                                     }
@@ -846,7 +856,7 @@ let
                                             st.fan.delayTimer = time.epoch;
                                             st.fan.delayStep = true;
                                         } else if (time.epoch - st.fan.delayTimer >= timeWait) {
-                                            log("sun is high, fan turning on: " + temp.toFixed(1)
+                                            log("sun is high, fan turning on: " + temp
                                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 1);
                                             fanSwitch(true);
                                         }
@@ -858,9 +868,9 @@ let
                                             st.fan.delayTimer = time.epoch;
                                             st.fan.delayStep = true;
                                         } else if (time.epoch - st.fan.delayTimer >= timeWait) {
-                                            if (amps <= fan.onAmpsDischarge) log("discharge amps is high: " + amps + "A, fan turning on: " + temp.toFixed(1)
+                                            if (amps <= fan.onAmpsDischarge) log("discharge amps is high: " + amps + "A, fan turning on: " + temp
                                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 1);
-                                            if (amps >= fan.onAmps) log("charge amps is high: " + amps + "A, fan turning on: " + temp.toFixed(1)
+                                            if (amps >= fan.onAmps) log("charge amps is high: " + amps + "A, fan turning on: " + temp
                                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 1);
                                             fanSwitch(true);
                                         }
@@ -876,7 +886,7 @@ let
                                             st.fan.delayTimer = time.epoch;
                                             st.fan.delayStep = true;
                                         } else if (time.epoch - st.fan.delayTimer >= timeWait) {
-                                            log("room has cooled down and sun is low, fan turning off: " + temp.toFixed(1)
+                                            log("room has cooled down and sun is low, fan turning off: " + temp
                                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 1);
                                             fanSwitch(false);
                                         }
@@ -888,9 +898,9 @@ let
                                             st.fan.delayTimer = time.epoch;
                                             st.fan.delayStep = true;
                                         } else if (time.epoch - st.fan.delayTimer >= timeWait) {
-                                            if (amps > 2) log("charger current has reduced, fan turning off: " + temp.toFixed(1)
+                                            if (amps > 2) log("charger current has reduced, fan turning off: " + temp
                                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 1)
-                                            if (amps < 2) log("inverter current has reduced, fan turning off: " + temp.toFixed(1)
+                                            if (amps < 2) log("inverter current has reduced, fan turning off: " + temp
                                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 1)
                                             fanSwitch(false);
                                         }
@@ -901,7 +911,7 @@ let
                                             st.fan.delayTimer = time.epoch;
                                             st.fan.delayStep = true;
                                         } else if (time.epoch - st.fan.delayTimer >= timeWait) {
-                                            log("room has cooled down, fan turning off: " + temp.toFixed(1)
+                                            log("room has cooled down, fan turning off: " + temp
                                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 1);
                                             fanSwitch(false);
                                         }
@@ -914,14 +924,14 @@ let
                                 break;
                         }
                         if (temp >= fan.tempWarn && st.fan.warn == false) {
-                            log("room is starting to overheat: " + temp.toFixed(2)
+                            log("room is starting to overheat: " + temp
                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 2);
                             fanSwitch(true);
                             st.fan.warn = true;
                             st.fan.faultStep = time.epochMin;
                         }
                         if (temp >= fan.tempError && st.fan.error == false) {
-                            log("room is overheating!!!: " + temp.toFixed(2)
+                            log("room is overheating!!!: " + temp
                                 + cfg.sensor.temp[fan.sensorTemp].unit, index, 3);
                             fanSwitch(true);
                             st.fan.error = true;
@@ -950,25 +960,22 @@ let
                 // log grid blackout statistics
                 // log sunlight daily index
                 // grid statistics , save to nv
-                let volts = parseFloat(state.esp[cfg.grid.espVoltage]).toFixed(0), config = cfg.grid, grid = st.grid;
+                let volts = ~~parseFloat(state.esp[cfg.grid.espVoltage]), config = cfg.grid, grid = st.grid;
                 if (time.boot > 10) {
                     if (volts >= config.voltMax) {
                         if (grid.state != false) {
                             log("grid over-voltage: " + volts + "v", index, 3);
-                            st.grid.timerBlackout = time.epoch;
-                            grid.state = false;
+                            blackout()
                         } else grid.delayOn = time.epoch;
                     } else if (volts < config.voltMin && volts > 20.0) {
                         if (grid.state != false) {
                             log("grid under-voltage: " + volts + "v", index, 3);
-                            st.grid.timerBlackout = time.epoch;
-                            grid.state = false;
+                            blackout()
                         } else grid.delayOn = time.epoch;
-                    } else if (volts < 20.0) {
+                    } else if (volts < 20.0 || Number.isFinite(volts) == false) {
                         if (grid.state != false) {
-                            log("grid blackout", index, 3);
-                            st.grid.timerBlackout = time.epoch;
-                            grid.state = false;
+                            log("grid blackout: " + volts + "  raw: " + state.esp[cfg.grid.espVoltage], index, 3);
+                            blackout()
                         } else grid.delayOn = time.epoch;
                     } else if (grid.state == null) {
                         log("grid is online: " + volts + "v", index, 1);
@@ -980,13 +987,18 @@ let
                         }
                     }
                 }
+                function blackout() {
+                    st.grid.timerBlackout = time.epoch;
+                    grid.state = false;
+                    grid.delayOn = time.epoch;
+                }
             }
             function checkWelder() {    // needs to be rewritten for  cfg.inverter.sensorAmps or esp direct
                 if (state.esp[cfg.inverter[0].espPower] >= cfg.inverter[0].welderWatts ||  // check inverter meter
                     state.esp[cfg.grid.espPower] >= cfg.inverter[0].welderWatts) {           // check grid meter
                     st.welderStep = time.epoch;                   // extend welter timeout if still heavy loads
                     if (st.welder == false) {
-                        log("welder detected: " + state.esp[cfg.inverter[0].espPower].toFixed() + "w - shutting down all pumps", index, 2);
+                        log("welder detected: " + state.esp[cfg.inverter[0].espPower] + "w - shutting down all pumps", index, 2);
                         st.welder = true;
                         st.priority[0] = false;
                         ha.send("input_boolean.auto_compressor", false);
@@ -996,7 +1008,7 @@ let
                     }
                 } else {
                     if (st.welder == true && time.epoch - st.welderStep >= cfg.inverter[0].welderTimeout) {
-                        log("welder not detected: " + state.esp[cfg.inverter[0].espPower].toFixed() + "w", index, 1);
+                        log("welder not detected: " + state.esp[cfg.inverter[0].espPower] + "w", index, 1);
                         st.welder = false;
                     }
                 }
@@ -1004,7 +1016,7 @@ let
             function checkBattery() {
                 for (let x = 0; x < cfg.battery.length; x++) {
                     let config = cfg.battery[x], bat = st.battery[x];
-                    volts = st.sensor.volt[config.sensorVolt].toFixed(2);
+                    volts = Math.round(st.sensor.volt[config.sensorVolt] * 100) / 100;
                     if (nv.battery[x].floating == null) {
                         if (volts <= config.voltsFullCharge && volts > config.voltsFloatStop) {
                             log("battery charger is floating: " + volts + "v", index, 1);
@@ -1061,7 +1073,7 @@ let
                         const next = cfg.soc[config.socTable][i + 1];
                         if (voltage <= current.voltage && voltage > next.voltage) {
                             percent = next.percent + (voltage - next.voltage) * (current.percent - next.percent) / (current.voltage - next.voltage);
-                            return percent.toFixed(1);
+                            return Math.round(percent * 10) / 10;
                         }
                     }
                 }
@@ -1076,7 +1088,7 @@ let
                         if (config.sensorVoltType == "sensor") volts = st.sensor.volt[config.sensorVolt];
                         if (Number.isFinite(volts * amps)) st.sensor.watt[x] = volts * amps;
                         else (st.sensor.watt[x] = 0.0);
-                        ha.send("watt_" + config.name, st.sensor.watt[x].toFixed(0), "W");
+                        ha.send("watt_" + config.name, ~~st.sensor.watt[x], "W");
                     } else {
                         if (config.combineESP != undefined)
                             for (let y = 0; y < config.combineESP.length; y++) {
@@ -1094,11 +1106,11 @@ let
                                 ha.send("watt_" + config.name, 0, "W");
                             } else {
                                 if (Number.isFinite(batWatts)) st.sensor.watt[x] = batWatts + sumSensor + sumESP;
-                                ha.send("watt_" + config.name, Math.round(batWatts + sumSensor + sumESP), "W");
+                                ha.send("watt_" + config.name, ~~(batWatts + sumSensor + sumESP), "W");
                             }
                         } else {
                             if (Number.isFinite(batWatts)) st.sensor.watt[x] = sumSensor + sumESP;
-                            ha.send("watt_" + config.name, Math.round(sumSensor + sumESP), "W");
+                            ha.send("watt_" + config.name, ~~(sumSensor + sumESP), "W");
                         }
                     }
                     if (config.record == true) {
@@ -1152,7 +1164,7 @@ let
                             } else st.sensor.amp[x] = parseFloat(data);
                             if (st.sensor.amp[x] != null)
                                 if (st.sensor.amp[x] != null && Number.isFinite(st.sensor.amp[x])) {
-                                    ha.send("amp_" + cfg.sensor.amp[x].name, st.sensor.amp[x].toFixed(1), "A");
+                                    ha.send("amp_" + cfg.sensor.amp[x].name, Math.round(st.sensor.amp[x] * 10) / 10, "A");
                                 }
 
                         });
@@ -1183,11 +1195,11 @@ let
                                 }
                                 st.sensor.volt[x] = final;
                                 if (st.sensor.volt[x] != null && Number.isFinite(st.sensor.volt[x]))
-                                    ha.send("volt_" + cfg.sensor.volt[x].name, final.toFixed(2), "V");
+                                    ha.send("volt_" + cfg.sensor.volt[x].name, Math.round(final * 100) / 100, "V");
                             } else if (cfg.sensor.volt[x].multiplier != undefined) {    // standard multiplies
                                 st.sensor.volt[x] = voltage * cfg.sensor.volt[x].multiplier;
                                 if (st.sensor.volt[x] != null && Number.isFinite(st.sensor.volt[x]))
-                                    ha.send("volt_" + cfg.sensor.volt[x].name, st.sensor.volt[x].toFixed(2), "V");
+                                    ha.send("volt_" + cfg.sensor.volt[x].name, Math.round(st.sensor.volt[x] * 100) / 100, "V");
                             } else st.sensor.volt[x] = voltage;                         // no multiplier
                             timerSensorTimeout.volt[x] = setTimeout(() => {
                                 log("volt sensor " + cfg.sensor.volt[x].name + " is offline", index, 2);
@@ -1204,7 +1216,7 @@ let
                                 if (newData != null) {
                                     st.sensor.watt[x] = newData;
                                     if (st.sensor.watt[x] != undefined && Number.isFinite(st.sensor.watt[x]))
-                                        ha.send("watt_" + e.name, st.sensor.watt[x].toFixed(0), "W");
+                                        ha.send("watt_" + e.name, ~~st.sensor.watt[x], "W");
                                 }
                             });
                     });
@@ -1226,7 +1238,7 @@ let
                             if (cfg.sensor.temp[x].multiplier != undefined) {
                                 st.sensor.temp[x] = parseFloat(data) * cfg.sensor.temp[x].multiplier;
                                 if (st.sensor.temp[x] != null && Number.isFinite(st.sensor.temp[x]))
-                                    ha.send("temp_" + cfg.sensor.temp[x].name, st.sensor.temp[x].toFixed(1), cfg.sensor.temp[x].unit);
+                                    ha.send("temp_" + cfg.sensor.temp[x].name, Math.round(st.sensor.temp[x] * 10) / 10, cfg.sensor.temp[x].unit);
                             }
                             else st.sensor.temp[x] = parseFloat(data);
                         });
@@ -1373,10 +1385,10 @@ let
                 for (let x = 0; x < obj.day.length; x++) last30Days += obj.day[x];
                 for (let x = 0; x < obj.month.length; x++) lastMonth += obj.month[x];
 
-                ha.send("kwh_" + name + "_hour", (lastHour / 1000).toFixed(2), "kWh");
-                ha.send("kwh_" + name + "_day", (lastDay / 1000).toFixed(2), "kWh");
-                ha.send("kwh_" + name + "_30days", (last30Days / 1000).toFixed(2), "kWh");
-                ha.send("kwh_" + name + "_12months", (last30Days / 1000).toFixed(2), "kWh");
+                ha.send("kwh_" + name + "_hour", Math.round((lastHour / 1000) * 100) / 100, "kWh");
+                ha.send("kwh_" + name + "_day", Math.round((lastDay / 1000) * 100) / 100, "kWh");
+                ha.send("kwh_" + name + "_30days", Math.round((last30Days / 1000) * 100) / 100, "kWh");
+                ha.send("kwh_" + name + "_12months", Math.round((last30Days / 1000) * 100) / 100, "kWh");
             }
         }
     ];
