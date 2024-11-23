@@ -16,6 +16,7 @@ let
             "input_button.pump_uth_one_shot",
             "input_number.pump_uth_timer",
             "input_boolean.pump_uth_reserve",
+            "input_number.auto_pump_profile",
         ],
         esp: [
             "lth-tank",             // 0
@@ -149,10 +150,12 @@ let
                     profile: [
                         { start: 20, stop: 25 },
                         { start: 26, stop: 31 },
-                        { start: 28, stop: 42 },
+                        { start: 30, stop: 42 },
                     ],
-                    startTurbo: 26,
-                    stopTurbo: 31,
+                    turbo: {
+                        start: 26,
+                        stop: 31,
+                    }
                 },
                 flow: {                 // object must be declared
                     id: 1,              // flow sensor number (in cfg.flow block)
@@ -269,29 +272,38 @@ let
             */
             if (state.auto[index] == undefined) init();
             function timer() {    // called every minute
-                if (time.hour == 7 && time.min == 0) {
+                if (time.hour == 4 && time.min == 0) {
                     for (let x = 0; x < cfg.dd.length; x++) { state.auto[index].dd[x].warn.flowDaily = false; } // reset low flow daily warning
-                    //     if (state.ha[1] == true) ha.send("input_boolean.auto_compressor", true);
                 }
                 if (state.ha[1] == true) {
                     if (time.hour == 6 && time.min == 30) {
                         clearTimeout(state.auto[index].dd[2].oneShot);
+                        ha.send("input_number.auto_pump_profile", 0);
                         ha.send("input_boolean.auto_pump_pressure", true);
                     }
                     if (time.hour == 6 && time.min == 40) {
                         ha.send("input_boolean.auto_pump_pressure", false);
                     }
+                    if (time.hour == 7 && time.min == 15) {
+                        clearTimeout(state.auto[index].dd[2].oneShot);
+                        ha.send("input_number.auto_pump_profile", 0);
+                        ha.send("input_boolean.auto_pump_pressure", true);
+                    }
+                    if (time.hour == 7 && time.min == 40) {
+                        ha.send("input_boolean.auto_pump_pressure", false);
+                    }
                     if (time.hour == 12 && time.min == 0) {
                         clearTimeout(state.auto[index].dd[2].oneShot);
+                        ha.send("input_number.auto_pump_profile", 1);
                         ha.send("input_boolean.auto_pump_pressure", true);
-                        ha.send("input_boolean.auto_pump_pressure_turbo", true);
                     }
                     if (time.hour == 12 && time.min == 30) {
                         ha.send("input_boolean.auto_pump_pressure", false);
-                        ha.send("input_boolean.auto_pump_pressure_turbo", false);
+                        ha.send("input_number.auto_pump_profile", 0);
                     }
                     if (time.hour == 17 && time.min == 0) {
                         clearTimeout(state.auto[index].dd[2].oneShot);
+                        ha.send("input_number.auto_pump_profile", 0);
                         ha.send("input_boolean.auto_pump_pressure", true);
                     }
                     if (time.hour == 17 && time.min == 15) {
@@ -337,7 +349,7 @@ let
                 switch (dd.auto.state) {
                     case true:                  // when Auto System is ONLINE
                         switch (dd.state.run) {
-                            case false:         // when pump is STOPPED (local perspective)
+                            case false:     // when pump is STOPPED (local perspective)
                                 switch (dd.fault.flow) {
                                     case false: // when pump is STOPPED and not flow faulted
                                         if (dd.press.out.cfg.unit == "m") {
@@ -348,9 +360,16 @@ let
                                                 return;
                                             }
                                         } else if (dd.state.turbo) {
-                                            if (dd.press.out.state.psi <= dd.cfg.press.startTurbo) {
+                                            if (dd.press.out.state.psi <= dd.cfg.press.turbo.start) {
                                                 log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
                                                     + "psi) - pump turbo is starting", index, 1);
+                                                pumpStart(true);
+                                                return;
+                                            }
+                                        } else if (dd.state.profile != null) {
+                                            if (dd.press.out.state.psi <= dd.cfg.press.profile[dd.state.profile].start) {
+                                                log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
+                                                    + "psi) - pump is starting with profile: " + dd.state.profile, index, 1);
                                                 pumpStart(true);
                                                 return;
                                             }
@@ -366,7 +385,8 @@ let
                                                 pumpStart(true);
                                                 return;
                                             } else {
-                                                if (dd.flow != undefined && dd.flow[dd.state.pump].lm > dd.cfg.pump[dd.state.pump].flow.startError && dd.warn.flowFlush == false) {
+                                                if (dd.flow != undefined && dd.flow[dd.state.pump].lm > dd.cfg.pump[dd.state.pump].flow.startError
+                                                    && dd.warn.flowFlush == false && dd.sharedPump.shared == false) {
                                                     log(dd.cfg.name + " - flow is detected (" + dd.flow[dd.state.pump].lm.toFixed(0) + "lpm) possible sensor damage or flush operation", index, 2);
                                                     dd.warn.flowFlush = true;
                                                     log(dd.cfg.name + " - shutting down auto system", index, 1);
@@ -399,8 +419,15 @@ let
                                         return;
                                     }
                                 } else if (dd.state.turbo) {
-                                    if (dd.press.out.state.psi >= dd.cfg.press.stopTurbo) {
+                                    if (dd.press.out.state.psi >= dd.cfg.press.turbo.stop) {
                                         log(dd.cfg.name + " - " + dd.press.out.cfg.name + " turbo shutoff pressure reached - pump is stopping", index, 1);
+                                        pumpStop();
+                                        return;
+                                    }
+                                } else if (dd.state.profile != null) {
+                                    if (dd.press.out.state.psi >= dd.cfg.press.profile[dd.state.profile].stop) {
+                                        log(dd.cfg.name + " - " + dd.press.out.cfg.name + " pump profile: " + dd.state.profile + " pressure reached: "
+                                            + dd.press.out.state.psi.toFixed(0) + " - pump is stopping", index, 1);
                                         pumpStop();
                                         return;
                                     }
@@ -498,8 +525,9 @@ let
                         else dd.state.pump = 0;
                     }
 
-                    if (dd.pump[dd.state.pump].flow != undefined)
+                    if (dd.cfg.pump[dd.state.pump].flow != undefined) 
                         dd.flow[dd.state.pump].batch = nv.flow[dd.cfg.pump[dd.state.pump].flow.id].total;
+
                     dd.fault.flow = false;
                     dd.state.run = true;
                     dd.state.timerRun = time.epoch;
@@ -768,6 +796,7 @@ let
                             run: false,
                             oneShot: null,
                             turbo: false,
+                            profile: null,
                             pump: 0,
                             flowCheck: false,
                             flowCheckPassed: false,
@@ -821,6 +850,13 @@ let
                             if (state.auto[index].dd[x].flow == undefined) state.auto[index].dd[x].flow = [];
                             state.auto[index].dd[x].flow.push(state.auto[index].flow[cfg.dd[x].pump[y].flow.id])
                         }
+                    }
+                    if (cfg.dd[x].press != undefined && cfg.dd[x].press.profile != undefined &&
+                        cfg.dd[x].ha.profile != undefined && cfg.dd[x].press.profile.length > 0) {
+                        state.auto[index].dd[x].state.profile = parseInt(state.ha[cfg.dd[x].ha.profile]);
+                    }
+                    if (cfg.dd[x].ha.turbo != undefined) {
+                        state.auto[index].dd[x].state.turbo = state.ha[cfg.dd[x].ha.turbo];
                     }
                 }
                 calcFlow();
@@ -954,6 +990,13 @@ let
                                 log(cfg.dd[x].name + " - disabling pump turbo mode", index, 1);
                                 state.auto[index].dd[x].state.turbo = false;
                             }
+                        });
+                    }
+                    if (cfg.dd[x].press != undefined && cfg.dd[x].press.profile != undefined &&
+                        cfg.dd[x].ha.profile != undefined && cfg.dd[x].press.profile.length > 0) {
+                        em.on(cfg.ha[cfg.dd[x].ha.profile], (newState) => {
+                            log(cfg.dd[x].name + " - pump profile changing to mode: " + ~~newState, index, 1);
+                            state.auto[index].dd[x].state.profile = parseInt(newState);
                         });
                     }
                 }
