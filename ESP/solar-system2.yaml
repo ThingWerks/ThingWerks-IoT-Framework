@@ -59,7 +59,7 @@ sensor:
     register_type: holding
     address: 0x0056
     value_type: U_WORD
-    accuracy_decimals: 1
+    accuracy_decimals: 2
     unit_of_measurement: A
     force_update: true
     filters:
