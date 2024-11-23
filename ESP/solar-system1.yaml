@@ -27,7 +27,6 @@ wifi:
   output_power: 17dB  # lower power to reduce heat
   fast_connect: true
   power_save_mode: none
-captive_portal:
 uart: 
   - rx_pin: GPIO22
     tx_pin: GPIO16
