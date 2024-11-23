@@ -1,226 +1,153 @@
 esphome:
-  name: power1
-  friendly_name: Power1
+  name: power2
+  friendly_name: Power2
 esp32:
   board: esp32dev
   framework:
     type: arduino
 logger:
+  level: WARN
 api:
   encryption:
     key: "myKey"
 ota:
   platform: esphome
   password: "myPass"
-#  num_attempts: 3
-#  safe_mode: no
 wifi:
   networks:
   - ssid: WiFi-Battery
     hidden: true
   manual_ip:
-    static_ip: 10.21.55.32
+    static_ip: 10.21.55.31
     gateway: 10.21.55.1
     subnet: 255.255.255.0 
     dns1: 10.21.55.1
   output_power: 20dB
   power_save_mode: none
-captive_portal:
-uart: # setup the two UARTs used by the two pzem-004 modules
-  - rx_pin: GPIO22
-    tx_pin: GPIO16
+uart:
+  - rx_pin: 16
+    tx_pin: 17
     baud_rate: 9600
     id: uart_1
-  - rx_pin: GPIO21
-    tx_pin: GPIO17
+  - rx_pin: 18
+    tx_pin: 19
     baud_rate: 9600
     id: uart_2
-modbus: # The pzem-004 modules use Modbus over UART
+modbus:
   - uart_id: uart_1
     send_wait_time: 200ms
     id: modbus_1
   - uart_id: uart_2
-    send_wait_time: 200ms
+    send_wait_time: 300ms
     id: modbus_2
+modbus_controller:
+  command_throttle: 100ms
+  id: modbus_ctrl1
+  update_interval: 200ms
+  address: 0x1
+  modbus_id: modbus_2
+i2c:
+  sda: GPIO27
+  scl: GPIO14
+  scan: true
+  id: bus_a
+ads1115:
+  - address: 0x48
+    continuous_mode: true
 sensor:
-  - platform: wifi_signal # so we can see the wifi signal strength in Home Assistant
-    name: "wifi-power1"
+  - platform: wifi_signal
+    name: "wifi-power2"
     update_interval: 60s
-  - platform: pzemac      # Pzem-004 Module for 8kw inverter
-    id: pzemac_1
+  - platform: modbus_controller
+    modbus_controller_id: modbus_ctrl1
+    name: "Battery-Current"
+    register_type: holding
+    address: 0x0056
+    value_type: U_WORD
+    accuracy_decimals: 1
+    unit_of_measurement: A
+    force_update: true
+    filters:
+      - exponential_moving_average:
+          alpha: 0.1  # Adjust this value based on testing 
+      - throttle: 1000ms
+  - platform: pzemac
     modbus_id: modbus_1
-    update_interval: 1s
+    id: pzemac_3
     current:
-      name: "8kw-Current"
-      id: pzem_8kw_current
+      name: "10kw-Current"
+      id: pzem_current
       accuracy_decimals: 1
-    voltage:
-      name: "8kw-Voltage"
-      id: pzem_8kw_voltage
-      accuracy_decimals: 0
-      force_update: true
-      filters:
-        - lambda: |-
-            id(last_update_8kw) = millis();
-            if (x > 270.0) { return 0.0; } else { return x; }
-    energy:
-      name: "8kw-Energy"
-      unit_of_measurement: Wh
-      device_class: "energy"
-      state_class: "total_increasing"
-    power:
-      name: "8kw-Power"
-      id: pzem_8kw_power
-      accuracy_decimals: 0
-      filters:
-        - lambda: |-
-            if (x > 31000.0) { return 0.0; } else { return x; }
-    frequency:
-      name: "8kw-Hz"
-    power_factor:
-      name: "8kw-PF"
-  - platform: pzemac      # Pzem-004 Module for Grid
-    modbus_id: modbus_2
-    update_interval: 1s
-    id: pzemac_2
-    current:
-      name: "Grid-Current"
-      id: pzem_grid_current
-      accuracy_decimals: 1
-      force_update: true
       filters:
         - lambda: |-
             if (x > 120.0) { return 0.0; } else { return x; }
     voltage:
-      name: "Grid-Voltage"
-      id: pzem_grid_voltage
+      name: "10kw-Voltage"
+      id: pzem_voltage
       accuracy_decimals: 0
       filters:
         - lambda: |-
-            id(last_update_grid) = millis();
+            id(last_update_time) = millis();
             if (x > 270.0) { return 0.0; } else { return x; }
     energy:
-      name: "Grid-Energy"
+      name: "10kw-Energy"
       unit_of_measurement: Wh
       device_class: "energy"
       state_class: "total_increasing"
     power:
-      name: "Grid-Power"
-      id: pzem_grid_power
+      name: "10kw-Power"
+      id: pzem_power
       accuracy_decimals: 0
       filters:
         - lambda: |-
             if (x > 31000.0) { return 0.0; } else { return x; }
     frequency:
-      name: "Grid-Hz"
+      name: "10kw-Hz"
     power_factor:
-      name: "Grid-PF"
-  - platform: adc           # Sensor input for battery pack voltage divider
-    name: "Battery-Voltage"
-    pin: GPIO35
-    id: battery_voltage
-    unit_of_measurement: "V"
-    accuracy_decimals: 3
-    attenuation: auto
-    force_update: true
-    update_interval: 100ms
+      name: "10kw-PF"
+    update_interval: 1s
+  - platform: ads1115
+    multiplexer: 'A2_GND'
+    gain: 6.144
+    name: "Sunlight-PV"
+    update_interval: 500ms
     filters:
-      - sliding_window_moving_average:
-            window_size: 500
-            send_every: 10
-  - platform: adc           # Sensor input for sunlight level 
-    name: "Sun-Level"
-    pin: GPIO32
-    id: sun
-    unit_of_measurement: "V"
-    accuracy_decimals: 2
-    attenuation: auto
+      - exponential_moving_average:
+          alpha: 0.02  # Adjust this value based on testing
+      - throttle: 1s
     force_update: true
-    update_interval: 100ms
-    filters:
-      - sliding_window_moving_average:
-            window_size: 500
-            send_every: 10
-  - platform: adc           # Sensor input for tempurature
-    name: "Temp-Battery"
-    pin: GPIO33
-    id: temp
-    unit_of_measurement: "V"
-    accuracy_decimals: 3
-    attenuation: auto
-    force_update: true
-    update_interval: 10ms
-    filters:
-      - sliding_window_moving_average:
-            window_size: 100
-            send_every: 100
   - platform: template
-    name: "8kw-Voltage-Safe"
+    name: "10kw-Voltage-Safe"
     lambda: |-
       const int timeout_ms = 1500; 
-      if ((millis() - id(last_update_8kw)) < timeout_ms) {
-      return id(pzem_8kw_voltage).state; 
+      if ((millis() - id(last_update_time)) < timeout_ms) {
+      return id(pzem_voltage).state; 
       } else { return NAN; }
     accuracy_decimals: 0
     update_interval: 1s
     unit_of_measurement: V
   - platform: template
-    name: "8kw-Current-Safe"
+    name: "10kw-Current-Safe"
     lambda: |-
       const int timeout_ms = 1500; 
-      if ((millis() - id(last_update_8kw)) < timeout_ms) {
-      return id(pzem_8kw_current).state; 
+      if ((millis() - id(last_update_time)) < timeout_ms) {
+      return id(pzem_current).state; 
       } else { return NAN; }
     accuracy_decimals: 1
     update_interval: 1s
     unit_of_measurement: A
   - platform: template
-    name: "8kw-Power-Safe"
+    name: "10kw-Power-Safe"
     lambda: |-
       const int timeout_ms = 1500; 
-      if ((millis() - id(last_update_8kw)) < timeout_ms) {
-      return id(pzem_8kw_power).state; 
+      if ((millis() - id(last_update_time)) < timeout_ms) {
+      return id(pzem_power).state; 
       } else { return NAN; }
     accuracy_decimals: 0
     update_interval: 1s
     unit_of_measurement: W
-  - platform: template
-    name: "Grid-Voltage-Safe"
-    lambda: |-
-      const int timeout_ms = 1500; 
-      if ((millis() - id(last_update_grid)) < timeout_ms) {
-      return id(pzem_grid_voltage).state; 
-      } else { return NAN; }
-    accuracy_decimals: 0
-    update_interval: 1s
-    unit_of_measurement: V
-  - platform: template
-    name: "Grid-Current-Safe"
-    lambda: |-
-      const int timeout_ms = 1500; 
-      if ((millis() - id(last_update_grid)) < timeout_ms) {
-      return id(pzem_grid_current).state; 
-      } else { return NAN; }
-    accuracy_decimals: 1
-    update_interval: 1s
-    unit_of_measurement: A
-  - platform: template
-    name: "Grid-Power-Safe"
-    lambda: |-
-      const int timeout_ms = 1500; 
-      if ((millis() - id(last_update_grid)) < timeout_ms) {
-      return id(pzem_grid_power).state; 
-      } else { return NAN; }
-    accuracy_decimals: 0
-    update_interval: 1s
-    unit_of_measurement: W
-
 globals:
-  - id: last_update_8kw
-    type: int
-    restore_value: no
-    initial_value: "0"
-  - id: last_update_grid
+  - id: last_update_time
     type: int
     restore_value: no
     initial_value: "0"
@@ -228,49 +155,10 @@ globals:
 switch:
   - platform: uart
     uart_id: uart_1
-    name: "8kw-Reset" 
+    name: "10kw-Reset" 
     data: [0x01, 0x42, 0x80, 0x11]
   - platform: uart
     uart_id: uart_2
-    name: "Grid-Reset" 
+    name: "Battery-Reset" 
     data: [0x01, 0x42, 0x80, 0x11]
-  - platform: gpio
-    name: "power1-relay1"
-    pin:
-      number: 04
-      inverted: false
-  - platform: gpio
-    name: "power1-relay2"
-    pin:
-      number: 18
-      inverted: false
-  - platform: gpio
-    name: "power1-relay3"
-    pin:
-      number: 19
-      inverted: false
-  - platform: gpio
-    name: "power1-relay4"
-    pin:
-      number: 23
-      inverted: false
-  - platform: gpio
-    name: "power1-relay5"
-    pin:
-      number: 13
-      inverted: false
-  - platform: gpio
-    name: "power1-relay6"
-    pin:
-      number: 14
-      inverted: false
-  - platform: gpio
-    name: "power1-relay7"
-    pin:
-      number: 25
-      inverted: false
-  - platform: gpio
-    name: "power1-relay8"
-    pin:
-      number: 26
-      inverted: false
+
