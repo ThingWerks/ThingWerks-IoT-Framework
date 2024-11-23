@@ -92,14 +92,14 @@ sensor:
       id: pzem_grid_current
       accuracy_decimals: 1
       force_update: true
-      filters:
+      filters:            # filter out readings that are above maximum 
         - lambda: |-
             if (x > 120.0) { return 0.0; } else { return x; }
     voltage:
       name: "Grid-Voltage"
       id: pzem_grid_voltage
       accuracy_decimals: 0
-      filters:
+      filters:            # filter out readings that are above maximum 
         - lambda: |-
             id(last_update_grid) = millis();
             if (x > 270.0) { return 0.0; } else { return x; }
@@ -115,14 +115,14 @@ sensor:
       name: "Grid-Power"
       id: pzem_grid_power
       accuracy_decimals: 0
-      filters:
+      filters:            # filter out readings that are above maximum 
         - lambda: |-
             if (x > 31000.0) { return 0.0; } else { return x; }
     frequency:
       name: "Grid-Hz"
     power_factor:
       name: "Grid-PF"
-  - platform: adc           # Sensor input for battery pack voltage divider
+  - platform: adc         # Sensor input for battery pack voltage divider
     name: "Battery-Voltage"
     pin: GPIO35
     id: battery_voltage
@@ -156,11 +156,11 @@ sensor:
     accuracy_decimals: 3
     attenuation: auto
     force_update: true
-    update_interval: 10ms
+    update_interval: 100ms
     filters:
       - sliding_window_moving_average:
             window_size: 100
-            send_every: 100
+            send_every: 10
   - platform: template
     name: "8kw-Voltage-Safe"
     lambda: |-
