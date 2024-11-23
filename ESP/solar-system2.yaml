@@ -63,8 +63,8 @@ sensor:
     unit_of_measurement: A
     force_update: true
     filters:
-      - exponential_moving_average:
-          alpha: 0.1  # Adjust this value based on testing 
+      - exponential_moving_average:   # EMA filters respone to changes faster because old readins have less weight
+          alpha: 0.1  
       - throttle: 1000ms
   - platform: pzemac
     modbus_id: modbus_1
@@ -142,11 +142,11 @@ sensor:
     accuracy_decimals: 2
     attenuation: 12db
     force_update: true
-    update_interval: 500ms
+    update_interval: 100ms
     filters:
-      - exponential_moving_average:
-          alpha: 0.02  # Adjust this value based on testing
-      - throttle: 1s
+      - sliding_window_moving_average:
+            window_size: 100
+            send_every: 10
 globals:
   - id: last_update_time
     type: int
