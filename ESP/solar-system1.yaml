@@ -66,12 +66,10 @@ sensor:
             if (x > 270.0) { return 0.0; } else { return x; }
     energy:
       name: "8kw-Energy"
-      unit_of_measurement: KWh
+      unit_of_measurement: Wh
       device_class: "energy"
       state_class: "total_increasing"
-      accuracy_decimals: 1
-      filters:
-        - lambda: return x / 1000.0;  # Convert Wh to kWh
+      accuracy_decimals: 2
     power:
       name: "8kw-Power"
       id: pzem_8kw_power
@@ -105,12 +103,10 @@ sensor:
             if (x > 270.0) { return 0.0; } else { return x; }
     energy:
       name: "Grid-Energy"
-      unit_of_measurement: KWh
+      unit_of_measurement: Wh
       device_class: "energy"
       state_class: "total_increasing"
-      accuracy_decimals: 1
-      filters:
-        - lambda: return x / 1000.0;  # Convert Wh to kWh
+      accuracy_decimals: 2
     power:
       name: "Grid-Power"
       id: pzem_grid_power
