@@ -20,99 +20,96 @@ let
         com: function () {
             udp.on('message', function (data, info) {
                 let buf = JSON.parse(data);
-                if (buf.type != "async") {
-                    //  console.log(buf);
-                    switch (buf.type) {
-                        case "espState":      // incoming state change (from ESP)
-                            // console.log("receiving esp data, ID: " + buf.obj.id + " state: " + buf.obj.state);
-                            state.onlineESP = true;
-                            // if (buf.obj.id == 0) { state.esp[buf.obj.id] = 1.0; }
-                            state.esp[buf.obj.id] = buf.obj.state;
-                            if (state.online == true) {
-                                em.emit(cfg.esp[buf.obj.id], buf.obj.state);
-                                automation.forEach((func, index) => { if (state.auto[index]) func(index) });
-                            }
-                            break;
-                        case "haStateUpdate":       // incoming state change (from HA websocket service)
-                            log("receiving state data, entity: " + cfg.ha[buf.obj.id] + " value: " + buf.obj.state, 0);
-                            //         console.log(buf);
-                            try { state.ha[buf.obj.id] = buf.obj.state; } catch { }
-                            if (state.online == true) {
-                                em.emit(cfg.ha[buf.obj.id], buf.obj.state);
-                                automation.forEach((func, index) => { if (state.auto[index]) func(index) });
-                            }
-                            break;
-                        case "haFetchReply":        // Incoming HA Fetch result
-                            state.ha = (buf.obj);
-                            log("receiving fetch data: " + state.ha);
-                            state.onlineHA = true;
-                            automation.forEach((func, index) => { func(index) });
-                            break;
-                        case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
-                            log("Core has reconnected to HA, fetching again");
-                            send("espFetch");
-                            break;
-                        case "haQueryReply":        // HA device query
-                            console.log("Available HA Devices: " + buf.obj);
-                            break;
-                        case "udpReRegister":       // reregister request from server
+                //  console.log(buf);
+                switch (buf.type) {
+                    case "espState":      // incoming state change (from ESP)
+                        // console.log("receiving esp data, ID: " + buf.obj.id + " state: " + buf.obj.state);
+                        state.esp[buf.obj.id] = buf.obj.state;
+                        if (state.online == true) {
+                            em.emit(cfg.esp[buf.obj.id], buf.obj.state);
+                            automation.forEach((func, index) => { if (state.auto[index]) func(index); });
+                        }
+                        break;
+                    case "haStateUpdate":       // incoming state change (from HA websocket service)
+                        log("receiving state data, entity: " + cfg.ha[buf.obj.id] + " value: " + buf.obj.state, 0);
+                        //         console.log(buf);
+                        try { state.ha[buf.obj.id] = buf.obj.state; } catch { }
+                        if (state.online == true) {
+                            em.emit(cfg.ha[buf.obj.id], buf.obj.state);
+                            automation.forEach((func, index) => { if (state.auto[index]) func(index) });
+                        }
+                        break;
+                    case "haFetchReply":        // Incoming HA Fetch result
+                        state.ha = (buf.obj);
+                        log("receiving fetch data: " + state.ha);
+                        if (state.onlineHA == false) sys.boot(3);
+                        break;
+                    case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
+                        log("Core has reconnected to HA, fetching again");
+                        send("espFetch");
+                        break;
+                    case "haQueryReply":        // HA device query
+                        console.log("Available HA Devices: " + buf.obj);
+                        break;
+                    case "udpReRegister":       // reregister request from server
+                        if (state.online == true) {
                             log("server lost sync, reregistering...");
                             setTimeout(() => {
                                 sys.register();
                                 if (cfg.ha != undefined) { send("haFetch"); }
                             }, 1e3);
-                            break;
-                        case "coreData":
-                            exist = false;
-                            coreDataNum = null;
-                            for (let x = 0; x < state.coreData.length; x++) {
-                                if (state.coreData[x].name == buf.obj.name) {
-                                    state.coreData[x].data = JSON.parse(data);
-                                    exist = true;
-                                    break;
-                                }
+                        }
+                        break;
+                    case "coreData":
+                        exist = false;
+                        coreDataNum = null;
+                        for (let x = 0; x < state.coreData.length; x++) {
+                            if (state.coreData[x].name == buf.obj.name) {
+                                state.coreData[x].data = JSON.parse(data);
+                                exist = true;
+                                break;
                             }
-                            if (exist == false) {
-                                coreDataNum = state.coreData.push({ name: buf.obj.name, data: JSON.parse(data).data }) - 1;
-                                log("coreData:" + coreDataNum + " - is registering: " + buf.obj.name + " - " + buf.obj.data);
-                            }
-                            break;
-                        case "diag":                // incoming diag refresh request, then reply object
-                            send("diag", { state, nv });
-                            break;
-                        case "telegram":
-                            // console.log("receiving telegram message: " + buf.obj);
-                            switch (buf.obj.class) {
-                                case "agent":
-                                    user.telegram.agent(buf.obj.data);
-                                    break;
-                                case "callback":
-                                    user.telegram.callback(buf.obj.data);
-                                    break;
-                            }
-                            break;
-                        case "log": console.log(buf.obj); break;
-                    }
+                        }
+                        if (exist == false) {
+                            coreDataNum = state.coreData.push({ name: buf.obj.name, data: JSON.parse(data).data }) - 1;
+                            log("coreData:" + coreDataNum + " - is registering: " + buf.obj.name + " - " + buf.obj.data);
+                        }
+                        break;
+                    case "diag":                // incoming diag refresh request, then reply object
+                        send("diag", { state, nv });
+                        break;
+                    case "telegram":
+                        // console.log("receiving telegram message: " + buf.obj);
+                        switch (buf.obj.class) {
+                            case "agent":
+                                user.telegram.agent(buf.obj.data);
+                                break;
+                            case "callback":
+                                user.telegram.callback(buf.obj.data);
+                                break;
+                        }
+                        break;
+                    case "proceed": if (state.online == false) setTimeout(() => { sys.boot(2); }, 1e3); break;
+                    case "log": console.log(buf.obj); break;
                 }
             });
         },
         register: function () {
-            log("registering with TWIT-Core");
             let obj = {};
             if (cfg.ha != undefined) obj.ha = cfg.ha;
             if (cfg.esp != undefined) obj.esp = cfg.esp;
             if (cfg.telegram != undefined) obj.telegram = true;
             send("register", obj, cfg.moduleName);
             if (cfg.telegram != undefined) {
-                log("registering telegram users with TWIT-Core");
-                for (let x = 0; x < nv.telegram.length; x++) {
+                if (nv.telegram == undefined) nv.telegram = [];
+                else for (let x = 0; x < nv.telegram.length; x++) {
                     send("telegram", { class: "sub", id: nv.telegram[x].id });
                 }
             }
         },
         init: function () {
             nv = {};
-            state = { auto: [], ha: [], esp: [], udp: [], coreData: [], onlineHA: false, onlineESP: false, online: false };
+            state = { auto: [], ha: [], esp: [], udp: [], coreData: [], onlineHA: false, online: false };
             time = {
                 boot: null,
                 get epochMil() { return Date.now(); },
@@ -273,49 +270,40 @@ let
                     break;
                 case 1:
                     sys.com();
+                    log("trying to register with TWIT Core", 1);
                     sys.register();
-                    setTimeout(() => { sys.boot(2); }, 3e3);
+                    bootWait = setInterval(() => { sys.register(); }, 10e3);
                     break;
                 case 2:
-                    state.online = true;
-                    setInterval(() => { send("heartBeat"); time.boot++; }, 1e3);
+                    clearInterval(bootWait);
+                    log("registered with TWIT Core", 1);
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
-                        log("Starting Home Assistant", 1);
+                        log("fetching Home Assistant entities", 1);
                         send("haFetch");
-                        confirmHA();
+                        bootWait = setInterval(() => {
+                            log("HA fetch is failing, retrying...", 2);
+                            send("haFetch");
+                        }, 10e3);
+                    } else sys.boot(3);
+                    break;
+                case 3:
+                    clearInterval(bootWait);
+                    if (cfg.ha != undefined && cfg.ha.length > 0) {
+                        log("Home Assistant fetch complete", 1);
+                        state.onlineHA = true;
                     }
-                    else setTimeout(() => { automation.forEach((func, index) => { func(index) }); }, 1e3);
                     if (cfg.esp != undefined && cfg.esp.length > 0) {
-                        log("Starting ESPHome", 1);
-                        if (cfg.ha == undefined && cfg.ha.length < 0) confirmESP();
+                        log("fetching esp entities", 1);
                         send("espFetch");
-                    }
-                    /*
-                    if (cfg.udp != undefined && cfg.udp.length > 0) {
-                        log("Starting UDP", 1);
-                        if (cfg.ha == undefined && cfg.ha.length < 0) confirmESP();
-                        send("espFetch");
-                    }
-                    */
-                    function confirmHA() {
-                        setTimeout(() => {
-                            if (state.onlineHA == false) {
-                                log("TW-Core isn't online yet or fetch is failing, retrying...", 2);
-                                sys.register();
-                                send("haFetch");
-                                confirmHA();
-                            }
-                        }, 10e3);
-                    }
-                    function confirmESP() {
-                        setTimeout(() => {
-                            if (state.onlineESP == false) {
-                                log("TW-Core isn't online yet or fetch is failing, retrying...", 2);
-                                send("espFetch");
-                                confirmESP();
-                            }
-                        }, 10e3);
-                    }
+                        setTimeout(() => { sys.boot(4); }, 1e3);
+                    } else sys.boot(4);
+                    break;
+                case 4:
+                    if (cfg.esp != undefined && cfg.esp.length > 0)
+                        log("ESP fetch complete", 1);
+                    state.online = true;
+                    automation.forEach((func, index) => { func(index) });
+                    setInterval(() => { send("heartBeat"); time.boot++; }, 1e3);
                     break;
             }
         },
@@ -331,3 +319,4 @@ function log(message, index, level) {
     if (level == undefined) send("log", { message: message, mod: cfg.moduleName, level: index });
     else send("log", { message: message, mod: state.auto[index].name, level: level });
 }
+
