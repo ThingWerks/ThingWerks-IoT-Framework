@@ -1206,7 +1206,7 @@ let
             em = new events.EventEmitter();
             exec = require('child_process').exec;
             execSync = require('child_process').execSync;
-            workingDir = require('path').dirname(require.main.filename);
+            workingDir = require('path').dirname(require.main.filename) + "/";
             path = require('path');
             scriptName = path.basename(__filename).slice(0, -3);
             udpClient = require('dgram');
@@ -1223,7 +1223,7 @@ let
                     "WantedBy=multi-user.target\n",
                     "[Service]",
                     "ExecStartPre=/bin/bash -c 'uptime=$(awk \\'{print int($1)}\\' /proc/uptime); if [ $uptime -lt 300 ]; then sleep 70; fi'",
-                    "ExecStart=nodemon " + workingDir + "/client-" + moduleName + ".js -w " + workingDir + "/client-" + moduleName + ".js --exitcrash",
+                    "ExecStart=nodemon " + workingDir + "client-" + moduleName + ".js -w " + workingDir + "client-" + moduleName + ".js --exitcrash",
                     "Type=simple",
                     "User=root",
                     "Group=root",
