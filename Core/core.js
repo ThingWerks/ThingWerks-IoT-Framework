@@ -736,7 +736,7 @@ if (isMainThread) {
                 ws = [];
                 hass = [];
                 logs = { step: 0, sys: [], ws: [], tg: [], tgStep: 0, haInputs: [], esp: [] };
-                if (cfg.homeAssistant) {
+                if (cfg.homeAssistant != undefined) {
                     for (let x = 0; x < cfg.homeAssistant.length; x++) {
                         logs.ws.push([]);
                         logs.haInputs.push([]);
@@ -878,7 +878,7 @@ if (isMainThread) {
                         }
                     }
                     if (port != undefined) {
-                        console.log(ubuf);
+                        if (level == 0 && cfg.debugging == true) console.log(ubuf);
                         udp.send(JSON.stringify({ type: "log", obj: ubuf }), port);
                     } else if (level == 0 && cfg.debugging == true) console.log(cbuf);
                     else if (level != 0) console.log(cbuf);
