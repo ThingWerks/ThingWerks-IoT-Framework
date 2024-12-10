@@ -263,7 +263,7 @@ let
             em = new events.EventEmitter();
             exec = require('child_process').exec;
             execSync = require('child_process').execSync;
-            workingDir = require('path').dirname(require.main.filename);
+            workingDir = require('path').dirname(require.main.filename) + "/";
             path = require('path');
             scriptName = path.basename(__filename).slice(0, -3);
             udpClient = require('dgram');
