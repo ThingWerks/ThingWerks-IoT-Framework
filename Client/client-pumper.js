@@ -55,7 +55,9 @@ let
                 ],
                 press: {                // - must be an undefined object if not used
                     output: 0,          // pressure sensor number (in cfg.press block)
-                    input: undefined    // id for tank feeding this system
+                    input: undefined,   // id for tank feeding this system
+                    start: 3.80,        // output tank start psi/meters
+                    stop: 3.90,         // output tank stop psi/meters 
                 },
 
                 fault: {
@@ -95,6 +97,8 @@ let
                     outputRiseTime: 600,    // time to wait to check for level rise
                     outputRiseWarn: 5,      // level the tank must rise to   percentage for level/meter sensors and psi for pressure tanks
                     outputRiseError: 3,     // level to throw warning
+                    start: .95,            // output tank start psi/meters
+                    stop: 1.0,             // output tank stop psi/meters 
                     input: 0,               // input tank feeding the pump
                     // inputMin: 15         // minimum input level in percent
                 },
@@ -148,8 +152,8 @@ let
                     output: 2,          // pressure sensor number (in cfg.press block)
                     input: undefined,
                     profile: [
-                        { start: 20, stop: 25 },
-                        { start: 26, stop: 31 },
+                        { start: 20, stop: 30 },
+                        { start: 26, stop: 35 },
                         { start: 30, stop: 42 },
                     ],
                     turbo: {
@@ -180,9 +184,7 @@ let
                 unit: "m",              // measurement unit (i.e. PSI or meters) "m" or "psi" only
                 type: "esp",            // the sensor ID in "ha" or "esp" block
                 id: 0,                  // HA or ESP ID number, corresponds to array number (zero indexed) 
-                stop: 3.88,             // Demand Delivery system stop level in (meters) or PSI
-                start: 3.80,            // Demand Delivery system start level (meters) or PSI
-                // warn: 2.75,          // threshold to send warning notification on pump start
+                // levelFull: 3.90,        // for tanks not assigned to DD systems - meter reading only 
                 average: 40,            // amount of samples to average over
                 voltageMin: 0.566,      // calibration, minimum value when sensor is at atmospheric pressure 
                 pressureRating: 15,     // max rated pressure of transducer in PSI
@@ -192,9 +194,6 @@ let
                 unit: "m",              // measurement unit (i.e. PSI or meters) "m" or "psi" only
                 type: "esp",            // the sensor ID in "ha" or "esp" block
                 id: 2,                  // HA or ESP ID number, corresponds to array number (zero indexed) 
-                stop: 1,                // Demand Delivery system stop level in (meters) or PSI
-                start: .95,             // Demand Delivery system start level (meters) or PSI
-                // warn: .5,            // threshold to send warning notification on pump start
                 average: 40,            // amount of samples to average over
                 voltageMin: 0.666,      // calibration, minimum value when sensor is at atmospheric pressure 
                 pressureRating: 5,      // max rated pressure of transducer in PSI
@@ -204,8 +203,6 @@ let
                 unit: "psi",            // measurement unit (i.e. PSI or meters) "m" or "psi" only
                 type: "esp",            // the sensor ID in "ha" or "esp" block
                 id: 8,                  // HA or ESP ID number, corresponds to array number (zero indexed) 
-                stop: 24,               // Demand Delivery system stop level in (meters) or PSI
-                start: 20,              // Demand Delivery system start level (meters) or PSI
                 average: 5,             // amount of samples to average over
                 voltageMin: 0.609,      // calibration, minimum value when sensor is at atmospheric pressure 
                 pressureRating: 174,    // max rated pressure of transducer in PSI
@@ -353,7 +350,7 @@ let
                                 switch (dd.fault.flow) {
                                     case false: // when pump is STOPPED and not flow faulted
                                         if (dd.press.out.cfg.unit == "m") {
-                                            if (dd.press.out.state.meters <= dd.press.out.cfg.start) {
+                                            if (dd.press.out.state.meters <= dd.cfg.press.start) {
                                                 log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.meters.toFixed(2)
                                                     + "m) - pump is starting", index, 1);
                                                 pumpStart(true);
@@ -373,7 +370,7 @@ let
                                                 pumpStart(true);
                                                 return;
                                             }
-                                        } else if (dd.press.out.state.psi <= dd.press.out.cfg.start) {
+                                        } else if (dd.press.out.state.psi <= dd.cfg.press.start) {
                                             log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
                                                 + "psi) - pump is starting", index, 1);
                                             pumpStart(true);
@@ -413,7 +410,7 @@ let
                                 break;
                             case true:      // when pump is RUNNING
                                 if (dd.press.out.cfg.unit == "m") {
-                                    if (dd.press.out.state.meters >= dd.press.out.cfg.stop) {
+                                    if (dd.press.out.state.meters >= dd.cfg.press.stop) {
                                         log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is full - pump is stopping", index, 1);
                                         pumpStop();
                                         return;
@@ -431,7 +428,7 @@ let
                                         pumpStop();
                                         return;
                                     }
-                                } else if (dd.press.out.state.psi >= dd.press.out.cfg.stop) {
+                                } else if (dd.press.out.state.psi >= dd.cfg.press.stop) {
                                     log(dd.cfg.name + " - " + dd.press.out.cfg.name + " shutoff pressure reached - pump is stopping", index, 1);
                                     pumpStop();
                                     return;
@@ -490,7 +487,7 @@ let
                         }
                         break;
                 }
-                if (dd.press.out.state.meters >= (dd.press.out.cfg.stop + .12) && dd.fault.flowOver == false) {
+                if (dd.press.out.state.meters >= (dd.cfg.press.stop + .12) && dd.fault.flowOver == false) {
                     log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is overflowing (" + dd.press.out.state.meters
                         + dd.press.out.cfg.unit + ") - possible SSR or hardware failure", index, 3);
                     pumpStop();
@@ -900,33 +897,47 @@ let
                 }
                 for (let x = 0; x < cfg.press.length; x++) {
                     let calc = { percent: [], sum: 0 }, press = {
-                        cfg: cfg.press[x], state: (cfg.press[x].type == "esp")
+                        cfg: cfg.press[x], reading: (cfg.press[x].type == "esp")
                             ? state.esp[cfg.press[x].id] : state.ha[cfg.press[x].id],
-                        out: state.auto[index].press[x]
+                        out: state.auto[index].press[x].profiles,
+                        state: state.auto[index].press[x],
                     };
-                    if (press.out.step < press.cfg.average) { press.out.raw[press.out.step++] = press.state; }
-                    else { press.out.step = 0; press.out.raw[press.out.step++] = press.state; }
-                    for (let y = 0; y < press.out.raw.length; y++) calc.sum += press.out.raw[y];
-                    calc.average = calc.sum / press.out.raw.length;
+                    let stopPressure = null;
+                    for (let y = 0; y < cfg.dd.length; y++) {
+                        if (cfg.dd[y].press.output == x) {
+                            if (cfg.dd[y].press.profile != undefined) {
+                                stopPressure = cfg.dd[y].press.profile[0].stop;
+                                break;
+                            } else {
+                                stopPressure = cfg.dd[y].press.stop;
+                                break;
+                            }
+                        }
+                    }
+                    if (stopPressure == null) stopPressure = press.cfg.levelFull;
+                    if (press.state.step < press.cfg.average) { press.state.raw[press.state.step++] = press.reading; }
+                    else { press.state.step = 0; press.state.raw[press.state.step++] = press.reading; }
+                    for (let y = 0; y < press.state.raw.length; y++) calc.sum += press.state.raw[y];
+                    calc.average = calc.sum / press.state.raw.length;
                     if (press.cfg.voltageMin == 0.5) log("sensor ID: " + x + " is uncalibrated - Average Volts: "
                         + calc.average.toFixed(3) + "  - WAIT " + press.cfg.average + " seconds", index, 1);
                     calc.psi = (press.cfg.pressureRating / 4) * (calc.average - press.cfg.voltageMin);
                     calc.meters = 0.703249 * calc.psi;
-                    calc.percent[0] = press.cfg.stop - calc.meters;
-                    calc.percent[1] = calc.percent[0] / press.cfg.stop;
+                    calc.percent[0] = stopPressure - calc.meters;
+                    calc.percent[1] = calc.percent[0] / stopPressure;
                     calc.percent[2] = Math.round(100 - (calc.percent[1] * 100));
-                    press.out.volts = Number(calc.average.toFixed(3));
-                    press.out.psi = (calc.psi < 0.0) ? 0 : Number(calc.psi.toFixed(2));
-                    press.out.meters = (calc.meters < 0.0) ? 0 : Number(calc.meters.toFixed(2));
-                    press.out.percent = (calc.percent[2] < 0.0) ? 0 : calc.percent[2];
-                    sendHA(press.cfg.name + "_percent", press.out.percent.toFixed(0), '%');
-                    sendHA(press.cfg.name + "_meters", press.out.meters.toFixed(2), 'm');
-                    sendHA(press.cfg.name + "_psi", press.out.psi.toFixed(0), 'psi');
+                    press.state.volts = Number(calc.average.toFixed(3));
+                    press.state.psi = (calc.psi < 0.0) ? 0 : Number(calc.psi.toFixed(2));
+                    press.state.meters = (calc.meters < 0.0) ? 0 : Number(calc.meters.toFixed(2));
+                    press.state.percent = (calc.percent[2] < 0.0) ? 0 : calc.percent[2];
+                    sendHA(press.cfg.name + "_percent", press.state.percent.toFixed(0), '%');
+                    sendHA(press.cfg.name + "_meters", press.state.meters.toFixed(2), 'm');
+                    sendHA(press.cfg.name + "_psi", press.state.psi.toFixed(0), 'psi');
                     send("coreData", {
                         name: press.cfg.name, data: {
-                            percent: press.out.percent.toFixed(0),
-                            meters: press.out.meters.toFixed(2),
-                            psi: press.out.psi.toFixed(0)
+                            percent: press.state.percent.toFixed(0),
+                            meters: press.state.meters.toFixed(2),
+                            psi: press.state.psi.toFixed(0)
                         }
                     });
                 }
@@ -1018,7 +1029,7 @@ let
     ];
 let
     user = {        // user configurable block - Telegram 
-        telegram: { // enter a case matching your desireable input
+        telegram: { // enter a case matching your desirable input 
             agent: function (msg) {
                 //  log("incoming telegram message: " + msg,  0);
                 //  console.log("incoming telegram message: ", msg);
@@ -1083,7 +1094,7 @@ let
                         }
                         break;
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
-                        log("receiving state data, entity: " + cfg.ha[buf.obj.id] + " value: " + buf.obj.state, 0);
+                        log("receiving HA state data, entity: " + cfg.ha[buf.obj.id] + " value: " + buf.obj.state, 0);
                         //         console.log(buf);
                         try { state.ha[buf.obj.id] = buf.obj.state; } catch { }
                         if (state.online == true) {
