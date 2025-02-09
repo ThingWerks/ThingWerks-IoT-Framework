@@ -90,8 +90,6 @@ let
         solar: {
             inverterAuto: 0,            // HA Toggle automation id
             inverterDelaySwitch: 15,    // time sensor must maintain reading before switching inverter state
-            inverterDelaySwitchOff: 15,
-
             inverterRapidSwitch: 10,    // inverter minimum switch cycle time for before faulting
             espSunlight: 10,            // sunlight sensor esp ID
             sun: [
@@ -165,9 +163,10 @@ let
                     id: undefined,              // optional - Power switch ESP ID
                     type: "esp",                // optional - output type esp/udp/ha
                     delayOff: undefined,        // optional - delay power off switch after shutdown
+                    startAuto: true,            // optional - state the inverter on system start if voltage is good to go
                     ha: 7                       // Inverter Home Assistant Power Button ID number (in cfg.ha) 
                 },
-                transfer: {
+                transfer: {                     // required!!
                     type: "esp",                // Power switch output type esp/udp/ha
                     switchOn: [                 // transfer switch on sequence
                         { id: 3, state: true }, // transfer elements, state is to turn on (true), or off (false)
@@ -225,8 +224,8 @@ let
                 ampsRun: 20.0,
                 ampsStop: -5.0,
                 // ampsRunFloat: 10.0,
-                // ampsStopFloat: -10.0,
-                delaySwitch: 20,
+                ampsStopFloat: -10.0,
+                delaySwitch: 30,
                 battery: 0,
             },
         ],
@@ -530,16 +529,41 @@ let
             }
             function inverterAuto() {
                 for (let x = 0; x < cfg.inverter.length; x++) {         // initialize all inverter states
-                    let { config, inverter } = pointers(x);
-                    if (st.inverter[x].state == null && config.battery != undefined && config.battery.sensorVolt != undefined) {
-                        //  console.log("x is: " + x + " sensor is: " + cfg.inverter[x].sensorVolt + " object is: ", st.sensor)
-                        log("initializing " + config.name + " inverter state - current state: " + state.esp[config.transfer.switchOn[0].id], index, 1);
-                        inverter.state = state.esp[config.transfer.switchOn[0].id];
+                    let { voltsBat, config, inverter } = pointers(x);
+                    if (inverter.state == null || inverter.boot == false) {
+                        if (cfg.inverter[x].power.ha != undefined) {
+                            log("inverter: " + cfg.inverter[x].name + " - syncing HA power - state: " + state.ha[cfg.inverter[x].power.ha], index, 1);
+                            if (state.ha[cfg.inverter[x].power.ha] == true) {
+                                if (state.esp[config.transfer.switchOn[0].id] != config.transfer.switchOn[0].state) {
+                                    log("inverter: " + cfg.inverter[x].name + " - state ATS OFF (" + state.esp[config.transfer.switchOn[0].id]
+                                        + ") is not expected - HA says its ON", index, 2);
+                                    inverter.state = true;
+                                } else inverter.state = true;
+                            } else {
+                                if (state.esp[config.transfer.switchOff[0].id] != config.transfer.switchOff[0].state) {
+                                    log("inverter: " + cfg.inverter[x].name + " - state ATS ON (" + state.esp[config.transfer.switchOff[0].id]
+                                        + ")is not expected - HA says its OFF", index, 2);
+                                    inverter.state = false;
+                                } else inverter.state = false;
+                            }
+                        }
+                        inverter.delaySwitchStep = false;
+                        inverter.delaySwitchVoltsStep = false;
+                        inverter.delaySwitchFaultStep = false;
+                        inverter.delaySwitchSunStep = false;
                         inverter.step = time.epoch - 20;
-                        if (state.ha[cfg.solar.inverterAuto] == true) log("inverter: " + config.name + " - automation is on", index, 1);
-                        else log("inverter: " + config.name + " - automation is off", index, 1);
-                        if (state.ha[config.power.ha] != inverter.state)
-                            ha.send(cfg.ha[config.power.ha], inverter.state);
+                        if (inverter.state == false) {
+                            if (config.power.startAuto == true) {
+                                if (voltsBat > config.voltsStop) {
+                                    log("inverter: " + config.name + " - first start, volts is greater than stop volts, good to run", index, 1);
+                                    inverterPower(x, true);
+                                }
+                            } else if (nv.battery[config.battery].floating == true) {
+                                log("inverter: " + config.name + " - first start, battery is floating, good to run", index, 1);
+                                inverterPower(x, true);
+                            }
+                        }
+                        inverter.boot = true;
                     } else if (inverter.state == "faulted") {
                         if (voltsInverter <= config.voltsFloatStop) {
                             log("inverter: " + config.name + " - inverter was faulted but now resetting because charger is no longer floating", index, 2);
@@ -557,7 +581,7 @@ let
                     if (inverter.state != "faulted" && inverter.state == true) {
                         if (inverterNightMode(x) == true) {
                             if (voltsBat < config.nightMode.startVoltageMin) {
-                                log("Battery is too low to make it through the night: " + voltsBat + ", " + config.name + " switching off", index, 1);
+                                log("inverter: " + config.name + " - Battery is too low to make it through the night: " + voltsBat + ", switching off", index, 1);
                                 inverterPower(x, false);
                                 return;
                             }
@@ -569,8 +593,7 @@ let
                                             inverter.delaySwitchTimer = time.epoch;
                                             inverter.delaySwitchStep = true;
                                         } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                            log("Sun is low: " + sun + "  voltsBat: " + voltsBat
-                                                + ", " + config.name + " is switching to grid ", index, 1);
+                                            log("inverter: " + config.name + " - Sun is low: " + sun + "  voltsBat: " + voltsBat + ", switching to grid ", index, 1);
                                             inverterPower(x, false);
                                             return;
                                         }
@@ -598,8 +621,7 @@ let
                                         inverter.delaySwitchStep = true;
                                     } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
                                         log("inverter: " + config.name + " - solar power too low: " + ampsBat + "a  voltsBat: " + voltsBat
-                                            + "v  Floating: " + nv.battery[config.battery].floating + " Sun: " + sun + "v  Watts: " + wattsInverter + ", " + config.name
-                                            + " is switching to grid ", index, 1);
+                                            + "v  Floating: " + nv.battery[config.battery].floating + " Sun: " + sun + "v  Watts: " + wattsInverter + ", switching to grid ", index, 1);
                                         inverterPower(x, false);
                                         inverter.switchWatts = wattsInverter;
                                         inverter.switchSun = sun;
@@ -613,7 +635,7 @@ let
                                 inverter.delaySwitchVoltsTimer = time.epoch;
                                 inverter.delaySwitchVoltsStep = true;
                             } else if (time.epoch - inverter.delaySwitchVoltsTimer >= cfg.solar.inverterDelaySwitch) {
-                                log("Battery is low: " + voltsBat + ", " + config.name + " is switching to grid ", index, 1);
+                                log("inverter: " + config.name + " - Battery is low: " + voltsBat + ", is switching to grid ", index, 1);
                                 inverterPower(x, false);
                                 return;
                             }
@@ -622,7 +644,7 @@ let
                             && time.hour < config.nightMode.startHour) {
                             if (config.nightMode.endAmps != undefined) {
                                 if (ampsBat >= config.nightMode.endAmps) {
-                                    log("Battery is charging, current is high: " + ampsBat + "a  " + voltsBat + "v, " + config.name + " exiting night mode", index, 1);
+                                    log("inverter: " + config.name + " - Battery is charging, current is high: " + ampsBat + "a  " + voltsBat + "v, exiting night mode", index, 1);
                                     inverter.nightMode = false;
                                 }
                             } else checkCharging(x, false, voltsBat); // inverter only exits night mode only when there is sufficient charging
@@ -634,7 +656,7 @@ let
                             } else if (time.epoch - inverter.delaySwitchFaultTimer >= 10) {
                                 //   log("inverter: " + config.name + " has faulted - no output - Inverter Auto is shutting down ", index, 3);
                                 //    if (cfg.solar.inverterAuto != undefined) ha.send(cfg.ha[cfg.solar.inverterAuto], false);
-                                log("inverter: " + config.name + " has faulted - no output - Inverter is going offline ", index, 3);
+                                log("inverter: " + config.name + " - FAULT - no output - Inverter is going offline ", index, 3);
                                 inverter.state = "faulted";
                                 inverterPower(x, false);
                                 return;
@@ -676,7 +698,7 @@ let
                                         inverter.delaySwitchSunTimer = time.epoch;
                                         inverter.delaySwitchSunStep = true;
                                     } else if (time.epoch - inverter.delaySwitchSunTimer >= cfg.solar.inverterDelaySwitch) {
-                                        log("battery is floating, sun is enough: " + sun + "v  Power: " + wattsGrid + ", " + config.name + " switching on", index, 1);
+                                        log("inverter: " + config.name + " - battery is floating, sun is enough: " + sun + "v  Power: " + wattsGrid + ", switching on", index, 1);
                                         finish();
                                         return;
                                     }
@@ -690,7 +712,7 @@ let
                                     inverter.delaySwitchTimer = time.epoch;
                                     inverter.delaySwitchStep = true;
                                 } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("battery is charging, sun is high: " + voltsBat + ", " + config.name + " switching on", index, 1);
+                                    log("inverter: " + config.name + " - battery is charging, sun is high: " + voltsBat + ", switching on", index, 1);
                                     finish();
                                 }
                             } else if (sun < config.sunRun) inverter.delaySwitchStep = false;
@@ -701,7 +723,7 @@ let
                                     inverter.delaySwitchTimer = time.epoch;
                                     inverter.delaySwitchStep = true;
                                 } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("battery is charging, current is high: " + ampsBat + "a  " + voltsBat + "v, " + config.name + " switching on", index, 1);
+                                    log("inverter: " + config.name + " - battery is charging, current is high: " + ampsBat + "a  " + voltsBat + "v, switching on", index, 1);
                                     finish();
                                 }
                             } else if (ampsBat < config.ampsRun) inverter.delaySwitchStep = false;
@@ -711,7 +733,7 @@ let
                                     inverter.delaySwitchTimer = time.epoch;
                                     inverter.delaySwitchStep = true;
                                 } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                    log("charge current is higher than grid power: " + wattsSolar + "w  " + voltsBat + "v, " + config.name + " switching on", index, 1);
+                                    log("inverter: " + config.name + " - charge current is higher than grid power: " + wattsSolar + "w  " + voltsBat + "v, switching on", index, 1);
                                     finish();
                                 }
                             }
@@ -722,14 +744,14 @@ let
                                 inverter.delaySwitchTimer = time.epoch;
                                 inverter.delaySwitchStep = true;
                             } else if (time.epoch - inverter.delaySwitchTimer >= cfg.solar.inverterDelaySwitch) {
-                                log("battery is charging: " + voltsBat + ", " + config.name + " switching on", index, 1);
+                                log("inverter: " + config.name + " - battery is charging: " + voltsBat + ", switching on", index, 1);
                                 finish();
                             }
                         }
                     } else if (voltsBat < config.voltsRun) inverter.delaySwitchStep = false;
                     function finish() {
                         if (inverter.nightMode == true) {
-                            log(config.name + " exiting night mode", index, 1);
+                            log("inverter: " + config.name + " - exiting night mode", index, 1);
                             inverter.nightMode = false;
                         }
                         if (power == true) inverterPower(x, true);
@@ -776,7 +798,7 @@ let
                 } else nightMode = false;
                 if (nightMode == true) {
                     if (st.inverter[x].nightMode == false) {
-                        log("night mode is activated for inverter: " + config.name, index, 1);
+                        log("inverter: " + config.name + " - activating night mode", index, 1);
                         st.inverter[x].nightMode = true;
                         return true;
                     } else return false;
@@ -789,7 +811,8 @@ let
                     if (run) list = config.transfer.switchOn; else list = config.transfer.switchOff;
                     for (let y = 0; y < list.length; y++) {
                         setTimeout(() => {
-                            log("inverter: " + config.name + ", transferring ATS switch " + y, index, 1);
+                            log("inverter: " + config.name + " - intention: " + run + ", transferring ATS switch "
+                                + y + " - state: " + list[y].state, index, 1);
                             esp.send(cfg.esp[list[y].id], list[y].state);
                         }, ((list[y].delay == undefined) ? 0 : (list[y].delay * 1e3)));
                     }
@@ -798,18 +821,18 @@ let
                 if (run == true) {
                     if (time.epoch - st.inverter[x].step >= cfg.solar.inverterRapidSwitch) {
                         if (config.power.id == undefined) {
-                            log("inverter: " + config.name + ", transfer switch to inverter", index, 1);
+                            log("inverter: " + config.name + " - transferring switches to inverter - wait", index, 1);
                             toggle(run);
                         } else {
                             if (state.esp[config.power.id] == false) {
                                 esp.send(cfg.esp[config.power.id], run);
-                                log("inverter: " + config.name + ", power on, delaying transfer switch 10 secs", index, 1);
+                                log("inverter: " + config.name + " - power on, delaying transfer switch 10 secs", index, 1);
                                 toggle(run);
                             } else {
-                                log("inverter: " + config.name + ", already on - clearing shutdown delay", index, 1);
+                                log("inverter: " + config.name + " - already on - clearing shutdown delay", index, 1);
                                 clearTimeout(st.inverter[x].delayOffTimer);
                                 st.inverter[x].delayOffTimer = null;
-                                log("inverter: " + config.name + ", transfer switch to inverter", index, 1);
+                                log("inverter: " + config.name + " - transferring switches to inverter - wait", index, 1);
                                 toggle(run);
                             }
                         }
@@ -817,7 +840,7 @@ let
                         st.inverter[x].delaySwitchFaultStep = false;
                         setTimeout(() => { st.inverter[x].delaySwitchFaultStep = false }, 5e3);
                     } else {
-                        log("inverter: " + config.name + ", cycling too frequently, epoch: "
+                        log("inverter: " + config.name + " - cycling too frequently, epoch: "
                             + time.epoch + " step:" + st.inverter[x].step + " - inverter auto shutting down", index, 3);
                         // st.inverter[x].state = false;
                         ha.send(cfg.solar.inverterAuto, false);
@@ -825,10 +848,10 @@ let
                     }
                 } else {
                     if (config.power.id == undefined) {
-                        log("inverter: " + config.name + ", transfer switch to grid", index, 1);
+                        log("inverter: " + config.name + " - transferring switches to grid - wait", index, 1);
                         toggle(run);
                     } else {
-                        log("inverter: " + config.name + ", transfer switch to grid", index, 1);
+                        log("inverter: " + config.name + " - transferring switches to grid - wait", index, 1);
                         toggle(run);
                         if (config.power.delayOff == undefined) {
                             log("inverter: " + config.name + ", power off", index, 1);
@@ -837,9 +860,9 @@ let
                                 st.inverter[x].delayOffTimer = null;
                             }, 10e3);
                         } else {
-                            log("inverter: " + config.name + ", shutdown will delay by:" + config.power.delayOff + " seconds", index, 1);
+                            log("inverter: " + config.name + " - shutdown will delay by:" + config.power.delayOff + " seconds", index, 1);
                             st.inverter[x].delayOffTimer = setTimeout(() => {
-                                log("inverter: " + config.name + " shutdown was delayed, now powering off", index, 1);
+                                log("inverter: " + config.name + " - shutdown was delayed, now powering off", index, 1);
                                 esp.send(cfg.esp[config.power.id], run);
                                 st.inverter[x].delayOffTimer = null;
                                 st.inverter[x].timeShutdown = time.epoch;
@@ -1328,28 +1351,20 @@ let
                         });
                     });
                 }
-                em.on("input_boolean.auto_inverter", (newState) => {
+                em.on(cfg.ha[cfg.solar.inverterAuto], (newState) => {
                     if (newState == true) log("inverter auto going online", index, 1);
                     else log("inverter auto going offline", index, 1);
                 });
                 for (let x = 0; x < cfg.inverter.length; x++) {
                     em.on(cfg.ha[cfg.inverter[x].power.ha], (newState) => {   // keep inverter state synced to automation state
                         if (st.inverter[x].state != "faulted" && st.inverter[x].state != newState) {
-                            log("inverter " + cfg.inverter[x].name + " state switching to " + newState, index, 1);
+                            log("inverter: " + cfg.inverter[x].name + " - HA power state switching to " + newState, index, 1);
                             st.inverter[x].state = newState;
                             inverterNightMode(x);
                             inverterPower(x, newState);
                             st.inverter[x].warn.manualPowerOn = false;
                         }
                     });
-                    if (cfg.inverter[x].power.ha != undefined) {
-                        log("syncing inverter: " + cfg.inverter[x].name + " - state: " + state.ha[cfg.inverter[x].power.ha], index, 1);
-                        st.inverter[x].state = state.ha[cfg.inverter[x].power.ha];
-                        st.inverter[x].delaySwitchStep = false;
-                        st.inverter[x].delaySwitchVoltsStep = false;
-                        st.inverter[x].delaySwitchFaultStep = false;
-                        st.inverter[x].delaySwitchSunStep = false;
-                    }
                 }
                 for (let x = 0; x < cfg.solar.priority.queue.length; x++) {
                     let queue = cfg.solar.priority.queue[x];
@@ -1387,7 +1402,7 @@ let
                 initNV();
                 cfg.inverter.forEach(_ => {
                     state.auto[index].inverter.push({
-                        state: null, step: time.epoch - 20, nightMode: false, delayOffTimer: undefined, switchWatts: 0, switchSun: 0,
+                        state: null, boot: false, step: time.epoch - 20, nightMode: false, delayOffTimer: undefined, switchWatts: 0, switchSun: 0,
                         delaySwitchTimer: time.epoch, delaySwitchStep: false, delaySwitchVoltsTimer: time.epoch, delaySwitchVoltsStep: false,
                         delaySwitchSunTimer: time.epoch, delaySwitchSunStep: false, delaySwitchFaultStep: false, delaySwitchFaultTimer: time.epoch,
                         timeShutdown: null,
@@ -1402,14 +1417,16 @@ let
                 cfg.battery.forEach(_ => {
                     state.auto[index].battery.push({ percent: null, min: null, whPos: 0, whNeg: 0, floatStep: false, floatTimer: null })
                 });
-                setInterval(() => {
-                    calcSensor(); checkBattery(); checkGrid();
-                    if (state.ha != undefined && state.ha[cfg.solar.inverterAuto] == true) {
-                        inverterAuto();
-                        if (st.welder.detect == false) priorityAuto();
-                    }
-                    if (cfg.fan != undefined) checkRoomTemp();
-                }, 1e3);      // set minimum rerun time, otherwise this automation function will only on ESP and HA events
+                setTimeout(() => {
+                    setInterval(() => {
+                        calcSensor(); checkBattery(); checkGrid();
+                        if (state.ha != undefined && state.ha[cfg.solar.inverterAuto] == true) {
+                            inverterAuto();
+                            if (st.welder.detect == false) priorityAuto();
+                        }
+                        if (cfg.fan != undefined) checkRoomTemp();
+                    }, 1e3);      // set minimum rerun time, otherwise this automation function will only on ESP and HA events
+                }, 3e3);
                 setInterval(() => { timer(); file.write.nv(); }, 30e3);
                 emitters();
                 log("automation system started", index, 1);                 // log automation start with index number and severity 
@@ -1452,6 +1469,8 @@ let
                             };
                         }
                 }
+                if (state.ha[cfg.solar.inverterAuto] == true) log("inverter automation is on", index, 1);
+                else log("inverter automation is off", index, 1);
                 file.write.nv();
             }
             function timer() {
@@ -1493,7 +1512,7 @@ let
     ];
 let
     user = {        // user configurable block - Telegram 
-        telegram: { // enter a case matching your desireable input
+        telegram: { // enter a case matching your desirable input 
             agent: function (msg) {
                 //  log("incoming telegram message: " + msg,  0);
                 //  console.log("incoming telegram message: ", msg);
@@ -1558,7 +1577,7 @@ let
                         }
                         break;
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
-                        log("receiving state data, entity: " + cfg.ha[buf.obj.id] + " value: " + buf.obj.state, 0);
+                        log("receiving HA state data, entity: " + cfg.ha[buf.obj.id] + " value: " + buf.obj.state, 0);
                         //         console.log(buf);
                         try { state.ha[buf.obj.id] = buf.obj.state; } catch { }
                         if (state.online == true) {
