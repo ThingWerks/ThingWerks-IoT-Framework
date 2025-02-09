@@ -1,7 +1,11 @@
-{
     "webDiag": true,
     "webDiagPort": 20000,
-    "debugging": true,
+    "debugging": false,
+    "logging": {
+        "debug": false,
+        "client": true,
+        "clientCrash": true
+    },
     "homeAssistant": [
         {
             "enable": true,
@@ -9,6 +13,10 @@
             "address": "10.20.0.10",
             "port": 8123,
             "token": "myKey"
+            "log": {
+                "lag": true,
+                "lagTime": 100
+            }
         }
     ],
     "telegram": {
