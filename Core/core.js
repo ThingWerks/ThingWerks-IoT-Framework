@@ -207,11 +207,19 @@ if (isMainThread) {
                 if (delay < state.perf.ha[num].best) state.perf.ha[num].best = delay;
                 if (delay > state.perf.ha[num].worst) state.perf.ha[num].worst = delay;
                 let total = 0;
-                if (state.perf.ha[num].last100Pos < 99) {
+                let lag = false, lagTime = 100;
+                if (cfg.homeAssistant.log != undefined) {
+                    if (cfg.homeAssistant.log.lag != undefined) lag = cfg.homeAssistant.log.lag;
+                    if (cfg.homeAssistant.log.lagTime != undefined) lagTime = cfg.homeAssistant.log.lagTime;
+                }
+                if (state.perf.ha[num].last100Pos < lagTime) {
                     if (state.perf.ha[num].last100[state.perf.ha[num].last100Pos]) state.perf.ha[num].last100[state.perf.ha[num].last100Pos++] = delay;
                     else state.perf.ha[num].last100.push(delay);
                 } else {
-                    console.log(state.perf.ha);
+                    if (lag) {
+                        log("HHA Websocket (" + a.color("white", config.address) + ") is lagging", 1, 2);
+                        console.log(state.perf.ha);
+                    }
                     if (state.perf.ha[num].last100[state.perf.ha[num].last100Pos]) state.perf.ha[num].last100[state.perf.ha[num].last100Pos] = delay;
                     else state.perf.ha[num].last100.push(delay);
                     state.perf.ha[num].last100Pos = 0;
@@ -489,7 +497,7 @@ if (isMainThread) {
             watchDog: function () {
                 for (let x = 0; x < state.client.length; x++) {
                     if (state.client[x].heartBeat == true && time.epochMil - state.client[x].time >= 2000) {
-                        log("Client: " + state.client[x].name + " has crashed!!", 3, cfg.telegram.logClientCrash ? 3 : 0);
+                        log("Client: " + state.client[x].name + " has crashed!!", 3, cfg.logging.clientCrash ? 3 : 0);
                         state.client.splice(x, 1);
                         ha.rescan();
                     } else if (time.epochMil - state.client[x].time >= 10000) {
@@ -879,8 +887,10 @@ if (isMainThread) {
                     }
                     if (port != undefined) {
                         if (level == 0 && cfg.debugging == true) console.log(ubuf);
+                        else if (cfg.logging.client) console.log(ubuf);
                         udp.send(JSON.stringify({ type: "log", obj: ubuf }), port);
-                    } else if (level == 0 && cfg.debugging == true) console.log(cbuf);
+                    }
+                    else if (level == 0 && cfg.debugging == true) console.log(cbuf);
                     else if (level != 0) console.log(cbuf);
                     return buf;
                 };
@@ -921,7 +931,7 @@ if (isMainThread) {
                 if (process.argv[3] == "-j") journal = true;
                 if (process.argv[2] == "-i") {
                     log("installing ThingWerks-Core service...");
-                    let exec = "ExecStart=nodemon " + workingDir + "core.js -w " + workingDir + "core.js -w " + workingDir + "config.json --exitcrash --delay 5";
+                    let exec = "ExecStart=nodemon " + workingDir + "/core.js -w " + workingDir + "/core.js -w " + workingDir + "/config.json --exitcrash --delay 5";
                     let service = [
                         "[Unit]",
                         "Description=",
@@ -1020,7 +1030,8 @@ if (!isMainThread) {
         }
         function espReset() {
             try { client.disconnect(); } catch (error) { log("ESP disconnect failed...", 2); }
-            setTimeout(() => {
+            clearTimeout(state.errorResetTimeout);
+            state.errorResetTimeout = setTimeout(() => {
                 em.removeAllListeners();
                 client = null;
                 setTimeout(() => { espInit(); }, 5e3);
@@ -1064,11 +1075,13 @@ if (!isMainThread) {
                 data.on('state', (update) => {
                     if (state.reconnect == true) {
                         if (cfg.telegram.logESPDisconnect == true) {
-                            log("ESP Module reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
-                                + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 2);
+                            if (data.config.objectId.includes("wifi"))
+                                log("ESP Module reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
+                                    + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 2);
                         } else {
-                            log("ESP Module reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
-                                + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
+                            if (data.config.objectId.includes("wifi"))
+                                log("ESP Module reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
+                                    + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
                         }
                         state.reconnect = false;
                     }
