@@ -124,7 +124,7 @@ let
 
         }
     ];
-let
+    let
     sys = {         // ______________________system area, don't need to touch anything below this line__________________________________
         com: function () {
             udp.on('message', function (data, info) {
@@ -140,7 +140,7 @@ let
                         }
                         break;
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
-                        log("receiving state data, entity: " + cfg.ha[buf.obj.id] + " value: " + buf.obj.state, 0);
+                        log("receiving HA state data, entity: " + cfg.ha[buf.obj.id] + " value: " + buf.obj.state, 0);
                         //         console.log(buf);
                         try { state.ha[buf.obj.id] = buf.obj.state; } catch { }
                         if (state.online == true) {
