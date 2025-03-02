@@ -672,12 +672,12 @@ let
                 }
                 function pumpShared() {
                     let dd = state.auto[index].dd[x];
-                    dd.sharedPump = { shared: false, run: false, num: null };
+                    dd.sharedPump = { shared: null, run: false, num: null };
                     for (let y = 0; y < cfg.dd.length; y++) {
                         if (y != x && dd.pump[dd.state.pump].cfg.id == cfg.dd[y].pump[state.auto[index].dd[y].state.pump].id) {
                             if (state.auto[index].dd[y].state.run == true) {
                                 dd.sharedPump.run = true;
-                            }
+                            } else { setTimeout(() => { dd.sharedPump.run = false; }, 10e3); }
                             dd.sharedPump.shared = true;
                             dd.sharedPump.num = y;
                             break;
