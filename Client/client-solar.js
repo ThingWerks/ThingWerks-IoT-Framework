@@ -537,7 +537,8 @@ let
                                 if (state.esp[config.transfer.switchOn[0].id] != config.transfer.switchOn[0].state) {
                                     log("inverter: " + cfg.inverter[x].name + " - state ATS OFF (" + state.esp[config.transfer.switchOn[0].id]
                                         + ") is not expected - HA says its ON", index, 2);
-                                    inverter.state = true;
+                                    inverterPower(x, true);
+                                   // inverter.state = true;
                                 } else inverter.state = true;
                             } else {
                                 if (state.esp[config.transfer.switchOff[0].id] != config.transfer.switchOff[0].state) {
