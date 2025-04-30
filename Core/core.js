@@ -527,8 +527,10 @@ if (isMainThread) {
                                 if (state.esp[data.esp] != undefined) state.esp[data.esp].entity = [];
                                 break;
                             case "state":
-                                //   console.log("incoming state change: ", state.esp[data.esp].entity[data.obj.io]);
-                                state.esp[data.esp].entity[data.obj.io].state = data.obj.state;   // store the state locally 
+                                //  console.log("incoming state change - ESP: " + data.esp + " - IO: " + data.obj.io);
+                                // console.log("incoming state change: ", state.esp[data.esp].entity[data.obj.io]);
+                                // console.log(data);
+                                state.esp[data.esp].entity[data.obj.io].state = data.obj.state;  // store the state locally 
                                 state.esp[data.esp].entity[data.obj.io].update = time.stamp;
                                 for (let a = 0; a < state.client.length; a++) {        // scan all the UDP clients and find which one cares about this entity
                                     for (let b = 0; b < state.client[a].esp.length; b++) {                 // scan each UDP clients registered ESP entity list
@@ -562,8 +564,12 @@ if (isMainThread) {
                             }
                             else { cfg = JSON.parse(data); sys.boot(1); }
                         });
+                        exec = require('child_process').exec;
+                        execSync = require('child_process').execSync;
                         break;
                     case 1:     // read nv.json file
+                        console.log("checking args");
+                        sys.checkArgs();
                         sys.boot(2);  // core does not use nv data, bypassed
                         return;
                         console.log("Loading non-volatile data...");
@@ -577,12 +583,10 @@ if (isMainThread) {
                             else { nv = JSON.parse(data); }
                         });
                         break;
-                    case 2:     // state init and load modules
+                    case 2:     // state init and load modules and workers 
                         sys.lib();
                         sys.init();
                         log("initializing system states done");
-                        log("checking args");
-                        sys.checkArgs();
                         log("actual working directory: " + workingDir);
                         if (cfg.esp != undefined && cfg.esp.devices != undefined && cfg.esp.devices.length > 0 && cfg.esp.enable == true) { // load worker threads
                             cfg.esp.devices.forEach((_, x) => { newWorker(x, true); });
@@ -786,13 +790,12 @@ if (isMainThread) {
             },
             lib: function () {
                 util = require('util');
-                exec = require('child_process').exec;
-                execSync = require('child_process').execSync;
                 if (cfg.webDiag == true) {
                     expressLib = require("express");
                     express = expressLib();
                 }
                 if (cfg.homeAssistant != undefined) {
+                    require.resolve("homeassistant");
                     HomeAssistant = require('homeassistant');
                     WebSocketClient = require('websocket').client;
                 }
@@ -927,10 +930,24 @@ if (isMainThread) {
                 time.startTime();
             },
             checkArgs: function () {
+                let workingDir = require('path').dirname(require.main.filename);
                 let journal = false;
                 if (process.argv[3] == "-j") journal = true;
+                if (process.argv[2] == "-p") {
+                    console.log("installing APT packages...");
+                    execSync("sudo apt install build-essential");
+                    console.log("installing NPM packages...");
+                    execSync("cd " + workingDir + " ; npm i express");
+                    execSync("cd " + workingDir + " ; npm i homeassistant");
+                    execSync("cd " + workingDir + " ; npm i websocket");
+                    execSync("cd " + workingDir + " ; npm i nodemon -g");
+                    if (cfg.telegram.enable) execSync("cd " + workingDir + " ; npm i node-telegram-bot-api");
+                    if (cfg.esp.enable) execSync("cd " + workingDir + " ; npm i @2colors/esphome-native-api");
+                    console.log("TWIT Core system prep complete");
+                    process.exit();
+                }
                 if (process.argv[2] == "-i") {
-                    log("installing ThingWerks-Core service...");
+                    console.log("installing ThingWerks-Core service...");
                     let exec = "ExecStart=nodemon " + workingDir + "/core.js -w " + workingDir + "/core.js -w " + workingDir + "/config.json --exitcrash --delay 5";
                     let service = [
                         "[Unit]",
@@ -956,12 +973,12 @@ if (isMainThread) {
                     execSync("systemctl enable twit-core.service");
                     execSync("systemctl start twit-core");
                     execSync("service twit-core status");
-                    log("service installed and started");
+                    console.log("service installed and started");
                     console.log("type:  journalctl -f -u twit-core  or  tail -f /apps/log-twit-core.txt -n 500");
                     process.exit();
                 }
                 if (process.argv[2] == "-u") {
-                    log("uninstalling TWIT-Core service...");
+                    console.log("uninstalling TWIT-Core service...");
                     execSync("systemctl stop twit-core");
                     execSync("systemctl disable twit-core.service");
                     fs.unlinkSync("/etc/systemd/system/twit-core.service");
@@ -979,7 +996,10 @@ if (!isMainThread) {
             init: function () {
                 cfg = {};
                 client = null;
-                state = { entity: [], reconnect: false, boot: false, errorResetTimeout: null };
+                state = {
+                    entity: [], reconnect: false, boot: false, errorResetTimeout: null,
+                    keepaliveTimer: null, heartBeat: false, resetting: false,
+                };
                 sys.lib();
             },
             lib: function () {
@@ -1017,9 +1037,9 @@ if (!isMainThread) {
         sys.init();
         function espInit() {
             client = new Client({
-                host: cfg.esp.devices[workerData.esp].ip,
+                host: espClient.ip,
                 port: 6053,
-                encryptionKey: cfg.esp.devices[workerData.esp].key,
+                encryptionKey: espClient.key,
                 reconnect: true,
                 reconnectInterval: 5000,
                 pingInterval: 3000,
@@ -1029,86 +1049,121 @@ if (!isMainThread) {
             try { clientConnect(); } catch (error) { log(error) };
         }
         function espReset() {
-            try { client.disconnect(); } catch (error) { log("ESP disconnect failed...", 2); }
-            clearTimeout(state.errorResetTimeout);
-            state.errorResetTimeout = setTimeout(() => {
-                em.removeAllListeners();
-                client = null;
-                setTimeout(() => { espInit(); }, 5e3);
-            }, 10e3);
+            if (state.resetting == false) {
+                state.resetting = true;
+                state.reconnect = true;
+                try { client.disconnect(); } catch (error) { log("ESP module - " + a.color("green", espClient.name) + " - disconnect failed...", 2); }
+                clearTimeout(state.errorResetTimeout);
+                clearTimeout(state.keepaliveTimer);
+                state.keepaliveTimer = null;
+                state.errorResetTimeout = setTimeout(() => {
+                    em.removeAllListeners();
+                    client = null;
+                    parentPort.postMessage({ type: "esp", class: "reset", esp: espClient.name });
+                    state.entity = [];
+                    setTimeout(() => { espInit(); }, 5e3);
+                }, 10e3);
+            }
         }
         function clientConnect() {
-            if (state.reconnect == false) {
-                log("trying to connect to esp module: " + a.color("white", cfg.esp.devices[workerData.esp].ip), 2);       // client connection function, ran for each ESP device
+            if (state.reconnect == false) {     // client connection function, ran for each ESP device
+                log("ESP module - " + a.color("green", espClient.name) + " - trying to connect...", 2);
             }
             client.on('error', (error) => {
                 if (state.reconnect == false) {
-                    log("ESP module had a connection error, resetting ESP connection: "
-                        + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
-                    state.reconnect = true;
+                    log("ESP module - " + a.color("green", espClient.name) + " - had a connection error, resetting connection..."
+                        , 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
                     espReset();
                 }
             });
             client.on('disconnected', () => {
                 if (state.reconnect == false) {
-                    log("ESP module disconnected, resetting ESP connection: "
-                        + a.color("white", cfg.esp.devices[workerData.esp].ip), 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
+                    log("ESP module - " + a.color("green", espClient.name) + " - disconnected, resetting ESP connection..."
+                        , 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
                     espReset();
-                    state.reconnect = true;
                 }
             });
             client.on('newEntity', data => {
                 let exist = 0, io = null;
-                for (let x = 0; x < state.entity.length; x++)         // scan for this entity in the entity list
+                state.resetting = false;
+                for (let x = 0; x < state.entity.length; x++) {        // scan for this entity in the entity list
                     if (state.entity[x].id == data.id) { exist++; io = x; break; };
+                    if (data.config.objectId === cfg.esp.devices[workerData.esp].heartbeat) {
+                        if (state.keepaliveTimer == null) {
+                            log("ESP module - " + a.color("green", espClient.name) + " - registering heartbeat - "
+                                + a.color("green", data.config.objectId), 2);
+                            em.emit(data.config.objectId, data.id, true);
+                            state.keepaliveTimer = setInterval(() => {
+                                if (state.heartBeat) { em.emit(data.config.objectId, data.id, false); state.heartBeat = false; }
+                                else { em.emit(data.config.objectId, data.id, true); state.heartBeat = true; }
+                            }, 3e3);
+                        }
+                    }
+                }
                 if (exist == 0)                                                 // dont add this entity if its already in the list 
                     io = state.entity.push({ name: data.config.objectId, type: data.type, id: data.id }) - 1;
                 if (state.boot == false)
                     //  log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
-                    parentPort.postMessage({ type: "esp", class: "entity", esp: workerData.esp, obj: { id: data.id, io, name: data.config.objectId, type: data.type } });
+                    parentPort.postMessage({
+                        type: "esp", class: "entity", esp: workerData.esp,
+                        obj: { id: data.id, io, name: data.config.objectId, type: data.type }
+                    });
                 if (data.type === "Switch") {                                 // if this is a switch, register the emitter
+                    // console.log(data.config.objectId)
                     em.on(data.config.objectId, function (id, state) {        // emitter for this connection 
                         try { data.connection.switchCommandService({ key: id, state: state }); }
-                        catch (e) { log("error sending command to ESP - resetting...", 2, 3); espReset(); } // reset() was removed from here
+                        catch (e) {
+                            if (state.resetting == false) {
+                                log("ESP module - " + a.color("green", espClient.name)
+                                    + " - error sending command - resetting...", 2, 3);
+                                espReset();
+                            }
+                        }
                     });
                 }
                 data.on('state', (update) => {
                     if (state.reconnect == true) {
-                        if (cfg.telegram.logESPDisconnect == true) {
-                            if (data.config.objectId.includes("wifi"))
-                                log("ESP Module reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
-                                    + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 2);
-                        } else {
-                            if (data.config.objectId.includes("wifi"))
-                                log("ESP Module reconnected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
-                                    + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
-                        }
+                        if (data.config.objectId.includes("wifi"))
+                            log("ESP module - " + a.color("green", espClient.name) + " - reconnected: " + a.color("white", espClient.ip) + " - "
+                                + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2
+                                , ((cfg.telegram.logESPDisconnect == true) ? 2 : 1));
                         state.reconnect = false;
                     }
                     if (state.boot == false) {
                         if (data.config.objectId.includes("wifi"))
-                            log("ESP Module connected: " + a.color("white", cfg.esp.devices[workerData.esp].ip) + " - "
+                            log("ESP module - " + a.color("green", espClient.name) + " - connected: " + a.color("white", espClient.ip) + " - "
                                 + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
-                        setTimeout(() => { state.boot = true; }, 20);  // indicate booted so not to show entity names again
+                        setTimeout(() => { state.boot = true; }, 20);   // indicate booted so not to show entity names again
                     }
                     for (let x = 0; x < state.entity.length; x++) {
-                        if (state.entity[x].id == update.key) {          // identify this entity request with local object
-                            parentPort.postMessage({ type: "esp", class: "state", esp: workerData.esp, obj: { io: x, name: data.config.objectId, state: update.state } });
+                        if (state.entity[x].id == update.key) {         // identify this entity request with local object
+                            parentPort.postMessage({
+                                type: "esp", class: "state", esp: workerData.esp,
+                                obj: { io: x, name: data.config.objectId, state: update.state }
+                            });
                         }
                     }
                 });
             });
-            try { client.connect(); } catch (error) { log("client connect error: " + error) };
+            try { client.connect(); } catch (error) { log("ESP module - " + a.color("green", espClient.name) + " - client connect error: " + error) };
         }
         parentPort.on('message', (data) => {
             switch (data.type) {
                 case "config":
                     cfg = data.obj;
                     // log("ESP connections initiating...", 2);
+                    espClient = {
+                        name: cfg.esp.devices[workerData.esp].name,
+                        ip: cfg.esp.devices[workerData.esp].ip,
+                        key: cfg.esp.devices[workerData.esp].key
+                    }
                     espInit();
                     break;
                 case "espSend":
                     em.emit(data.obj.name, data.obj.id, data.obj.state);
+                    break;
+                case "reset":
+                    // em.emit(data.obj.name, data.obj.id, data.obj.state);
                     break;
             }
         });
