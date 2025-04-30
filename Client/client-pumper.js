@@ -35,9 +35,13 @@ let
         ],
         dd: [       // config for the Demand/Delivery automation function, 1 object for each DD system
             {   // DD system example
-                name: "LTH-AirLift",       // Demand Delivery system name
+                name: "LTH-AirLift",        // Demand Delivery system name
+                heartbeat: {                // heartbeats for ESPHome devices 
+                    interval: 3000,         // heartbeat interval
+                    list: ["lth-led"]       // list of switches to toggle 
+                },
                 ha: {
-                    auto: 0,            // home assistant auto toggle ID number (specified above in cfg.ha config)
+                    auto: 0,                // home assistant auto toggle ID number (specified above in cfg.ha config)
                 },
                 pump: [
                     {
@@ -803,6 +807,7 @@ let
                             timerRun: null,
                             pressStart: null,
                             timerRise: null,
+                            heartbeat: false,
                         },
                         fault: {
                             flow: false,
@@ -855,6 +860,24 @@ let
                     if (cfg.dd[x].ha.turbo != undefined) {
                         state.auto[index].dd[x].state.turbo = state.ha[cfg.dd[x].ha.turbo];
                     }
+                    if (cfg.dd[x].heartbeat && cfg.dd[x].heartbeat.list.length > 0) {
+                        cfg.dd[x].heartbeat.list.forEach(element => {
+                            log(cfg.dd[x].name + " - starting heartbeat for - " + element, index, 1);
+                        });
+                        setInterval(() => {
+                            if (state.auto[index].dd[x].state.heartbeat) {
+                                cfg.dd[x].heartbeat.list.forEach(element => {
+                                    esp.send(element, false);
+                                });
+                                state.auto[index].dd[x].state.heartbeat = false;
+                            } else {
+                                cfg.dd[x].heartbeat.list.forEach(element => {
+                                    esp.send(element, true);
+                                    state.auto[index].dd[x].state.heartbeat = true;
+                                });
+                            }
+                        }, cfg.dd[x].heartbeat.interval);
+                    }
                 }
                 calcFlow();
                 calcFlowMeter();
@@ -886,11 +909,11 @@ let
                         , state.auto[index].flow[x].lm, nv.flow[x].today];
                     for (let y = 0; y < 5; y++) {
                         if (state.auto[index].ha.pushLast[pos] == undefined) {
-                            state.auto[index].ha.pushLast.push(Number(value[y]).toFixed(0));
-                            sendHA(cfg.flow[x].name + list[y], Number(value[y]).toFixed(0), unit[y]);
-                        } else if (state.auto[index].ha.pushLast[pos] != Number(value[y]).toFixed(0)) {
-                            state.auto[index].ha.pushLast[pos] = (Number(value[y]).toFixed(0));
-                            sendHA(cfg.flow[x].name + list[y], Number(value[y]).toFixed(0), unit[y]);
+                            state.auto[index].ha.pushLast.push(Number(value[y]).toFixed(2));
+                            sendHA(cfg.flow[x].name + list[y], Number(value[y]).toFixed(((unit[y] == "m3") ? 2 : 0)), unit[y]);
+                        } else if (state.auto[index].ha.pushLast[pos] != Number(value[y]).toFixed(2)) {
+                            state.auto[index].ha.pushLast[pos] = (Number(value[y]).toFixed(2));
+                            sendHA(cfg.flow[x].name + list[y], Number(value[y]).toFixed(((unit[y] == "m3") ? 2 : 0)), unit[y]);
                         }
                         pos++;
                     }
