@@ -8,10 +8,10 @@ esp32:
 logger:
 api:
   encryption:
-    key: "uGRD003qEm5/SLr595GOPu+TRE6LMroYODcRmbZTDGM="
+    key: "===="
 ota:
   - platform: esphome
-    password: "71df997363554610d88ca49bde5ed5ee"
+    password: "======"
 wifi:
   networks:
   - ssid: "iot-solar"
@@ -26,7 +26,7 @@ wifi:
     dns1: 10.21.0.1
   ap:
     ssid: "Test Fallback Hotspot"
-    password: "bjlXLJHcJpPE"
+    password: "====="
 captive_portal:
 interval:
   - interval: 1s # Run this sequence every 10 seconds (adjust as needed)
