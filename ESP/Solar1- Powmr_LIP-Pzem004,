@@ -1,0 +1,827 @@
+esphome:
+  name: esp-solar
+  friendly_name: ESP-Solar
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+api:
+  encryption:
+    key: "====="
+ota:
+  - platform: esphome
+    password: "====="
+wifi:
+  networks:
+  - ssid: "iot-solar"
+    hidden: true
+  fast_connect: true
+  output_power: 20dB
+  power_save_mode: none
+  manual_ip:
+    static_ip: 10.21.0.32
+    gateway: 10.21.0.1
+    subnet: 255.255.254.0 
+    dns1: 10.21.0.1
+  ap:
+    ssid: "Test Fallback Hotspot"
+    password: "===="
+captive_portal:
+interval:
+  - interval: 1s # Run this sequence every 10 seconds (adjust as needed)
+    then:
+      - logger.log: "Starting PZEM update sequence..."
+      - component.update: pzem_a1  # <--- Corrected action name
+      - delay: 50ms
+      - component.update: pzem_a2  # <--- Corrected action name
+      # No delay needed after the last one
+      - logger.log: "Finished PZEM update sequence."
+
+
+uart:
+  - id: uart_inverter
+    baud_rate: 9600
+    tx_pin: GPIO26
+    rx_pin: GPIO27
+    stop_bits: 1
+    parity: NONE
+  - id: uart_pzem
+    rx_pin: GPIO13
+    tx_pin: GPIO14
+    baud_rate: 9600
+    data_bits: 8
+    stop_bits: 1
+    parity: NONE
+
+
+modbus:
+  - id: modbus_inverter
+    uart_id: uart_inverter
+    send_wait_time: 500ms
+  - id: modbus_pzem
+    uart_id: uart_pzem
+    send_wait_time: 250ms
+modbus_controller:
+  - id: inverter1    
+    address: 0x01
+    modbus_id: modbus_inverter
+    setup_priority: -10
+    offline_skip_updates: 10
+    update_interval: 1s
+ #   command_throttle: 350ms
+  - id: inverter2    
+    address: 0x02
+    modbus_id: modbus_inverter
+    setup_priority: -10
+    offline_skip_updates: 10
+    update_interval: 1s
+   # command_throttle: 350ms
+
+
+sensor:
+
+
+  - platform: wifi_signal
+    name: "wifi-solar"
+    update_interval: 5s
+
+
+  - platform: pzemac
+    id: pzem_a1
+    modbus_id: modbus_pzem
+    address: 0xA1
+    current:
+      name: "PZEM-Daren Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-Daren Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-Daren Meter"
+    power:
+      name: "PZEM-Daren Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-Daren Hz"
+    power_factor:
+      name: "PZEM-Daren PF"
+  - platform: pzemac
+    id: pzem_a2
+    modbus_id: modbus_pzem
+    address: 0xA2
+    current:
+      name: "PZEM-Alvarez Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-Alvarez Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-Alvarez Meter"
+    power:
+      name: "PZEM-Alvarez Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-Alvarez Hz"
+    power_factor:
+      name: "PZEM-Alvarez PF"
+ 
+
+
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Output Current"
+    address: 206
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1   
+
+
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Output Power Active"
+    address: 213
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+    filters:
+      - multiply: 1 
+
+
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Battery Voltage"
+    address: 215
+    register_type: holding
+    value_type: U_WORD
+    device_class: voltage
+    state_class: measurement
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1    
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Battery Current"
+    address: 216
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1  
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Battery Power"
+    address: 217
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Battery Percentage"
+    address: 229
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    device_class: battery
+    unit_of_measurement: "%"
+    accuracy_decimals: 0 
+
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - PV Voltage"
+    address: 219
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.1 
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - PV Power"
+    address: 223
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Temp"
+    address: 227
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "℃"
+    accuracy_decimals: 1 
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Output Current"
+    address: 206
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1   
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Output Power Active"
+    address: 213
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+    filters:
+      - multiply: 1 
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Battery Voltage"
+    address: 215
+    register_type: holding
+    value_type: U_WORD
+    device_class: voltage
+    state_class: measurement
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1    
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Battery Current"
+    address: 216
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1  
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Battery Power"
+    address: 217
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Load"
+    address: 225
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "%"
+    accuracy_decimals: 0 
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - PV Voltage"
+    address: 219
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.1 
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - PV Power"
+    address: 223
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Temp"
+    address: 227
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "℃"
+    accuracy_decimals: 1 
+ 
+
+switch:
+  - platform: restart
+    name: "Restart ESP"
+    id: restart_action
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Remote Switch"
+    address: 420  # Register 420 (decimal)
+    register_type: holding
+    use_write_multiple: true
+    write_lambda: |-
+      ESP_LOGD("Modbus", "Writing value %d to register 420", x ? 1 : 0);
+      return x ? 1 : 0;
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Remote Switch"
+    address: 420  # Register 420 (decimal)
+    register_type: holding
+    use_write_multiple: true
+    write_lambda: |-
+      ESP_LOGD("Modbus", "Writing value %d to register 420", x ? 1 : 0);
+      return x ? 1 : 0;
+
+  - platform: gpio
+    name: "solar-relay1-alvarez"
+    restore_mode: RESTORE_DEFAULT_ON
+    pin:
+      number: 4
+      inverted: false
+  - platform: gpio
+    name: "solar-relay2-daren"
+    id: "relay2"
+    pin:
+      number: 16
+      inverted: false
+  - platform: gpio
+    name: "solar-relay3"
+    id: "relay3"
+    pin:
+      number: 17
+      inverted: false
+  - platform: gpio
+    name: "solar-relay4"
+    pin:
+      number: 18
+      inverted: false
+  - platform: gpio
+    name: "solar-relay5"
+    pin:
+      number: 19
+      inverted: false
+  - platform: gpio
+    name: "solar-relay6"
+    pin:
+      number: 21
+      inverted: false
+  - platform: gpio
+    name: "solar-relay7"
+    pin:
+      number: 22
+      inverted: false
+  - platform: gpio
+    name: "solar-relay8"
+    pin:
+      number: 23
+      inverted: false
+
+
+
+
+
+esphome:
+  name: esp-solar
+  friendly_name: ESP-Solar
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+api:
+  encryption:
+    key: "uGRD003qEm5/SLr595GOPu+TRE6LMroYODcRmbZTDGM="
+ota:
+  - platform: esphome
+    password: "71df997363554610d88ca49bde5ed5ee"
+wifi:
+  networks:
+  - ssid: "iot-solar"
+    hidden: true
+  fast_connect: true
+  output_power: 20dB
+  power_save_mode: none
+  manual_ip:
+    static_ip: 10.21.0.32
+    gateway: 10.21.0.1
+    subnet: 255.255.254.0 
+    dns1: 10.21.0.1
+  ap:
+    ssid: "Test Fallback Hotspot"
+    password: "bjlXLJHcJpPE"
+captive_portal:
+interval:
+  - interval: 1s # Run this sequence every 10 seconds (adjust as needed)
+    then:
+      - logger.log: "Starting PZEM update sequence..."
+      - component.update: pzem_a1  # <--- Corrected action name
+      - delay: 50ms
+      - component.update: pzem_a2  # <--- Corrected action name
+      # No delay needed after the last one
+      - logger.log: "Finished PZEM update sequence."
+
+
+uart:
+  - id: uart_inverter
+    baud_rate: 9600
+    tx_pin: GPIO26
+    rx_pin: GPIO27
+    stop_bits: 1
+    parity: NONE
+  - id: uart_pzem
+    rx_pin: GPIO13
+    tx_pin: GPIO14
+    baud_rate: 9600
+    data_bits: 8
+    stop_bits: 1
+    parity: NONE
+
+
+modbus:
+  - id: modbus_inverter
+    uart_id: uart_inverter
+    send_wait_time: 500ms
+  - id: modbus_pzem
+    uart_id: uart_pzem
+    send_wait_time: 250ms
+modbus_controller:
+  - id: inverter1    
+    address: 0x01
+    modbus_id: modbus_inverter
+    setup_priority: -10
+    offline_skip_updates: 10
+    update_interval: 1s
+ #   command_throttle: 350ms
+  - id: inverter2    
+    address: 0x02
+    modbus_id: modbus_inverter
+    setup_priority: -10
+    offline_skip_updates: 10
+    update_interval: 1s
+   # command_throttle: 350ms
+
+
+sensor:
+
+
+  - platform: wifi_signal
+    name: "wifi-solar"
+    update_interval: 5s
+
+
+  - platform: pzemac
+    id: pzem_a1
+    modbus_id: modbus_pzem
+    address: 0xA1
+    current:
+      name: "PZEM-Daren Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-Daren Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-Daren Meter"
+    power:
+      name: "PZEM-Daren Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-Daren Hz"
+    power_factor:
+      name: "PZEM-Daren PF"
+  - platform: pzemac
+    id: pzem_a2
+    modbus_id: modbus_pzem
+    address: 0xA2
+    current:
+      name: "PZEM-Alvarez Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-Alvarez Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-Alvarez Meter"
+    power:
+      name: "PZEM-Alvarez Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-Alvarez Hz"
+    power_factor:
+      name: "PZEM-Alvarez PF"
+ 
+
+
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Output Current"
+    address: 206
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1   
+
+
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Output Power Active"
+    address: 213
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+    filters:
+      - multiply: 1 
+
+
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Battery Voltage"
+    address: 215
+    register_type: holding
+    value_type: U_WORD
+    device_class: voltage
+    state_class: measurement
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1    
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Battery Current"
+    address: 216
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1  
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Battery Power"
+    address: 217
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Battery Percentage"
+    address: 229
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    device_class: battery
+    unit_of_measurement: "%"
+    accuracy_decimals: 0 
+
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - PV Voltage"
+    address: 219
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.1 
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - PV Power"
+    address: 223
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Temp"
+    address: 227
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "℃"
+    accuracy_decimals: 1 
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Output Current"
+    address: 206
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1   
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Output Power Active"
+    address: 213
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+    filters:
+      - multiply: 1 
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Battery Voltage"
+    address: 215
+    register_type: holding
+    value_type: U_WORD
+    device_class: voltage
+    state_class: measurement
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1    
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Battery Current"
+    address: 216
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1  
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Battery Power"
+    address: 217
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Load"
+    address: 225
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "%"
+    accuracy_decimals: 0 
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - PV Voltage"
+    address: 219
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.1 
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - PV Power"
+    address: 223
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Temp"
+    address: 227
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "℃"
+    accuracy_decimals: 1 
+ 
+
+switch:
+  - platform: restart
+    name: "Restart ESP"
+    id: restart_action
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter 1 - Remote Switch"
+    address: 420  # Register 420 (decimal)
+    register_type: holding
+    use_write_multiple: true
+    write_lambda: |-
+      ESP_LOGD("Modbus", "Writing value %d to register 420", x ? 1 : 0);
+      return x ? 1 : 0;
+  - platform: modbus_controller
+    modbus_controller_id: inverter2
+    name: "Inverter 2 - Remote Switch"
+    address: 420  # Register 420 (decimal)
+    register_type: holding
+    use_write_multiple: true
+    write_lambda: |-
+      ESP_LOGD("Modbus", "Writing value %d to register 420", x ? 1 : 0);
+      return x ? 1 : 0;
+
+  - platform: gpio
+    name: "solar-relay1-alvarez"
+    restore_mode: RESTORE_DEFAULT_ON
+    pin:
+      number: 4
+      inverted: false
+  - platform: gpio
+    name: "solar-relay2-daren"
+    id: "relay2"
+    pin:
+      number: 16
+      inverted: false
+  - platform: gpio
+    name: "solar-relay3"
+    id: "relay3"
+    pin:
+      number: 17
+      inverted: false
+  - platform: gpio
+    name: "solar-relay4"
+    pin:
+      number: 18
+      inverted: false
+  - platform: gpio
+    name: "solar-relay5"
+    pin:
+      number: 19
+      inverted: false
+  - platform: gpio
+    name: "solar-relay6"
+    pin:
+      number: 21
+      inverted: false
+  - platform: gpio
+    name: "solar-relay7"
+    pin:
+      number: 22
+      inverted: false
+  - platform: gpio
+    name: "solar-relay8"
+    pin:
+      number: 23
+      inverted: false
