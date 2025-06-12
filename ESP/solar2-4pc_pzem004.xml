@@ -1,0 +1,199 @@
+esphome:
+  name: esp-solar2
+  friendly_name: ESP-Solar2
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+  level: NONE
+  baud_rate: 0
+api:
+  encryption:
+    key: "===="
+ota:
+  - platform: esphome
+    password: "===="
+wifi:
+  networks:
+  - ssid: "iot-solar"
+    hidden: true
+  fast_connect: true
+  output_power: 20dB
+  power_save_mode: none
+  manual_ip:
+    static_ip: 10.21.0.34
+    gateway: 10.21.0.1
+    subnet: 255.255.254.0 
+    dns1: 10.21.0.1
+  ap:
+    ssid: "Esp-Solar2 Fallback Hotspot"
+    password: "===="
+captive_portal:
+interval:
+  - interval: 1s # Run this sequence every 10 seconds (adjust as needed)
+    then:
+      - logger.log: "Starting PZEM update sequence..."
+      - component.update: pzem_a3  # <--- Corrected action name
+      - delay: 50ms
+      - component.update: pzem_a4  # <--- Corrected action name
+      - delay: 50ms
+      - component.update: pzem_a5  # <--- Corrected action name
+      - delay: 50ms
+      - component.update: pzem_a6  # <--- Corrected action name
+      - delay: 50ms
+      - component.update: pzem_a7  # <--- Corrected action name
+      - delay: 50ms
+      - component.update: pzem_a8  # <--- Corrected action name
+      # No delay needed after the last one
+      - logger.log: "Finished PZEM update sequence."
+uart:
+  - id: uart_pzem
+    rx_pin: GPIO22
+    tx_pin: GPIO23
+    baud_rate: 9600
+    data_bits: 8
+    stop_bits: 1
+    parity: NONE
+  - id: uart_pzem2
+    rx_pin: GPIO18
+    tx_pin: GPIO19
+    baud_rate: 9600
+    data_bits: 8
+    stop_bits: 1
+    parity: NONE
+  - id: uart_pzem3
+    rx_pin: GPIO16
+    tx_pin: GPIO17
+    baud_rate: 9600
+    data_bits: 8
+    stop_bits: 1
+    parity: NONE
+modbus:
+  - id: modbus_pzem
+    uart_id: uart_pzem
+    send_wait_time: 250ms
+  - id: modbus_pzem2
+    uart_id: uart_pzem2
+    send_wait_time: 250ms
+  - id: modbus_pzem3
+    uart_id: uart_pzem3
+    send_wait_time: 250ms
+sensor:
+  - platform: wifi_signal
+    name: "wifi-solar2"
+    update_interval: 5s
+  - platform: pzemac
+    id: pzem_a3
+    modbus_id: modbus_pzem
+    address: 0xA3
+    current:
+      name: "PZEM-Sofia Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-Sofia Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-Sofia Meter"
+    power:
+      name: "PZEM-Sofia Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-Sofia Hz"
+    power_factor:
+      name: "PZEM-Sofia PF"
+  - platform: pzemac
+    id: pzem_a4
+    modbus_id: modbus_pzem3
+    address: 0xA4
+    current:
+      name: "PZEM-Carwash Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-Carwash Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-Carwash Meter"
+    power:
+      name: "PZEM-Carwash Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-Carwash Hz"
+    power_factor:
+      name: "PZEM-Carwash PF"
+  - platform: pzemac
+    id: pzem_a5
+    modbus_id: modbus_pzem
+    address: 0xA5
+    current:
+      name: "PZEM-Butsoy Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-Butsoy Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-Butsoy Meter"
+    power:
+      name: "PZEM-Butsoy Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-Butsoy Hz"
+    power_factor:
+      name: "PZEM-Butsoy PF"
+  - platform: pzemac
+    id: pzem_a6
+    modbus_id: modbus_pzem2
+    address: 0xA6
+    current:
+      name: "PZEM-Groogies Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-Groogies Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-Groogies Meter"
+    power:
+      name: "PZEM-Groogies Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-Groogies Hz"
+    power_factor:
+      name: "PZEM-Groogies PF"
+  - platform: pzemac
+    id: pzem_a7
+    modbus_id: modbus_pzem2
+    address: 0xA7
+    current:
+      name: "PZEM-MaMigo Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-MaMigo Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-MaMigo Meter"
+    power:
+      name: "PZEM-MaMigo Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-MaMigo Hz"
+    power_factor:
+      name: "PZEM-MaMigo PF"
+  - platform: pzemac
+    id: pzem_a8
+    modbus_id: modbus_pzem2
+    address: 0xA8
+    current:
+      name: "PZEM-Vacant Amps"
+      accuracy_decimals: 1
+    voltage:
+      name: "PZEM-Vacant Volts"
+      accuracy_decimals: 0
+    energy:
+      name: "PZEM-Vacant Meter"
+    power:
+      name: "PZEM-Vacant Watts"
+      accuracy_decimals: 0
+    frequency:
+      name: "PZEM-Vacant Hz"
+    power_factor:
+      name: "PZEM-Vacant PF"
