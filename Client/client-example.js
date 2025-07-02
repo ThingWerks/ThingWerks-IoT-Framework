@@ -14,6 +14,11 @@ let
         udp: [                              // UDP API is under development
             "myUdpEntity",
         ],
+        heartbeat: {
+            esp: [
+                { name: "lth-myEspEntity", interval: 3 }    // send a heartbeat to an ESP switch, interval in seconds 
+            ]
+        },
         myAutomationConfigData: {      // create your own area for non-volatile config data for each function if needed
             test: "a test string",
             params: true
@@ -47,14 +52,11 @@ let
                     ha.send("switch.fan_exhaust_switch", false);            // different methods to set state of HA and ESP entities
                     ha.send("input_boolean.fan_auto", true);
                     ha.send("switch.fan_bed_switch", false);
-                    ha.send(0, false);                                      // you can call by the entity number as listed in the order in cfg.ha
-                    ha.send(2, true);                                       // or you can call my the entity's ID name as listed in Home Assistant entity list
-                    esp.send("myEspEntity", true);                          // call esp device by name or cfg.esp array element number
-                    esp.send(0, true);
-                    ha.send("volts_dc_Battery", parseFloat(st.voltsDC).toFixed(2), "v");    // send sensor data to HA. your sensor name, value, unit of your choice
+                    esp.send("myEspEntity", true);                          // call esp device by name
+                    ha.send("volts_dc_Battery_turnicated", ~~parseFloat(st.voltsDC), "v");    // send sensor data to HA. your sensor name, value, unit of your choice
+                    ha.send("volts_dc_Battery_rounded", Math.round(parseFloat(st.voltsDC) * 10) / 10, "v");    // send sensor data to HA. your sensor name, value, unit of your choice
                     ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
                     send("coreData", { name: "coreDataName", data: { myData: "data" } });  // broadcast data to the Core for other clients to receive
-
                     nv.myAutomation = { myVar: "test" };                    // create non-volatile data structure           
                     log("writing NV data to disk...", index, 1);            // example log event
                     file.write.nv();       // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
@@ -124,34 +126,38 @@ let
 
         }
     ];
-    let
+let
     sys = {         // ______________________system area, don't need to touch anything below this line__________________________________
         com: function () {
             udp.on('message', function (data, info) {
                 let buf = JSON.parse(data);
                 //  console.log(buf);
                 switch (buf.type) {
-                    case "espState":      // incoming state change (from ESP)
-                        // console.log("receiving esp data, ID: " + buf.obj.id + " state: " + buf.obj.state);
-                        state.esp[buf.obj.id] = buf.obj.state;
+                    case "espState":            // incoming state change (from ESP)
+                        // console.log("receiving esp data, name: " + buf.obj.name + " state: " + buf.obj.state);
+                        state.esp[buf.obj.name] ||= {}; // If state.esp[buf.obj.name] is falsy (undefined, null, 0, '', false), assign it an empty object.
+                        state.esp[buf.obj.name].state = buf.obj.state;
+                        state.esp[buf.obj.name].update = time.epoch;
                         if (state.online == true) {
-                            em.emit(cfg.esp[buf.obj.id], buf.obj.state);
+                            em.emit(buf.obj.name, buf.obj.state);
                             automation.forEach((func, index) => { if (state.auto[index]) func(index); });
                         }
                         break;
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
-                        log("receiving HA state data, entity: " + cfg.ha[buf.obj.id] + " value: " + buf.obj.state, 0);
-                        //         console.log(buf);
-                        try { state.ha[buf.obj.id] = buf.obj.state; } catch { }
+                        log("receiving HA state data, entity: " + buf.obj.name + " value: " + buf.obj.state, 0);
+                        // console.log(buf);
+                        state.ha[buf.obj.name].state ||= {};
+                        state.ha[buf.obj.name].update = time.epoch;
+                        try { state.ha[buf.obj.name].state = buf.obj.state; } catch { }
                         if (state.online == true) {
-                            em.emit(cfg.ha[buf.obj.id], buf.obj.state);
+                            em.emit(buf.obj.name, buf.obj.state);
                             automation.forEach((func, index) => { if (state.auto[index]) func(index) });
                         }
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
-                        state.ha = (buf.obj);
+                        state.ha = buf.obj;
                         log("receiving fetch data: " + state.ha);
-                        if (state.onlineHA == false) sys.boot(3);
+                        if (state.onlineHA == false) sys.boot(4);
                         break;
                     case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
                         log("Core has reconnected to HA, fetching again");
@@ -198,7 +204,7 @@ let
                                 break;
                         }
                         break;
-                    case "proceed": if (state.online == false) setTimeout(() => { sys.boot(2); }, 1e3); break;
+                    case "proceed": if (state.online == false) setTimeout(() => { sys.boot(3); }, 1e3); break;
                     case "log": console.log(buf.obj); break;
                 }
             });
@@ -207,6 +213,17 @@ let
             let obj = {};
             if (cfg.ha != undefined) obj.ha = cfg.ha;
             if (cfg.esp != undefined) obj.esp = cfg.esp;
+            if (cfg.heartbeat != undefined) {
+                if (cfg.heartbeat.esp != undefined && cfg.heartbeat.esp.length > 0) {
+                    cfg.heartbeat.esp.forEach((e, x) => {
+                        clearInterval(heartbeat.timer[x]);
+                        heartbeat.timer[x] = setInterval(() => {
+                            if (heartbeat.state) { esp.send(e.name, false); heartbeat.state = false; }
+                            else { esp.send(e.name, true); heartbeat.state = true; }
+                        }, e.interval * 1e3);
+                    });
+                }
+            }
             if (cfg.telegram != undefined) obj.telegram = true;
             send("register", obj, cfg.moduleName);
             if (cfg.telegram != undefined) {
@@ -218,7 +235,8 @@ let
         },
         init: function () {
             nv = {};
-            state = { auto: [], ha: [], esp: [], udp: [], coreData: [], onlineHA: false, online: false };
+            state = { auto: [], ha: {}, esp: {}, udp: [], coreData: [], onlineHA: false, online: false };
+            heartbeat = { state: false, timer: [] }
             time = {
                 boot: null,
                 get epochMil() { return Date.now(); },
@@ -359,6 +377,16 @@ let
                     bot(msg.from.id, name, buf);
                 },
             };
+            bot = function (id, data, obj) { send("telegram", { class: "send", id, data, obj }) };
+            send = function (type, obj, name) { udp.send(JSON.stringify({ type, obj, name }), 65432, '127.0.0.1') };
+            coreData = function (name) {
+                for (let x = 0; x < state.coreData.length; x++) if (state.coreData[x].name == name) return state.coreData[x].data;
+                return {};
+            };
+            log = function (message, index, level) {
+                if (level == undefined) send("log", { message: message, mod: cfg.moduleName, level: index });
+                else send("log", { message: message, mod: state.auto[index].name, level: level });
+            };
             sys.boot(0);
         },
         boot: function (step) {
@@ -374,16 +402,30 @@ let
                             nv = { telegram: [] };
                         }
                         else { nv = JSON.parse(data); }
-                        sys.boot(1);
+                        sys.boot(2);
                     });
                     break;
                 case 1:
+                    console.log("Loading config data...");
+                    // fs.writeFileSync(workingDir + "/config-" + scriptName + ".json", JSON.stringify(cfg, null, 2), 'utf-8')
+                    //process.exit();
+                    fs.readFile(workingDir + "/config-" + scriptName + ".json", function (err, data) {
+                        if (err) {
+                            log("\x1b[33;1mconfig file does not exist\x1b[37;m"
+                                + ", config-" + scriptName + ".json file should be in same folder as client-" + scriptName + ".js file (" + workingDir + ")");
+                            process.exit();
+                        }
+                        else { cfg = JSON.parse(data); }
+                        sys.boot(2);
+                    });
+                    break;
+                case 2:
                     sys.com();
                     log("trying to register with TWIT Core", 1);
                     sys.register();
                     bootWait = setInterval(() => { sys.register(); }, 10e3);
                     break;
-                case 2:
+                case 3:
                     clearInterval(bootWait);
                     log("registered with TWIT Core", 1);
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
@@ -393,9 +435,9 @@ let
                             log("HA fetch is failing, retrying...", 2);
                             send("haFetch");
                         }, 10e3);
-                    } else sys.boot(3);
+                    } else sys.boot(4);
                     break;
-                case 3:
+                case 4:
                     clearInterval(bootWait);
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
                         log("Home Assistant fetch complete", 1);
@@ -404,10 +446,10 @@ let
                     if (cfg.esp != undefined && cfg.esp.length > 0) {
                         log("fetching esp entities", 1);
                         send("espFetch");
-                        setTimeout(() => { sys.boot(4); }, 1e3);
-                    } else sys.boot(4);
+                        setTimeout(() => { sys.boot(5); }, 1e3);
+                    } else sys.boot(5);
                     break;
-                case 4:
+                case 5:
                     if (cfg.esp != undefined && cfg.esp.length > 0)
                         log("ESP fetch complete", 1);
                     state.online = true;
@@ -418,13 +460,3 @@ let
         },
     };
 setTimeout(() => { sys.init(); }, 1e3);
-function bot(id, data, obj) { send("telegram", { class: "send", id, data, obj }) }
-function send(type, obj, name) { udp.send(JSON.stringify({ type, obj, name }), 65432, '127.0.0.1') }
-function coreData(name) {
-    for (let x = 0; x < state.coreData.length; x++) if (state.coreData[x].name == name) return state.coreData[x].data;
-    return {};
-}
-function log(message, index, level) {
-    if (level == undefined) send("log", { message: message, mod: cfg.moduleName, level: index });
-    else send("log", { message: message, mod: state.auto[index].name, level: level });
-}
