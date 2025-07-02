@@ -1,0 +1,126 @@
+esphome:
+  name: test
+  friendly_name: Test
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+api:
+  encryption:
+    key: "mykey="
+ota:
+  - platform: esphome
+    password: "mykey"
+wifi:
+  networks:
+  - ssid: "Alvarez"
+    hidden: false
+  fast_connect: true
+  output_power: 20dB
+  power_save_mode: none
+  manual_ip:
+    static_ip: 10.21.0.19
+    gateway: 10.21.0.1
+    subnet: 255.255.254.0 
+    dns1: 10.21.0.1
+  ap:
+    ssid: "Test Fallback Hotspot"
+    password: "mykey"
+captive_portal:
+globals:
+  - id: last_heartbeat_time
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          if ((millis() - id(last_heartbeat_time)) > 5000) {
+          id(relay2).turn_on();
+          id(relay3).turn_on();
+          }
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Asia/Manila
+    servers:
+     - asia.pool.ntp.org
+     - 1.pool.ntp.org
+     - 2.pool.ntp.org
+wireguard:
+  private_key: -------=
+  peer_public_key: --------=
+  peer_endpoint: vpn.thwerks.com
+  peer_port: 1021
+  peer_persistent_keepalive: 25s
+  address: 10.254.0.2
+  netmask: 255.255.255.255
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    accuracy_decimals: 2
+    update_interval: 10s
+switch:
+  - platform: restart
+    name: "Restart ESP"
+    id: restart_action
+  - platform: gpio
+    name: "test-led"
+    id: "led"
+    restore_mode: ALWAYS_OFF
+    pin:
+      number: 2
+      inverted: false
+    on_turn_on:
+      then:
+        - lambda: |-
+            id(last_heartbeat_time) = millis();
+    on_turn_off:
+      then:
+        - lambda: |-
+            id(last_heartbeat_time) = millis();
+  - platform: gpio
+    name: "lth-relay1"
+    pin:
+      number: 4
+      inverted: false
+  - platform: gpio
+    name: "lth-relay2"
+    id: "relay2"
+    pin:
+      number: 16
+      inverted: false
+  - platform: gpio
+    name: "lth-relay3"
+    id: "relay3"
+    pin:
+      number: 17
+      inverted: false
+  - platform: gpio
+    name: "lth-relay4"
+    pin:
+      number: 18
+      inverted: false
+  - platform: gpio
+    name: "lth-relay5"
+    pin:
+      number: 19
+      inverted: false
+  - platform: gpio
+    name: "lth-relay6"
+    pin:
+      number: 21
+      inverted: false
+  - platform: gpio
+    name: "lth-relay7"
+    pin:
+      number: 22
+      inverted: false
+  - platform: gpio
+    name: "lth-relay8"
+    pin:
+      number: 23
+      inverted: false
+
