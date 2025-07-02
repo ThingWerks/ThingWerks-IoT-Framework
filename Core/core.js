@@ -3,82 +3,135 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 if (isMainThread) {
     let
         ha = {
+            refreshEntities: async function (haIndex) {
+                log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) refreshing available inputs...`, 1);
+                logs.haInputs[haIndex] = []; // Clear current list before refreshing
+                try {
+                    const data = await hass[haIndex].states.list();
+                    if (data.includes("401: Unauthorized")) {
+                        log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) Connection failed during refresh: Unauthorized`, 1, 3);
+                        return false; // Indicate failure
+                    } else {
+                        data.forEach(element => { logs.haInputs[haIndex].push(element.entity_id) });
+                        log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) successfully refreshed ${logs.haInputs[haIndex].length} entities.`, 1);
+                        return true; // Indicate success
+                    }
+                } catch (err) {
+                    log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) entity list refresh failed: ${err}`, 1, 2);
+                    return false; // Indicate failure
+                }
+            },
             fetch: function (client, retry) {
-                let sendDelay = 0, completed = 0, delay = 20, haSystem, buf = [];
+                let sendDelay = 0, completed = 0, delay = 20, haSystem, buf = {};
                 if (retry == undefined) retry = 0;
+
+                // entitiesToFetch MUST be declared here, within the fetch function's scope
+                const entitiesToFetch = [];
+
                 if (client.ha) {
-                    //  console.log(client.ha);
-                    //  logs.haInputs.forEach(element => { console.log(element); });
+                    // Collect all entities to fetch first, then process
                     for (let x = 0; x < client.ha.length; x++) {
                         for (let y = 0; y < cfg.homeAssistant.length; y++) {
-                            haSystem = y;
-                            for (let z = 0; z < logs.haInputs[y].length; z++) {
-                                if (x == client.ha.length - 1 && z == logs.haInputs[y].length - 1) checkIfCompleted(y);
-                                if (logs.haInputs[y][z] == client.ha[x]) {
-                                    //  log("HA fetch found device for Client: " + a.color("white", client.name) + " On HA System: " + y + " - Entity: " + logs.haInputs[y][z], 1, 0)
-                                    getData(y, client.ha[x]);
+                            // Ensure logs.haInputs[y] exists before iterating
+                            if (logs.haInputs[y]) {
+                                for (let z = 0; z < logs.haInputs[y].length; z++) {
+                                    if (logs.haInputs[y][z] === client.ha[x]) {
+                                        entitiesToFetch.push({ haIndex: y, entityId: client.ha[x] });
+                                        break; // Found the entity, move to next client.ha[x]
+                                    }
                                 }
                             }
                         }
-                    }       // flow is different than regular because NaN will corrupt flow meter NV data and also we want to know if a regular sensor is NaN
-                    function getData(ha, name) {
-                        let typeCheck = ["input_boolean", 'input_button', "switch", "input_number", "flow", "sensor"];
-                        let typeGet = ["input_boolean", 'input_button', "switch", "input_number", "sensor", "sensor"];
-                        for (let x = 0; x < typeCheck.length; x++) {
-                            if (name.includes(typeCheck[x])) {
-                                setTimeout(() => {
-                                    hass[ha].states.get(typeGet[x], name)
-                                        .then(data => {
-                                            switch (x) {
-                                                case 0:
-                                                case 1:
-                                                case 2: data.state == "on" ? buf.push(true) : buf.push(false); finished(); break;
-                                                case 3:
-                                                case 4: if (isNaN(Number(data.state)) != true && Number(data.state) != null)
-                                                    buf.push(Number(data.state));  // prevent NaN for flow meters
-                                                    finished();
-                                                    break;
-                                                case 5: buf.push(Number(data.state)); finished(); break;
-                                            }
-                                        })
-                                        .catch(err => console.error(err))
-                                }, sendDelay);
-                                sendDelay += delay;
-                                break;
-                            }
+                    }
+
+                    if (entitiesToFetch.length === 0) {
+                        log(`No matching Home Assistant entities found for client: ${client.name}`, 1, 1);
+                        udp.send(JSON.stringify({ type: "haFetchReply", obj: buf }), client.port);
+                        return;
+                    }
+
+                    // Process entitiesToFetch
+                    entitiesToFetch.forEach(item => {
+                        getData(item.haIndex, item.entityId);
+                    });
+                }
+
+                // --- getData and finished MUST be defined INSIDE the fetch function's scope ---
+
+                function getData(haIndex, name) { // Renamed 'ha' to 'haIndex' for clarity
+                    let typeCheck = ["input_boolean", 'input_button', "switch", "input_number", "flow", "sensor"];
+                    let typeGet = ["input_boolean", 'input_button', "switch", "input_number", "sensor", "sensor"];
+
+                    let foundType = false;
+                    for (let x = 0; x < typeCheck.length; x++) {
+                        if (name.includes(typeCheck[x])) {
+                            foundType = true;
+                            setTimeout(() => {
+                                hass[haIndex].states.get(typeGet[x], name) // Use haIndex here
+                                    .then(data => {
+                                        buf[name] = {}; // Initialize buffer for this entity
+                                        switch (x) {
+                                            case 0:
+                                            case 1:
+                                            case 2:
+                                                data.state == "on" ? buf[name].state = true : buf[name].state = false;
+                                                buf[name].update = time.epoch;
+                                                finished();
+                                                break;
+                                            case 3:
+                                            case 4:
+                                            case 5:
+                                                if (isNaN(Number(data.state)) !== true && Number(data.state) !== null) {
+                                                    buf[name].state = Number(data.state);
+                                                    buf[name].update = time.epoch;
+                                                } else {
+                                                    buf[name].state = null; // Or handle as appropriate for NaN/null states
+                                                    buf[name].update = time.epoch;
+                                                    log(`HA fetch: Entity ${name} has invalid state: ${data.state}`, 1, 1);
+                                                }
+                                                finished();
+                                                break;
+                                        }
+                                    })
+                                    .catch(async err => {
+                                        console.error(`Error fetching entity ${name} from HA system ${haIndex}:`, err); // Use haIndex here
+                                        log(`Entity fetch failed for ${name}. Attempting to refresh HA entities for system ${haIndex}.`, 1, 2); // Use haIndex here
+
+                                        // Correctly call refreshEntities using 'ha' object
+                                        const refreshSuccess = await ha.refreshEntities(haIndex); // Pass haIndex
+
+                                        if (refreshSuccess) {
+                                            log(`HA entities for system ${haIndex} refreshed successfully. Retrying fetch for ${name}.`, 1); // Use haIndex here
+                                            buf[name] = { state: null, error: "Refreshed entities, please retry fetch." };
+                                            finished();
+                                        } else {
+                                            log(`Failed to refresh HA entities for system ${haIndex} after fetch error.`, 1, 3); // Use haIndex here
+                                            buf[name] = { state: null, error: "Entity fetch failed and refresh also failed." };
+                                            finished();
+                                        }
+                                    });
+                            }, sendDelay);
+                            sendDelay += delay;
+                            break;
                         }
                     }
+                    if (!foundType) {
+                        log(`Warning: No matching type found for entity ${name}. Skipping.`, 1, 1);
+                        buf[name] = { state: null, error: "Unknown entity type." };
+                        finished();
+                    }
                 }
+
                 function finished() {
                     completed++;
-                    if (client.ha.length == completed) {
-                        log("fetch completed, found " + completed + " entities, sending results for HA system:" + haSystem + " to client:" + client.name, 1)
-                        udp.send(JSON.stringify({ type: "haFetchReply", obj: buf }), client.port)
+                    // entitiesToFetch is now accessible here because finished is within fetch's scope
+                    if (entitiesToFetch.length > 0 && completed === entitiesToFetch.length) {
+                        log(`Fetch completed, processed ${completed} entities, sending results for client: ${client.name}`, 1);
+                        udp.send(JSON.stringify({ type: "haFetchReply", obj: buf }), client.port);
+                    } else if (entitiesToFetch.length === 0 && completed === 0) {
+                        log(`Fetch completed, no entities requested for client: ${client.name}`, 1);
+                        udp.send(JSON.stringify({ type: "haFetchReply", obj: buf }), client.port);
                     }
-                }
-                function checkIfCompleted(x) {
-                    setTimeout(() => {
-                        if (completed != client.ha.length) {
-                            if (retry < 3) {
-                                log("Home Assistant is not fully online or some entities are not found, refreshing entities", 1, 2);
-                                retry++;
-                                for (let y = 0; y < cfg.homeAssistant.length; y++) {
-                                    logs.haInputs[x] = [];
-                                    try {
-                                        hass[x].states.list()
-                                            .then(data => {
-                                                data.forEach(element => { logs.haInputs[x].push(element.entity_id) });
-                                                if (cfg.homeAssistant.length - 1 == x) response.send(logs.haInputs);
-                                            })
-                                            .catch(err => { log("entity query failed: " + err, 1, 2); });
-                                    } catch (e) { console.log(e) }
-                                }
-                                // setTimeout(() => { ha.fetch(client, retry) }, 20e3);  // client will reinitiate fetch call 
-                            } else {
-                                log("Home Assistant is not fully online or some entities are not found, all attempts failed, ", 1, 3);
-                            }
-                        }
-                    }, 2e3);
                 }
             },
             ws: function () {
@@ -89,19 +142,16 @@ if (isMainThread) {
                     ws[haNum].connect("ws://" + config.address + ":" + config.port + "/api/websocket");
                     ws[haNum].on('connectFailed', function (error) { if (!client.error) { log(error.toString(), 1, 3); client.error = true; } });
                     ws[haNum].on('connect', function (socket) {
-                        //    if (client.reply == false) { log("fetching sensor states", 1); ha.fetch(); client.id = 0; }
                         client.reply = true;
                         client.online = true;
                         client.error = false;
                         socket.on('error', function (error) {
                             if (!client.error) { log("websocket (" + a.color("white", config.address) + ") " + error.toString(), 1, 3); client.error = true; }
                         });
-                        //   socket.on('close', function () { log('Connection closed!', 1, 3); });
                         socket.on('message', function (message) {
                             let buf = JSON.parse(message.utf8Data);
                             switch (buf.type) {
                                 case "pong":
-                                    //    log("pong: " + JSON.stringify(buf))
                                     client.reply = true;
                                     client.online = true;
                                     client.pingsLost = 0;
@@ -114,7 +164,6 @@ if (isMainThread) {
                                     send({ type: "auth", access_token: config.token, });
                                     break;
                                 case "auth_ok":
-                                    //  state.client = []; // force UDP client to reconnect if WS gets disconnected (will force fetch again)
                                     for (let x = 0; x < state.client.length; x++) {
                                         udp.send(JSON.stringify({ type: "haFetchAgain" }), state.client[x].port);
                                     }
@@ -125,47 +174,39 @@ if (isMainThread) {
                                     send({ id: client.id++, type: "ping" });
                                     setTimeout(() => { client.pingsLost = 0; send({ id: client.id++, type: "ping" }); client.reply = true; ping(); }, 10e3);
                                     break;
-                                case "result": // sudo callback for set state via ws
-                                    //  if (buf.id == tt2) log("ws result delay was: " + (Date.now() - tt))
-                                    // log("result: " + JSON.stringify(buf));
-                                    // 
-                                    //  let delay = ha.perf(0);
-                                    //     log("ws delay was: " + delay, 0, 0)
+                                case "result":
                                     break;
                                 case "event":
                                     switch (buf.event.event_type) {
                                         case "state_changed":
                                             if (config.legacyAPI == false && state.perf.ha[haNum].wait == true) {
-                                                let delay = ha.perf(0);
+                                                let delay = ha.perf(haNum); // Correct call: use 'ha.perf' and pass haNum
                                                 log("ws delay was: " + delay, 0, 0)
                                             }
                                             let ibuf = undefined;
-                                            if (buf.event.data.new_state != undefined                       // filter out corrupted events
+                                            if (buf.event.data.new_state != undefined
                                                 && buf.event.data.new_state != null) ibuf = buf.event.data.new_state.state;
                                             let obuf = undefined;
                                             if (logs.ws[haNum][client.logStep] == undefined) logs.ws[haNum].push(buf.event);
-                                            else logs.ws[haNum][client.logStep] = buf.event                     // record last 200 ws events for this client into the ws log  
+                                            else logs.ws[haNum][client.logStep] = buf.event
                                             if (client.logStep < 200) client.logStep++; else client.logStep = 0;
-                                            //  log("WS received data" + JSON.stringify(buf.event))
-                                            for (let x = 0; x < state.client.length; x++) {                    // scan all UDP clients
-                                                for (let y = 0; y < state.client[x].ha.length; y++) {          // scan registered HA entities for each client 
-                                                    if (state.client[x].ha[y] == buf.event.data.entity_id) {   // if this entity ID matches Client X's Entity Y
-                                                        //     log("WS received data for sensor: " + x + " local name: " + state.client[x].ha[y] + " buf name: " + buf.event.data.entity_id + JSON.stringify(buf.event.data.new_state))
-                                                        if (ibuf === "on") obuf = true;                     // check if entity is binary
+                                            for (let x = 0; x < state.client.length; x++) {
+                                                for (let y = 0; y < state.client[x].ha.length; y++) {
+                                                    if (state.client[x].ha[y] == buf.event.data.entity_id) {
+                                                        if (ibuf === "on") obuf = true;
                                                         else if (ibuf === "off") obuf = false;
                                                         else if (ibuf === null || ibuf == undefined) log("HA (" + a.color("white", config.address) + ") is sending bogus (null/undefined) data: " + ibuf, 1, 2);
-                                                        else if (ibuf === "unavailable") {                  // only disconnected ESP modules send this code
-                                                            if (cfg.telegram.logESPDisconnect == true)           // its annoying, see if enabled 
+                                                        else if (ibuf === "unavailable") {
+                                                            if (cfg.telegram.logESPDisconnect == true)
                                                                 log("HA (" + a.color("white", config.address) + "): ESP Module has gone offline: " + buf.event.data.new_state.entity_id + ibuf, 1, 2);
                                                         }
-                                                        else if (!isNaN(parseFloat(Number(ibuf))) == true   // check if data is float
+                                                        else if (!isNaN(parseFloat(Number(ibuf))) == true
                                                             && isFinite(Number(ibuf)) == true && ibuf != null) obuf = ibuf;
-                                                        else if (ibuf.length == 32) { obuf = ibuf }         // button entity, its always 32 chars
+                                                        else if (ibuf.length == 32) { obuf = ibuf }
                                                         else log("HA (" + a.color("white", config.address) + ") is sending bogus data = Entity: "
                                                             + buf.event.data.new_state.entity_id + " Bytes: " + ibuf.length + " data: " + ibuf, 1, 2);
-                                                        //   log("ws sensor: " + x + " data: " + buf.event.data.new_state.state + " result: " + ibuf);
-                                                        if (obuf != undefined) {                            // send data to relevant clients 
-                                                            udp.send(JSON.stringify({ type: "haStateUpdate", obj: { id: y, state: obuf } }), state.client[x].port);
+                                                        if (obuf != undefined) {
+                                                            udp.send(JSON.stringify({ type: "haStateUpdate", obj: { name: state.client[x].ha[y], state: obuf } }), state.client[x].port);
                                                         }
                                                     }
                                                 }
@@ -240,7 +281,7 @@ if (isMainThread) {
                         })
                         .catch(err => { log("fetching failed", 0, 2); });
                 }
-            },
+            }
         },
         sys = {
             udp: function (data, info) {
@@ -306,7 +347,10 @@ if (isMainThread) {
                                 for (let b = 0; b < state.client[id].esp.length; b++) {
                                     if (state.client[id].esp[b] == state.esp[x].entity[y].name) {
                                         //  log("sending ESP Device ID: " + b + "  Name:" + state.esp[x].entity[y].name + "  data: " + state.esp[x].entity[y].state, 3, 0);
-                                        udp.send(JSON.stringify({ type: "espState", obj: { id: b, state: state.esp[x].entity[y].state } }), port);
+                                        udp.send(JSON.stringify({
+                                            type: "espState",
+                                            obj: { name: state.esp[x].entity[y].name, state: state.esp[x].entity[y].state }
+                                        }), port);
                                     }
                                 }
                             }
@@ -527,15 +571,14 @@ if (isMainThread) {
                                 if (state.esp[data.esp] != undefined) state.esp[data.esp].entity = [];
                                 break;
                             case "state":
-                                //  console.log("incoming state change - ESP: " + data.esp + " - IO: " + data.obj.io);
-                                // console.log("incoming state change: ", state.esp[data.esp].entity[data.obj.io]);
+                                //   console.log("incoming state change: ", state.esp[data.esp].entity[data.obj.io]);
                                 // console.log(data);
-                                state.esp[data.esp].entity[data.obj.io].state = data.obj.state;  // store the state locally 
+                                state.esp[data.esp].entity[data.obj.io].state = data.obj.state;   // store the state locally 
                                 state.esp[data.esp].entity[data.obj.io].update = time.stamp;
                                 for (let a = 0; a < state.client.length; a++) {        // scan all the UDP clients and find which one cares about this entity
                                     for (let b = 0; b < state.client[a].esp.length; b++) {                 // scan each UDP clients registered ESP entity list
                                         if (state.client[a].esp[b] == state.esp[data.esp].entity[data.obj.io].name) {     // if there's a match, send UDP client the data
-                                            udp.send(JSON.stringify({ type: "espState", obj: { id: b, state: data.obj.state } }), state.client[a].port);
+                                            udp.send(JSON.stringify({ type: "espState", obj: { name: state.esp[data.esp].entity[data.obj.io].name, state: data.obj.state } }), state.client[a].port);
                                             //    console.log("UDP Client: " + a + " esp: " + b + " state: ", data.obj.state);
                                             break;
                                         }
@@ -688,41 +731,40 @@ if (isMainThread) {
                         if (cfg.homeAssistant) {
                             for (let x = 0; x < cfg.homeAssistant.length; x++) {
                                 if (cfg.homeAssistant[x].enable == true) {
-                                    haconnect();
+                                    // Pass the index 'x' to haconnect
+                                    haConnect(x);
                                     log("Legacy API - connecting to " + a.color("white", cfg.homeAssistant[x].address), 1);
-                                    function haconnect() {
-                                        hass[x].status()
+
+                                    // haconnect function needs to be defined where it can see 'ha'
+                                    function haConnect(haIndex) {
+                                        hass[haIndex].status()
                                             .then(data => {
-                                                log("Legacy API (" + a.color("white", cfg.homeAssistant[x].address) + ") service: " + a.color("green", data.message), 1);
-                                                log("Legacy API (" + a.color("white", cfg.homeAssistant[x].address) + ") fetching available inputs", 1);
-                                                hass[x].states.list()
-                                                    .then(data => {
-                                                        if (data.includes("401: Unauthorized"))
-                                                            log("Legacy API (" + a.color("white", cfg.homeAssistant[x].address) + ") Connection failed:" + data, 1, 3)
-                                                        else {
-                                                            data.forEach(element => { logs.haInputs[x].push(element.entity_id) });
-                                                            if (x == cfg.homeAssistant.length - 1) {
-                                                                if (state.ha[x].errorStart == true) {
+                                                log("Legacy API (" + a.color("white", cfg.homeAssistant[haIndex].address) + ") service: " + a.color("green", data.message), 1);
+                                                // Correctly call refreshEntities using the 'ha' object
+                                                ha.refreshEntities(haIndex)
+                                                    .then(success => {
+                                                        if (success) {
+                                                            if (haIndex == cfg.homeAssistant.length - 1) {
+                                                                if (state.ha[haIndex].errorStart == true) {
                                                                     log("Legacy API has starting error - delaying UDP connections for 30 seconds...");
                                                                     setTimeout(() => sys.boot(4), 30e3);
-                                                                }
-                                                                else sys.boot(4);
+                                                                } else { sys.boot(4); }
                                                             }
+                                                        } else {
+                                                            log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) initial entity refresh failed, retrying connection...`, 3);
+                                                            setTimeout(() => { haConnect(haIndex); }, 10e3);
                                                         }
                                                     })
                                                     .catch(err => {
-                                                        log(err, 1, 2);
-                                                        log("Legacy API - connection to (" + a.color("white", cfg.homeAssistant[x].address) + ") failed, retrying in 10 seconds", 3);
-                                                        setTimeout(() => {
-                                                            haconnect();
-                                                        }, 10e3);
+                                                        log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) an unexpected error occurred during initial entity refresh: ${err}`, 1, 2);
+                                                        setTimeout(() => { haConnect(haIndex); }, 10e3);
                                                     });
                                             })
                                             .catch(err => {
                                                 setTimeout(() => {
-                                                    log("Legacy API (" + a.color("white", cfg.homeAssistant[x].address) + ") service: Connection failed, retrying....", 1, 2)
-                                                    state.ha[x].errorStart = true;
-                                                    haconnect();
+                                                    log("Legacy API (" + a.color("white", cfg.homeAssistant[haIndex].address) + ") service: Connection failed, retrying....", 1, 2)
+                                                    state.ha[haIndex].errorStart = true;
+                                                    haConnect(haIndex);
                                                 }, 10e3);
                                                 log(err, 1, 2);
                                             });
@@ -947,7 +989,7 @@ if (isMainThread) {
                     process.exit();
                 }
                 if (process.argv[2] == "-i") {
-                    console.log("installing ThingWerks-Core service...");
+                    log("installing ThingWerks-Core service...");
                     let exec = "ExecStart=nodemon " + workingDir + "/core.js -w " + workingDir + "/core.js -w " + workingDir + "/config.json --exitcrash --delay 5";
                     let service = [
                         "[Unit]",
@@ -973,12 +1015,12 @@ if (isMainThread) {
                     execSync("systemctl enable twit-core.service");
                     execSync("systemctl start twit-core");
                     execSync("service twit-core status");
-                    console.log("service installed and started");
+                    log("service installed and started");
                     console.log("type:  journalctl -f -u twit-core  or  tail -f /apps/log-twit-core.txt -n 500");
                     process.exit();
                 }
                 if (process.argv[2] == "-u") {
-                    console.log("uninstalling TWIT-Core service...");
+                    log("uninstalling TWIT-Core service...");
                     execSync("systemctl stop twit-core");
                     execSync("systemctl disable twit-core.service");
                     fs.unlinkSync("/etc/systemd/system/twit-core.service");
@@ -1051,7 +1093,6 @@ if (!isMainThread) {
         function espReset() {
             if (state.resetting == false) {
                 state.resetting = true;
-                state.reconnect = true;
                 try { client.disconnect(); } catch (error) { log("ESP module - " + a.color("green", espClient.name) + " - disconnect failed...", 2); }
                 clearTimeout(state.errorResetTimeout);
                 clearTimeout(state.keepaliveTimer);
@@ -1059,8 +1100,6 @@ if (!isMainThread) {
                 state.errorResetTimeout = setTimeout(() => {
                     em.removeAllListeners();
                     client = null;
-                    parentPort.postMessage({ type: "esp", class: "reset", esp: espClient.name });
-                    state.entity = [];
                     setTimeout(() => { espInit(); }, 5e3);
                 }, 10e3);
             }
@@ -1073,6 +1112,7 @@ if (!isMainThread) {
                 if (state.reconnect == false) {
                     log("ESP module - " + a.color("green", espClient.name) + " - had a connection error, resetting connection..."
                         , 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
+                    state.reconnect = true;
                     espReset();
                 }
             });
@@ -1081,6 +1121,7 @@ if (!isMainThread) {
                     log("ESP module - " + a.color("green", espClient.name) + " - disconnected, resetting ESP connection..."
                         , 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
                     espReset();
+                    state.reconnect = true;
                 }
             });
             client.on('newEntity', data => {
@@ -1088,7 +1129,8 @@ if (!isMainThread) {
                 state.resetting = false;
                 for (let x = 0; x < state.entity.length; x++) {        // scan for this entity in the entity list
                     if (state.entity[x].id == data.id) { exist++; io = x; break; };
-                    if (data.config.objectId === cfg.esp.devices[workerData.esp].heartbeat) {
+                    // console.log("object ID: ", data.config.objectId + " - HB ID: ", cfg.esp.devices[workerData.esp].heartbeat )
+                    if (data.config.objectId == cfg.esp.devices[workerData.esp].heartbeat) {
                         if (state.keepaliveTimer == null) {
                             log("ESP module - " + a.color("green", espClient.name) + " - registering heartbeat - "
                                 + a.color("green", data.config.objectId), 2);
@@ -1103,7 +1145,7 @@ if (!isMainThread) {
                 if (exist == 0)                                                 // dont add this entity if its already in the list 
                     io = state.entity.push({ name: data.config.objectId, type: data.type, id: data.id }) - 1;
                 if (state.boot == false)
-                    //  log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
+                      log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
                     parentPort.postMessage({
                         type: "esp", class: "entity", esp: workerData.esp,
                         obj: { id: data.id, io, name: data.config.objectId, type: data.type }
@@ -1131,8 +1173,10 @@ if (!isMainThread) {
                     }
                     if (state.boot == false) {
                         if (data.config.objectId.includes("wifi"))
-                            log("ESP module - " + a.color("green", espClient.name) + " - connected: " + a.color("white", espClient.ip) + " - "
+                            setTimeout(() => {
+                                log("ESP module - " + a.color("green", espClient.name) + " - connected: " + a.color("white", espClient.ip) + " - "
                                 + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
+                            }, 10);
                         setTimeout(() => { state.boot = true; }, 20);   // indicate booted so not to show entity names again
                     }
                     for (let x = 0; x < state.entity.length; x++) {
@@ -1163,7 +1207,7 @@ if (!isMainThread) {
                     em.emit(data.obj.name, data.obj.id, data.obj.state);
                     break;
                 case "reset":
-                    // em.emit(data.obj.name, data.obj.id, data.obj.state);
+                    em.emit(data.obj.name, data.obj.id, data.obj.state);
                     break;
             }
         });
