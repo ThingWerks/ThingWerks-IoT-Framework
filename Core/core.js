@@ -26,7 +26,7 @@ if (isMainThread) {
                 if (retry == undefined) retry = 0;
 
                 // entitiesToFetch MUST be declared here, within the fetch function's scope
-                const entitiesToFetch = [];
+                let entitiesToFetch = [];
 
                 if (client.ha) {
                     // Collect all entities to fetch first, then process
@@ -43,21 +43,16 @@ if (isMainThread) {
                             }
                         }
                     }
-
                     if (entitiesToFetch.length === 0) {
                         log(`No matching Home Assistant entities found for client: ${client.name}`, 1, 1);
                         udp.send(JSON.stringify({ type: "haFetchReply", obj: buf }), client.port);
                         return;
                     }
-
                     // Process entitiesToFetch
                     entitiesToFetch.forEach(item => {
                         getData(item.haIndex, item.entityId);
                     });
                 }
-
-                // --- getData and finished MUST be defined INSIDE the fetch function's scope ---
-
                 function getData(haIndex, name) { // Renamed 'ha' to 'haIndex' for clarity
                     let typeCheck = ["input_boolean", 'input_button', "switch", "input_number", "flow", "sensor"];
                     let typeGet = ["input_boolean", 'input_button', "switch", "input_number", "sensor", "sensor"];
@@ -734,8 +729,6 @@ if (isMainThread) {
                                     // Pass the index 'x' to haconnect
                                     haConnect(x);
                                     log("Legacy API - connecting to " + a.color("white", cfg.homeAssistant[x].address), 1);
-
-                                    // haconnect function needs to be defined where it can see 'ha'
                                     function haConnect(haIndex) {
                                         hass[haIndex].status()
                                             .then(data => {
