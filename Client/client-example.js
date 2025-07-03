@@ -135,9 +135,9 @@ let
                 switch (buf.type) {
                     case "espState":            // incoming state change (from ESP)
                         // console.log("receiving esp data, name: " + buf.obj.name + " state: " + buf.obj.state);
-                        state.esp[buf.obj.name] ||= {}; // If state.esp[buf.obj.name] is falsy (undefined, null, 0, '', false), assign it an empty object.
-                        state.esp[buf.obj.name].state = buf.obj.state;
-                        state.esp[buf.obj.name].update = time.epoch;
+                        state.entity[buf.obj.name] ||= {}; // If state.esp[buf.obj.name] is falsy (undefined, null, 0, '', false), assign it an empty object.
+                        state.entity[buf.obj.name].state = buf.obj.state;
+                        state.entity[buf.obj.name].update = time.epoch;
                         if (state.online == true) {
                             em.emit(buf.obj.name, buf.obj.state);
                             automation.forEach((func, index) => { if (state.auto[index]) func(index); });
@@ -146,17 +146,17 @@ let
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
                         log("receiving HA state data, entity: " + buf.obj.name + " value: " + buf.obj.state, 0);
                         // console.log(buf);
-                        state.ha[buf.obj.name].state ||= {};
-                        state.ha[buf.obj.name].update = time.epoch;
-                        try { state.ha[buf.obj.name].state = buf.obj.state; } catch { }
+                        state.entity[buf.obj.name] ||= {};
+                        state.entity[buf.obj.name].update = time.epoch;
+                        try { state.entity[buf.obj.name].state = buf.obj.state; } catch { }
                         if (state.online == true) {
                             em.emit(buf.obj.name, buf.obj.state);
                             automation.forEach((func, index) => { if (state.auto[index]) func(index) });
                         }
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
-                        state.ha = buf.obj;
-                        log("receiving fetch data: " + state.ha);
+                        Object.assign(state.entity, buf.obj);
+                        log("receiving fetch data...");
                         if (state.onlineHA == false) sys.boot(4);
                         break;
                     case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
@@ -235,7 +235,7 @@ let
         },
         init: function () {
             nv = {};
-            state = { auto: [], ha: {}, esp: {}, udp: [], coreData: [], onlineHA: false, online: false };
+            state = { auto: [], entity: {}, onlineHA: false, online: false };
             heartbeat = { state: false, timer: [] }
             time = {
                 boot: null,
@@ -330,7 +330,7 @@ let
                 write: {
                     nv: function () {  // write non-volatile memory to the disk
                         // log("writing NV data...")
-                        fs.writeFile(workingDir + "/nv-" + scriptName + "-bak.json", JSON.stringify(nv), function () {
+                        fs.writeFile(workingDir + "/nv-" + scriptName + "-bak.json", JSON.stringify(nv, null, 2), function () {
                             fs.copyFile(workingDir + "/nv-" + scriptName + "-bak.json", workingDir + "/nv-" + scriptName + ".json", (err) => {
                                 if (err) throw err;
                             });
