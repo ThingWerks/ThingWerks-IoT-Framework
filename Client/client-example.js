@@ -218,18 +218,18 @@ let
                     cfg.heartbeat.esp.forEach((e, x) => {
                         clearInterval(heartbeat.timer[x]);
                         heartbeat.timer[x] = setInterval(() => {
-                            if (heartbeat.state) { esp.send(e.name, false); heartbeat.state = false; }
-                            else { esp.send(e.name, true); heartbeat.state = true; }
+                            if (heartbeat.state) { send(e.name, false); heartbeat.state = false; }
+                            else { send(e.name, true); heartbeat.state = true; }
                         }, e.interval * 1e3);
                     });
                 }
             }
             if (cfg.telegram != undefined) obj.telegram = true;
-            send("register", obj, cfg.moduleName);
+            udp.send(JSON.stringify({ type: "register", obj, name: cfg.moduleName }), 65432, '127.0.0.1');
             if (cfg.telegram != undefined) {
                 if (nv.telegram == undefined) nv.telegram = [];
                 else for (let x = 0; x < nv.telegram.length; x++) {
-                    send("telegram", { class: "sub", id: nv.telegram[x].id });
+                    udp.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: nv.telegram[x].id } }), 65432, '127.0.0.1');
                 }
             }
         },
@@ -268,14 +268,7 @@ let
                 },
             };
             time.startTime();
-            esp = { send: function (name, state) { send("espState", { name: name, state: state }) } };
-            ha = {
-                getEntities: function () { send("haQuery") },
-                send: function (name, state, unit, id) {  // if ID is not expressed for sensor, then sensor data will be send to HA system 0
-                    if (isFinite(Number(name)) == true) send("haState", { name: cfg.ha[name], state: state, unit: unit, haID: id });
-                    else send("haState", { name: name, state: state, unit: unit, haID: id });
-                }
-            };
+            ha = { getEntities: function () { send("haQuery") }, };
             fs = require('fs');
             events = require('events');
             em = new events.EventEmitter();
@@ -345,7 +338,7 @@ let
                         log("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
                         nv.telegram.push(buf);
                         bot(msg.chat.id, 'registered');
-                        send("telegram", { class: "sub", id: msg.from.id });
+                        udp.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
                         file.write.nv();
                     } else bot(msg.chat.id, 'already registered');
                 },
@@ -377,15 +370,44 @@ let
                     bot(msg.from.id, name, buf);
                 },
             };
-            bot = function (id, data, obj) { send("telegram", { class: "send", id, data, obj }) };
-            send = function (type, obj, name) { udp.send(JSON.stringify({ type, obj, name }), 65432, '127.0.0.1') };
+            bot = function (id, data, obj) {
+                udp.send(JSON.stringify({ type: "telegram", obj: { class: "send", id, data, obj } }), 65432, '127.0.0.1');
+            };
+            send = function (name, state, unit, id) {
+                for (let x = 0; x < cfg.esp.length; x++) {
+                    if (name == cfg.esp[x]) {
+                        udp.send(JSON.stringify({
+                            type: "espState",
+                            obj: { name: name, state: state }
+                        }), 65432, '127.0.0.1')
+                        return;
+                    }
+                }
+                for (let x = 0; x < cfg.ha.length; x++) {
+                    if (name == cfg.ha[x]) {
+                        udp.send(JSON.stringify({
+                            type: "haState",
+                            obj: { name: name, state: state, unit: unit, haID: id }
+                        }), 65432, '127.0.0.1')
+                        return;
+                    }
+                }
+            };
             coreData = function (name) {
                 for (let x = 0; x < state.coreData.length; x++) if (state.coreData[x].name == name) return state.coreData[x].data;
                 return {};
             };
             log = function (message, index, level) {
-                if (level == undefined) send("log", { message: message, mod: cfg.moduleName, level: index });
-                else send("log", { message: message, mod: state.auto[index].name, level: level });
+                if (level == undefined) {
+                    udp.send(JSON.stringify({
+                        type: "log",
+                        obj: { message: message, mod: cfg.moduleName, level: index }
+                    }), 65432, '127.0.0.1');
+                }
+                else udp.send(JSON.stringify({
+                    type: "log",
+                    obj: { message: message, mod: state.auto[index].name, level: level }
+                }), 65432, '127.0.0.1');
             };
             sys.boot(0);
         },
@@ -430,10 +452,10 @@ let
                     log("registered with TWIT Core", 1);
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
                         log("fetching Home Assistant entities", 1);
-                        send("haFetch");
+                        udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         bootWait = setInterval(() => {
                             log("HA fetch is failing, retrying...", 2);
-                            send("haFetch");
+                            udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         }, 10e3);
                     } else sys.boot(4);
                     break;
@@ -445,7 +467,8 @@ let
                     }
                     if (cfg.esp != undefined && cfg.esp.length > 0) {
                         log("fetching esp entities", 1);
-                        send("espFetch");
+                        udp.send(JSON.stringify({ type: "espFetchespFetch" }), 65432, '127.0.0.1');
+
                         setTimeout(() => { sys.boot(5); }, 1e3);
                     } else sys.boot(5);
                     break;
@@ -460,3 +483,4 @@ let
         },
     };
 setTimeout(() => { sys.init(); }, 1e3);
+
