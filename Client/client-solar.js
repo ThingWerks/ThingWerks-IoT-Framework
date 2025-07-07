@@ -220,10 +220,10 @@ let
                     name: "battery_current_rs485",
                     entity: ["battery-current"],    // must be array
                     multiplier: undefined,           // only devices with multiplier are sent to HA
-                    zero: 5014,
+                    zero: 4995,
                     rating: 500,
                     scale: 10000,
-                    inverted: true,
+                    inverted: false,
                 },
             ],
             watt: [
@@ -423,6 +423,10 @@ let
             function priorityAuto() {
                 let volts = undefined, amps = undefined, sun = undefined;
                 let config = cfg.solar.priority;
+                if (!st.priority.boot) {
+                    log("priority - system is going ONLINE", index, 1);
+                    st.priority.boot = true;
+                }
                 if (time.epoch - st.priority.step >= 10) { pointers(); priorityCheck(); } else return;  // delay start of priority queue
                 function priorityCheck() {
                     for (let x = config.queue.length - 1; x > -1; x--) {    // when priority is running
@@ -481,7 +485,7 @@ let
                             if (queue.state == false || queue.state == null) {
                                 if (priority.onVolts != undefined) {
                                     if (priority.inverter != undefined && st.inverter[priority.inverter].state == true
-                                        || priority.inverter == undefined && st.inverter[0].state == true) {
+                                        || priority.inverter == undefined && st.inverter[0].state == true || priority.inverter == undefined) {
                                         if (volts >= priority.onVolts) {
                                             if (sun != undefined && priority.onSun != undefined) {
                                                 if (priority.offAmpsFloat == undefined || priority.offAmpsFloat != undefined
@@ -531,14 +535,10 @@ let
                     }
                     function sendOutput(x, newState) {
                         let queue = st.priority.queue[x], priority = config.queue[x];
-                        for (let y = 0; y < priority.devices.length; y++) {
-                            if (priority.devices[y].includes("input_boolean"))
-                                ha.send(priority.devices[y], newState);
-                            else esp.send(priority.devices[y], newState);
-                        }
+                        for (let y = 0; y < priority.devices.length; y++)
+                            send(priority.devices[y], newState);
                         cfg.inverter.forEach((_, y) => { st.inverter[y].delaySwitchStep = false });
                         config.queue.forEach((_, y) => { st.priority.queue[y].delayStep = false; queue.delayStepSun = false; });
-
                         queue.state = newState;
                         st.priority.step = time.epoch;
                     }
@@ -690,7 +690,7 @@ let
                                     inverter.delaySwitchFaultStep = true;
                                 } else if (time.epoch - inverter.delaySwitchFaultTimer >= 10) {
                                     //   log("inverter: " + config.name + " has faulted - no output - Inverter Auto is shutting down ", index, 3);
-                                    //    if (cfg.solar.inverterAuto != undefined) ha.send(cfg.ha[cfg.solar.inverterAuto], false);
+                                    //    if (cfg.solar.inverterAuto != undefined) send(cfg.ha[cfg.solar.inverterAuto], false);
                                     log("inverter: " + config.name + " - FAULT - no output - Inverter is going offline ", index, 3);
                                     inverter.state = "faulted";
                                     inverterPower(x, false);
@@ -851,10 +851,10 @@ let
                         setTimeout(() => {
                             log("inverter: " + config.name + " - intention: " + run + ", transferring ATS switch "
                                 + y + " - state: " + list[y].state, index, 1);
-                            esp.send(cfg.esp[list[y].id], list[y].state);
+                            send(cfg.esp[list[y].id], list[y].state);
                         }, ((list[y].delay == undefined) ? 0 : (list[y].delay * 1e3)));
                     }
-                    if (cfg.inverter[x].power.ha != undefined) ha.send(cfg.ha[cfg.inverter[x].power.ha], run);
+                    if (cfg.inverter[x].power.ha != undefined) send(cfg.ha[cfg.inverter[x].power.ha], run);
                 }
                 if (run == true) {
                     if (time.epoch - st.inverter[x].step >= cfg.solar.inverterRapidSwitch) {
@@ -863,7 +863,7 @@ let
                             toggle(run);
                         } else {
                             if (state.esp[config.power.id] == false) {
-                                esp.send(cfg.esp[config.power.id], run);
+                                send(cfg.esp[config.power.id], run);
                                 log("inverter: " + config.name + " - power on, delaying transfer switch 10 secs", index, 1);
                                 toggle(run);
                             } else {
@@ -881,7 +881,7 @@ let
                         log("inverter: " + config.name + " - cycling too frequently, epoch: "
                             + time.epoch + " step:" + st.inverter[x].step + " - inverter auto shutting down", index, 3);
                         // st.inverter[x].state = false;
-                        ha.send(cfg.solar.inverterAuto, false);
+                        send(cfg.solar.inverterAuto, false);
                         inverterPower(x, false);
                     }
                 } else {
@@ -894,14 +894,14 @@ let
                         if (config.power.delayOff == undefined) {
                             log("inverter: " + config.name + ", power off", index, 1);
                             st.inverter[x].delayOffTimer = setTimeout(() => {
-                                esp.send(cfg.esp[config.power.id], run);
+                                send(cfg.esp[config.power.id], run);
                                 st.inverter[x].delayOffTimer = null;
                             }, 10e3);
                         } else {
                             log("inverter: " + config.name + " - shutdown will delay by:" + config.power.delayOff + " seconds", index, 1);
                             st.inverter[x].delayOffTimer = setTimeout(() => {
                                 log("inverter: " + config.name + " - shutdown was delayed, now powering off", index, 1);
-                                esp.send(cfg.esp[config.power.id], run);
+                                send(cfg.esp[config.power.id], run);
                                 st.inverter[x].delayOffTimer = null;
                                 st.inverter[x].timeShutdown = time.epoch;
                             }, config.power.delayOff * 1000);
@@ -1050,7 +1050,7 @@ let
                     fan.faultStep = time.epochMin;
                 }
                 function fanSwitchNow() {
-                    esp.send(cfg.esp[config.espPower], true);
+                    send(cfg.esp[config.espPower], true);
                     fan.run = true;
                     fan.faultStep = time.epochMin;
                 }
@@ -1061,13 +1061,13 @@ let
                     } else if (newState == true) {
                         if (time.epoch - fan.delayTimer >= config.delayOn) {
                             fan.run = newState;
-                            esp.send(cfg.esp[config.espPower], newState);
+                            send(cfg.esp[config.espPower], newState);
                             fan.delayStep = false;
                             return true;
                         }
                     } else if (time.epoch - fan.delayTimer >= config.delayOff) {
                         fan.run = newState;
-                        esp.send(cfg.esp[config.espPower], newState);
+                        send(cfg.esp[config.espPower], newState);
                         fan.delayStep = false;
                         return true;
                     }
@@ -1122,9 +1122,9 @@ let
                         log("welder detected: " + state.esp[cfg.inverter[0].espPower] + "w - shutting down all pumps", index, 2);
                         st.welder = true;
                         st.priority[0] = false;
-                        ha.send("input_boolean.auto_compressor", false);
-                        ha.send("input_boolean.auto_pump_transfer", false);
-                        //    esp.send("uth-relay1", false);
+                        send("input_boolean.auto_compressor", false);
+                        send("input_boolean.auto_pump_transfer", false);
+                        //    send("uth-relay1", false);
                         // turn on fan
                     }
                 } else {
@@ -1166,7 +1166,7 @@ let
                     }
                     bat.percent = Math.round(voltPercent(volts, config));
                     //console.log("bat percent: "+ bat.percent)
-                    ha.send("battery_" + config.name, bat.percent, "%");
+                    send("battery_" + config.name, bat.percent, "%");
                     if (config.sensorWatt != undefined) {
                         let watts = state.entity[config.sensorWatt].state;
                         if (Number.isFinite(watts)) {
@@ -1195,11 +1195,11 @@ let
                             nv.battery[x].discharge.today += discharge;
                             nv.battery[x].charge.total += charge;
                             nv.battery[x].discharge.total += discharge;
-                            ha.send("kwh_battery_" + config.name + "_charge_today", (Math.round((nv.battery[x].charge.today / 1000) * 10) / 10), "KWh");
-                            ha.send("kwh_battery_" + config.name + "_discharge_today", (Math.round((nv.battery[x].discharge.today / 1000) * 10) / 10), "KWh");
-                            //ha.send("battery_" + config.name + "_charge_total", Math.round(nv.battery[x].charge.total / 1000), "KWh");
-                            //ha.send("battery_" + config.name + "_discharge_total", Math.round(nv.battery[x].discharge.total / 1000), "KWh");
-                            ha.send("battery_" + config.name + "_cycles", nv.battery[x].cycles, "x");
+                            send("kwh_battery_" + config.name + "_charge_today", (Math.round((nv.battery[x].charge.today / 1000) * 10) / 10), "KWh");
+                            send("kwh_battery_" + config.name + "_discharge_today", (Math.round((nv.battery[x].discharge.today / 1000) * 10) / 10), "KWh");
+                            //send("battery_" + config.name + "_charge_total", Math.round(nv.battery[x].charge.total / 1000), "KWh");
+                            //send("battery_" + config.name + "_discharge_total", Math.round(nv.battery[x].discharge.total / 1000), "KWh");
+                            send("battery_" + config.name + "_cycles", nv.battery[x].cycles, "x");
                             bat.whPos = 0;
                             bat.whNeg = 0;
                             bat.min = time.min;
@@ -1209,7 +1209,7 @@ let
                                 ceff += nv.battery[x].charge.day[y];
                             for (let y = 0; y < nv.battery[x].discharge.day.length; y++)
                                 deff += nv.battery[x].discharge.day[y];
-                            ha.send("battery_" + config.name + "_efficiency", Math.round(((deff / ceff) * 100) * 10) / 10, "%");
+                            send("battery_" + config.name + "_efficiency", Math.round(((deff / ceff) * 100) * 10) / 10, "%");
                         }
                     }
                 }
@@ -1244,7 +1244,7 @@ let
                         entity.state = (Math.round(sum * 10) / 10);
                         entity.update = time.epoch;
                         // console.log("entity: " + config.name + " -  state: " + entity.state)
-                        ha.send("amp_" + config.name, (Math.round(sum * 10) / 10), "A");
+                        send("amp_" + config.name, (Math.round(sum * 10) / 10), "A");
                     }
                 }
                 for (let x = 0; x < cfg.sensor.watt.length; x++) {
@@ -1265,15 +1265,15 @@ let
                             if (config.solarPower == true) {
                                 let batWatts = state.entity[config.batteryWatt].state;
                                 if (Math.sign(batWatts) == -1 && batWatts <= ((sum) * -1)) {
-                                    ha.send("watt_" + config.name, 0, "W");
+                                    send("watt_" + config.name, 0, "W");
                                 } else {
                                     if (Number.isFinite(batWatts))
                                         entity.state = batWatts + sum;
-                                    ha.send("watt_" + config.name, ~~(batWatts + sum), "W");
+                                    send("watt_" + config.name, ~~(batWatts + sum), "W");
                                 }
                             } else {
                                 entity.state = ~~sum;
-                                ha.send("watt_" + config.name, ~~(sum), "W");
+                                send("watt_" + config.name, ~~(sum), "W");
                             }
                         }
                     } else if (config.sensorAmp != undefined && config.sensorVolt != undefined) {
@@ -1281,7 +1281,7 @@ let
                             , volts = state.entity[config.sensorVolt].state;
                         if (Number.isFinite(volts * amps)) entity.state = volts * amps;
                         else (entity.state = 0.0);
-                        ha.send("watt_" + config.name, ~~entity.state, "W");
+                        send("watt_" + config.name, ~~entity.state, "W");
                     }
                     if (config.record == true) {
                         if (Number.isFinite(entity.state) && Math.sign(entity.state) != -1)
@@ -1340,7 +1340,7 @@ let
                                 } else entity.state = parseFloat(data);
                                 if (entity.state != null)
                                     if (entity.state != null && Number.isFinite(entity.state)) {
-                                        ha.send("amp_" + config.name, Math.round(entity.state * 10) / 10, "A");
+                                        send("amp_" + config.name, Math.round(entity.state * 10) / 10, "A");
                                     }
                                 entity.update = time.epoch;
                                 // console.log("entity: " + config.name + " -  state: " + entity.state)
@@ -1375,11 +1375,11 @@ let
                                 }
                                 entity.state = final;
                                 if (entity.state != null && Number.isFinite(entity.state))
-                                    ha.send("volt_" + config.name, Math.round(final * 10) / 10, "V");
+                                    send("volt_" + config.name, Math.round(final * 10) / 10, "V");
                             } else if (config.multiplier != undefined) {    // standard multiplies
                                 entity.state = voltage * config.multiplier;
                                 if (entity.state != null && Number.isFinite(entity.state))
-                                    ha.send("volt_" + config.name, Math.round(entity.state * 10) / 10, "V");
+                                    send("volt_" + config.name, Math.round(entity.state * 10) / 10, "V");
                             } else entity.state = voltage;  // no multiplier
                             entity.update = time.epoch
                         });
@@ -1391,13 +1391,13 @@ let
                         if (config.entity != undefined && config.entity.length == 1 && !config.solarPower) {
                             log("creating listener for Watt sensor: " + config.name, index, 1);
                             em.on(config.entity[0], (data) => {
-                                console.log("sensor data: ", data)
+                                //  console.log("sensor data: ", data)
                                 let newData;
                                 if (config.multiplier != undefined) newData = parseFloat(data) * config.multiplier;
                                 else newData = parseFloat(data);
                                 if (Number.isFinite(entity.state)) {
                                     entity.state = newData;
-                                    ha.send("watt_" + config.name, ~~entity.state, "W");
+                                    send("watt_" + config.name, ~~entity.state, "W");
                                 } entity.state = 0.0;
                                 entity.update = time.epoch
                             });
@@ -1450,7 +1450,7 @@ let
                             if (config.multiplier != undefined) {
                                 entity.state = parseFloat(data) * config.multiplier;
                                 if (entity.state != null && Number.isFinite(entity.state))
-                                    ha.send("temp_" + config.name, Math.round(entity.state * 10) / 10, config.unit);
+                                    send("temp_" + config.name, Math.round(entity.state * 10) / 10, config.unit);
                             }
                             else entity.state = parseFloat(data);
                         });
@@ -1523,7 +1523,11 @@ let
                     });
                 });
                 cfg.solar.priority.queue.forEach(_ => {
-                    state.auto[index].priority.queue.push({ state: null, delayStep: false, delayStepSun: false, delayTimer: time.epoch, delayTimerSun: time.epoch })
+                    state.auto[index].priority.queue.push(
+                        {
+                            state: null, delayStep: false, delayStepSun: false, delayTimer: time.epoch, delayTimerSun: time.epoch,
+                            boot: false,
+                        })
                 });
                 cfg.battery.forEach(_ => {
                     state.auto[index].battery.push({ percent: null, min: null, whPos: 0, whNeg: 0, floatStep: false, floatTimer: null })
@@ -1531,16 +1535,15 @@ let
                 setTimeout(() => {
                     setInterval(() => {
                         calcSensor(); checkBattery(); checkGrid();
-
                         if (cfg.solar.inverterAuto != undefined && state.entity[cfg.solar.inverterAuto]
                             && state.entity[cfg.solar.inverterAuto].state == true) {
                             inverterAuto();
-                            // if (st.welder.detect == false) priorityAuto();
+                            // if (st.welder.detect == false) 
+                            if (cfg.solar.priority == undefined) priorityAuto();
                         }
                         if (cfg.solar.priority != undefined && cfg.solar.priority.haAuto
                             && state.entity[cfg.solar.priority.haAuto] && state.entity[cfg.solar.priority.haAuto].state == true)
                             priorityAuto();
-
                         if (cfg.fan != undefined && cfg.fan.sensor.temp != undefined) checkRoomTemp();
                     }, 1e3);      // set minimum rerun time, otherwise this automation function will only on ESP and HA events
                 }, 3e3);
@@ -1586,10 +1589,10 @@ let
             }
             function timer() {
                 if (time.hour == 8 && time.min == 0) {
-                    //  esp.send("power1-relay2", true); // fan
+                    //  send("power1-relay2", true); // fan
                 }
                 if (time.hour == 17 && time.min == 0) {
-                    //   esp.send("power1-relay2", false); // fan
+                    //   send("power1-relay2", false); // fan
                 }
             }
             function recorder(obj, diff, name) {  // nv is written every 60 seconds
@@ -1613,11 +1616,11 @@ let
                 for (let x = 0; x < obj.day.length; x++) last30Days += obj.day[x];
                 for (let x = 0; x < obj.month.length; x++) lastMonth += obj.month[x];
 
-                ha.send("kwh_" + name + "_total", Math.round((obj.total / 1000) * 10) / 10, "kWh");
-                ha.send("kwh_" + name + "_hour", Math.round((lastHour / 1000) * 100) / 100, "kWh");
-                ha.send("kwh_" + name + "_day", Math.round((lastDay / 1000) * 100) / 100, "kWh");
-                ha.send("kwh_" + name + "_30days", Math.round((last30Days / 1000) * 10) / 10, "kWh");
-                ha.send("kwh_" + name + "_12months", Math.round((last30Days / 1000)), "kWh");
+                send("kwh_" + name + "_total", Math.round((obj.total / 1000) * 10) / 10, "kWh");
+                send("kwh_" + name + "_hour", Math.round((lastHour / 1000) * 100) / 100, "kWh");
+                send("kwh_" + name + "_day", Math.round((lastDay / 1000) * 100) / 100, "kWh");
+                send("kwh_" + name + "_30days", Math.round((last30Days / 1000) * 10) / 10, "kWh");
+                send("kwh_" + name + "_12months", Math.round((last30Days / 1000)), "kWh");
             }
         }
     ];
@@ -1717,7 +1720,7 @@ let
                             log("server lost sync, reregistering...");
                             setTimeout(() => {
                                 sys.register();
-                                if (cfg.ha != undefined) { send("haFetch"); }
+                                if (cfg.ha != undefined) { udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1'); }
                             }, 1e3);
                         }
                         break;
@@ -1764,18 +1767,18 @@ let
                     cfg.heartbeat.esp.forEach((e, x) => {
                         clearInterval(heartbeat.timer[x]);
                         heartbeat.timer[x] = setInterval(() => {
-                            if (heartbeat.state) { esp.send(e.name, false); heartbeat.state = false; }
-                            else { esp.send(e.name, true); heartbeat.state = true; }
+                            if (heartbeat.state) { send(e.name, false); heartbeat.state = false; }
+                            else { send(e.name, true); heartbeat.state = true; }
                         }, e.interval * 1e3);
                     });
                 }
             }
             if (cfg.telegram != undefined) obj.telegram = true;
-            send("register", obj, cfg.moduleName);
+            udp.send(JSON.stringify({ type: "register", obj, name: cfg.moduleName }), 65432, '127.0.0.1');
             if (cfg.telegram != undefined) {
                 if (nv.telegram == undefined) nv.telegram = [];
                 else for (let x = 0; x < nv.telegram.length; x++) {
-                    send("telegram", { class: "sub", id: nv.telegram[x].id });
+                    udp.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: nv.telegram[x].id } }), 65432, '127.0.0.1');
                 }
             }
         },
@@ -1814,14 +1817,7 @@ let
                 },
             };
             time.startTime();
-            esp = { send: function (name, state) { send("espState", { name: name, state: state }) } };
-            ha = {
-                getEntities: function () { send("haQuery") },
-                send: function (name, state, unit, id) {  // if ID is not expressed for sensor, then sensor data will be send to HA system 0
-                    if (isFinite(Number(name)) == true) send("haState", { name: cfg.ha[name], state: state, unit: unit, haID: id });
-                    else send("haState", { name: name, state: state, unit: unit, haID: id });
-                }
-            };
+            ha = { getEntities: function () { send("haQuery") }, };
             fs = require('fs');
             events = require('events');
             em = new events.EventEmitter();
@@ -1891,7 +1887,7 @@ let
                         log("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
                         nv.telegram.push(buf);
                         bot(msg.chat.id, 'registered');
-                        send("telegram", { class: "sub", id: msg.from.id });
+                        udp.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
                         file.write.nv();
                     } else bot(msg.chat.id, 'already registered');
                 },
@@ -1923,15 +1919,44 @@ let
                     bot(msg.from.id, name, buf);
                 },
             };
-            bot = function (id, data, obj) { send("telegram", { class: "send", id, data, obj }) };
-            send = function (type, obj, name) { udp.send(JSON.stringify({ type, obj, name }), 65432, '127.0.0.1') };
+            bot = function (id, data, obj) {
+                udp.send(JSON.stringify({ type: "telegram", obj: { class: "send", id, data, obj } }), 65432, '127.0.0.1');
+            };
+            send = function (name, state, unit, id) {
+                for (let x = 0; x < cfg.esp.length; x++) {
+                    if (name == cfg.esp[x]) {
+                        udp.send(JSON.stringify({
+                            type: "espState",
+                            obj: { name: name, state: state }
+                        }), 65432, '127.0.0.1')
+                        return;
+                    }
+                }
+                if (name != "coreData")
+                    udp.send(JSON.stringify({
+                        type: "haState",
+                        obj: { name: name, state: state, unit: unit, haID: id }
+                    }), 65432, '127.0.0.1')
+                else udp.send(JSON.stringify({
+                    type: "coreData",
+                    obj: state
+                }), 65432, '127.0.0.1')
+            };
             coreData = function (name) {
                 for (let x = 0; x < state.coreData.length; x++) if (state.coreData[x].name == name) return state.coreData[x].data;
                 return {};
             };
             log = function (message, index, level) {
-                if (level == undefined) send("log", { message: message, mod: cfg.moduleName, level: index });
-                else send("log", { message: message, mod: state.auto[index].name, level: level });
+                if (level == undefined) {
+                    udp.send(JSON.stringify({
+                        type: "log",
+                        obj: { message: message, mod: cfg.moduleName, level: index }
+                    }), 65432, '127.0.0.1');
+                }
+                else udp.send(JSON.stringify({
+                    type: "log",
+                    obj: { message: message, mod: state.auto[index].name, level: level }
+                }), 65432, '127.0.0.1');
             };
             sys.boot(0);
         },
@@ -1976,10 +2001,10 @@ let
                     log("registered with TWIT Core", 1);
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
                         log("fetching Home Assistant entities", 1);
-                        send("haFetch");
+                        udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         bootWait = setInterval(() => {
                             log("HA fetch is failing, retrying...", 2);
-                            send("haFetch");
+                            udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         }, 10e3);
                     } else sys.boot(4);
                     break;
@@ -1991,7 +2016,7 @@ let
                     }
                     if (cfg.esp != undefined && cfg.esp.length > 0) {
                         log("fetching esp entities", 1);
-                        send("espFetch");
+                        udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         setTimeout(() => { sys.boot(5); }, 1e3);
                     } else sys.boot(5);
                     break;
@@ -2000,7 +2025,7 @@ let
                         log("ESP fetch complete", 1);
                     state.online = true;
                     automation.forEach((func, index) => { func(index) });
-                    setInterval(() => { send("heartBeat"); time.boot++; }, 1e3);
+                    setInterval(() => { udp.send(JSON.stringify({ type: "heartbeat" }), 65432, '127.0.0.1'); time.boot++; }, 1e3);
                     break;
             }
         },
