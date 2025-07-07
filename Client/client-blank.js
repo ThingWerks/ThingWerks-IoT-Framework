@@ -60,7 +60,7 @@ let
                             log("server lost sync, reregistering...");
                             setTimeout(() => {
                                 sys.register();
-                                if (cfg.ha != undefined) { send("haFetch"); }
+                                if (cfg.ha != undefined) { udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1'); }
                             }, 1e3);
                         }
                         break;
@@ -272,15 +272,15 @@ let
                         return;
                     }
                 }
-                for (let x = 0; x < cfg.ha.length; x++) {
-                    if (name == cfg.ha[x]) {
-                        udp.send(JSON.stringify({
-                            type: "haState",
-                            obj: { name: name, state: state, unit: unit, haID: id }
-                        }), 65432, '127.0.0.1')
-                        return;
-                    }
-                }
+                if (name != "coreData")
+                    udp.send(JSON.stringify({
+                        type: "haState",
+                        obj: { name: name, state: state, unit: unit, haID: id }
+                    }), 65432, '127.0.0.1')
+                else udp.send(JSON.stringify({
+                    type: "coreData",
+                    obj: state
+                }), 65432, '127.0.0.1')
             };
             coreData = function (name) {
                 for (let x = 0; x < state.coreData.length; x++) if (state.coreData[x].name == name) return state.coreData[x].data;
@@ -356,8 +356,7 @@ let
                     }
                     if (cfg.esp != undefined && cfg.esp.length > 0) {
                         log("fetching esp entities", 1);
-                        udp.send(JSON.stringify({ type: "espFetchespFetch" }), 65432, '127.0.0.1');
-
+                        udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         setTimeout(() => { sys.boot(5); }, 1e3);
                     } else sys.boot(5);
                     break;
@@ -366,7 +365,7 @@ let
                         log("ESP fetch complete", 1);
                     state.online = true;
                     automation.forEach((func, index) => { func(index) });
-                    setInterval(() => { send("heartBeat"); time.boot++; }, 1e3);
+                    setInterval(() => { udp.send(JSON.stringify({ type: "heartbeat" }), 65432, '127.0.0.1'); time.boot++; }, 1e3);
                     break;
             }
         },
