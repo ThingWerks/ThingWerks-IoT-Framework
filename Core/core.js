@@ -129,113 +129,111 @@ if (isMainThread) {
                     }
                 }
             },
-            ws: function () {
-                for (let haNum = 0; haNum < cfg.homeAssistant.length; haNum++) {
-                    ws.push({});
-                    let client = state.ha[haNum].ws;
-                    let config = cfg.homeAssistant[haNum];
-                    ws[haNum].connect("ws://" + config.address + ":" + config.port + "/api/websocket");
-                    ws[haNum].on('connectFailed', function (error) { if (!client.error) { log(error.toString(), 1, 3); client.error = true; } });
-                    ws[haNum].on('connect', function (socket) {
-                        client.reply = true;
-                        client.online = true;
-                        client.error = false;
-                        socket.on('error', function (error) {
-                            if (!client.error) { log("websocket (" + a.color("white", config.address) + ") " + error.toString(), 1, 3); client.error = true; }
-                        });
-                        socket.on('message', function (message) {
-                            let buf = JSON.parse(message.utf8Data);
-                            switch (buf.type) {
-                                case "pong":
-                                    client.reply = true;
-                                    client.online = true;
-                                    client.pingsLost = 0;
-                                    let timeFinish = new Date().getMilliseconds();
-                                    let timeResult = timeFinish - client.timeStart;
-                                    if (timeResult > 1000) log("websocket (" + a.color("white", config.address) + ") ping is lagging - delay is: " + timeResult + "ms", 1, 0);
-                                    break;
-                                case "auth_required":
-                                    log("Websocket (" + a.color("white", config.address) + ") authenticating", 1);
-                                    send({ type: "auth", access_token: config.token, });
-                                    break;
-                                case "auth_ok":
-                                    for (let x = 0; x < state.client.length; x++) {
-                                        udp.send(JSON.stringify({ type: "haFetchAgain" }), state.client[x].port);
-                                    }
-                                    log("Websocket (" + a.color("white", config.address) + ") authentication accepted", 1);
-                                    log("Websocket (" + a.color("white", config.address) + ") subscribing to event listener", 1);
-                                    send({ id: 1, type: "subscribe_events", event_type: "state_changed" });
-                                    client.timeStart = new Date().getMilliseconds();
-                                    send({ id: client.id++, type: "ping" });
-                                    setTimeout(() => { client.pingsLost = 0; send({ id: client.id++, type: "ping" }); client.reply = true; ping(); }, 10e3);
-                                    break;
-                                case "result":
-                                    break;
-                                case "event":
-                                    switch (buf.event.event_type) {
-                                        case "state_changed":
-                                            if (config.legacyAPI == false && state.perf.ha[haNum].wait == true) {
-                                                let delay = ha.perf(haNum); // Correct call: use 'ha.perf' and pass haNum
-                                                log("ws delay was: " + delay, 0, 0)
-                                            }
-                                            let ibuf = undefined;
-                                            if (buf.event.data.new_state != undefined
-                                                && buf.event.data.new_state != null) ibuf = buf.event.data.new_state.state;
-                                            let obuf = undefined;
-                                            if (logs.ws[haNum][client.logStep] == undefined) logs.ws[haNum].push(buf.event);
-                                            else logs.ws[haNum][client.logStep] = buf.event
-                                            if (client.logStep < 200) client.logStep++; else client.logStep = 0;
-                                            for (let x = 0; x < state.client.length; x++) {
-                                                for (let y = 0; y < state.client[x].ha.length; y++) {
-                                                    if (state.client[x].ha[y] == buf.event.data.entity_id) {
-                                                        if (ibuf === "on") obuf = true;
-                                                        else if (ibuf === "off") obuf = false;
-                                                        else if (ibuf === null || ibuf == undefined) log("HA (" + a.color("white", config.address) + ") is sending bogus (null/undefined) data: " + ibuf, 1, 2);
-                                                        else if (ibuf === "unavailable") {
-                                                            if (cfg.telegram.logESPDisconnect == true)
-                                                                log("HA (" + a.color("white", config.address) + "): ESP Module has gone offline: " + buf.event.data.new_state.entity_id + ibuf, 1, 2);
-                                                        }
-                                                        else if (!isNaN(parseFloat(Number(ibuf))) == true
-                                                            && isFinite(Number(ibuf)) == true && ibuf != null) obuf = ibuf;
-                                                        else if (ibuf.length == 32) { obuf = ibuf }
-                                                        else log("HA (" + a.color("white", config.address) + ") is sending bogus data = Entity: "
-                                                            + buf.event.data.new_state.entity_id + " Bytes: " + ibuf.length + " data: " + ibuf, 1, 2);
-                                                        if (obuf != undefined) {
-                                                            udp.send(JSON.stringify({ type: "haStateUpdate", obj: { name: state.client[x].ha[y], state: obuf } }), state.client[x].port);
-                                                        }
+            ws: function (haNum) {
+                ws.push({});
+                let client = state.ha[haNum].ws;
+                let config = cfg.homeAssistant[haNum];
+                ws[haNum].connect("ws://" + config.address + ":" + config.port + "/api/websocket");
+                ws[haNum].on('connectFailed', function (error) { if (!client.error) { log(error.toString(), 1, 3); client.error = true; } });
+                ws[haNum].on('connect', function (socket) {
+                    client.reply = true;
+                    client.online = true;
+                    client.error = false;
+                    socket.on('error', function (error) {
+                        if (!client.error) { log("websocket (" + a.color("white", config.address) + ") " + error.toString(), 1, 3); client.error = true; }
+                    });
+                    socket.on('message', function (message) {
+                        let buf = JSON.parse(message.utf8Data);
+                        switch (buf.type) {
+                            case "pong":
+                                client.reply = true;
+                                client.online = true;
+                                client.pingsLost = 0;
+                                let timeFinish = new Date().getMilliseconds();
+                                let timeResult = timeFinish - client.timeStart;
+                                if (timeResult > 1000) log("websocket (" + a.color("white", config.address) + ") ping is lagging - delay is: " + timeResult + "ms", 1, 0);
+                                break;
+                            case "auth_required":
+                                log("Websocket (" + a.color("white", config.address) + ") authenticating", 1);
+                                send({ type: "auth", access_token: config.token, });
+                                break;
+                            case "auth_ok":
+                                for (let x = 0; x < state.client.length; x++) {
+                                    udp.send(JSON.stringify({ type: "haFetchAgain" }), state.client[x].port);
+                                }
+                                log("Websocket (" + a.color("white", config.address) + ") authentication accepted", 1);
+                                log("Websocket (" + a.color("white", config.address) + ") subscribing to event listener", 1);
+                                send({ id: 1, type: "subscribe_events", event_type: "state_changed" });
+                                client.timeStart = new Date().getMilliseconds();
+                                send({ id: client.id++, type: "ping" });
+                                setTimeout(() => { client.pingsLost = 0; send({ id: client.id++, type: "ping" }); client.reply = true; ping(); }, 10e3);
+                                break;
+                            case "result":
+                                break;
+                            case "event":
+                                switch (buf.event.event_type) {
+                                    case "state_changed":
+                                        if (config.legacyAPI == false && state.perf.ha[haNum].wait == true) {
+                                            let delay = ha.perf(haNum); // Correct call: use 'ha.perf' and pass haNum
+                                            log("ws delay was: " + delay, 0, 0)
+                                        }
+                                        let ibuf = undefined;
+                                        if (buf.event.data.new_state != undefined
+                                            && buf.event.data.new_state != null) ibuf = buf.event.data.new_state.state;
+                                        let obuf = undefined;
+                                        if (logs.ws[haNum][client.logStep] == undefined) logs.ws[haNum].push(buf.event);
+                                        else logs.ws[haNum][client.logStep] = buf.event
+                                        if (client.logStep < 200) client.logStep++; else client.logStep = 0;
+                                        for (let x = 0; x < state.client.length; x++) {
+                                            for (let y = 0; y < state.client[x].ha.length; y++) {
+                                                if (state.client[x].ha[y] == buf.event.data.entity_id) {
+                                                    if (ibuf === "on") obuf = true;
+                                                    else if (ibuf === "off") obuf = false;
+                                                    else if (ibuf === null || ibuf == undefined) log("HA (" + a.color("white", config.address) + ") is sending bogus (null/undefined) data: " + ibuf, 1, 2);
+                                                    else if (ibuf === "unavailable") {
+                                                        if (cfg.telegram.logESPDisconnect == true)
+                                                            log("HA (" + a.color("white", config.address) + "): ESP Module has gone offline: " + buf.event.data.new_state.entity_id + ibuf, 1, 2);
+                                                    }
+                                                    else if (!isNaN(parseFloat(Number(ibuf))) == true
+                                                        && isFinite(Number(ibuf)) == true && ibuf != null) obuf = ibuf;
+                                                    else if (ibuf.length == 32) { obuf = ibuf }
+                                                    else log("HA (" + a.color("white", config.address) + ") is sending bogus data = Entity: "
+                                                        + buf.event.data.new_state.entity_id + " Bytes: " + ibuf.length + " data: " + ibuf, 1, 2);
+                                                    if (obuf != undefined) {
+                                                        udp.send(JSON.stringify({ type: "haStateUpdate", obj: { name: state.client[x].ha[y], state: obuf } }), state.client[x].port);
                                                     }
                                                 }
                                             }
-                                            break;
-                                    }
-                                    break;
-                            }
-                        });
-                        em.on('send' + haNum, function (data) { send(data) });
-                        function send(data) {
-                            try { socket.sendUTF(JSON.stringify(data)); }
-                            catch (error) { log(error, 1, 3) }
-                        }
-                        function ping() {
-                            if (client.reply == false) {
-                                if (client.pingsLost < 2) {
-                                    log("websocket (" + a.color("white", config.address) + ") ping never got replied in 10 sec", 1, 3);
-                                    client.pingsLost++;
+                                        }
+                                        break;
                                 }
-                                else { socket.close(); haReconnect("ping timeout"); return; }
-                            }
-                            client.reply = false;
-                            client.timeStart = new Date().getMilliseconds();
-                            send({ id: client.id++, type: "ping" });
-                            setTimeout(() => { ping(); }, 10e3);
-                        }
-                        function haReconnect(error) {
-                            log("websocket (" + a.color("white", config.address) + ") " + error.toString(), 1, 3);
-                            ws[haNum].connect("ws://" + config.address + ":" + config.port + "/api/websocket");
-                            setTimeout(() => { if (client.reply == false) { haReconnect("retrying..."); } }, 10e3);
+                                break;
                         }
                     });
-                }
+                    em.on('send' + haNum, function (data) { send(data) });
+                    function send(data) {
+                        try { socket.sendUTF(JSON.stringify(data)); }
+                        catch (error) { log(error, 1, 3) }
+                    }
+                    function ping() {
+                        if (client.reply == false) {
+                            if (client.pingsLost < 2) {
+                                log("websocket (" + a.color("white", config.address) + ") ping never got replied in 10 sec", 1, 3);
+                                client.pingsLost++;
+                            }
+                            else { socket.close(); haReconnect("ping timeout"); return; }
+                        }
+                        client.reply = false;
+                        client.timeStart = new Date().getMilliseconds();
+                        send({ id: client.id++, type: "ping" });
+                        setTimeout(() => { ping(); }, 10e3);
+                    }
+                    function haReconnect(error) {
+                        log("websocket (" + a.color("white", config.address) + ") " + error.toString(), 1, 3);
+                        ws[haNum].connect("ws://" + config.address + ":" + config.port + "/api/websocket");
+                        setTimeout(() => { if (client.reply == false) { haReconnect("retrying..."); } }, 10e3);
+                    }
+                });
             },
             perf: function (num) {
                 state.perf.ha[num].wait = false;
@@ -390,7 +388,7 @@ if (isMainThread) {
                         }
                         if (sensor == undefined) {
                             if (buf.obj.unit != undefined && buf.obj.name != undefined) {
-                                //      log("sensor name: " + buf.obj.name + "  value: " + buf.obj.state + " unit: " + buf.obj.unit, 0, 0);
+                                log("sensor name: " + buf.obj.name + "  value: " + buf.obj.state + " unit: " + buf.obj.unit, 0, 0);
                                 hass[(buf.obj.haID == undefined) ? 0 : buf.obj.haID].states.update('sensor', "sensor." + buf.obj.name,
                                     { state: buf.obj.state, attributes: { state_class: 'measurement', unit_of_measurement: buf.obj.unit } });
                                 return;
@@ -568,8 +566,8 @@ if (isMainThread) {
                             case "state":
                                 //   console.log("incoming state change: ", state.esp[data.esp].entity[data.obj.io]);
                                 // console.log(data);
-                                state.esp[data.esp].entity[data.obj.io].state = data.obj.state;   // store the state locally 
-                                state.esp[data.esp].entity[data.obj.io].update = time.stamp;
+                                try { state.esp[data.esp].entity[data.obj.io].state = data.obj.state; } catch { }   // store the state locally 
+                                try { state.esp[data.esp].entity[data.obj.io].update = time.stamp; } catch { }
                                 for (let a = 0; a < state.client.length; a++) {        // scan all the UDP clients and find which one cares about this entity
                                     for (let b = 0; b < state.client[a].esp.length; b++) {                 // scan each UDP clients registered ESP entity list
                                         if (state.client[a].esp[b] == state.esp[data.esp].entity[data.obj.io].name) {     // if there's a match, send UDP client the data
@@ -591,6 +589,7 @@ if (isMainThread) {
             boot: function (step) {
                 switch (step) {
                     case 0:     // read config.json file
+
                         fs = require('fs')
                         workingDir = require('path').dirname(require.main.filename);
                         console.log("Loading config data...");
@@ -723,56 +722,77 @@ if (isMainThread) {
                         sys.boot(3);
                         break;
                     case 3:     // connect to Home Assistant
+                        process.on('unhandledRejection', (reason, promise) => {
+                            // console.error('Unhandled Rejection:', reason);
+                        });
                         if (cfg.homeAssistant) {
+                            let total = cfg.homeAssistant.filter(h => h.enable).length;
+                            let completed = 0;
                             for (let x = 0; x < cfg.homeAssistant.length; x++) {
-                                if (cfg.homeAssistant[x].enable == true) {
-                                    // Pass the index 'x' to haconnect
-                                    haConnect(x);
+                                if (cfg.homeAssistant[x].enable) {
+                                    if (!state.ha[x]) state.ha[x] = {};
+                                    state.ha[x].retries = 0;
+                                    state.ha[x].connected = false;
                                     log("Legacy API - connecting to " + a.color("white", cfg.homeAssistant[x].address), 1);
-                                    function haConnect(haIndex) {
-                                        hass[haIndex].status()
-                                            .then(data => {
-                                                log("Legacy API (" + a.color("white", cfg.homeAssistant[haIndex].address) + ") service: " + a.color("green", data.message), 1);
-                                                // Correctly call refreshEntities using the 'ha' object
-                                                ha.refreshEntities(haIndex)
-                                                    .then(success => {
-                                                        if (success) {
-                                                            if (haIndex == cfg.homeAssistant.length - 1) {
-                                                                if (state.ha[haIndex].errorStart == true) {
-                                                                    log("Legacy API has starting error - delaying UDP connections for 30 seconds...");
-                                                                    setTimeout(() => sys.boot(4), 30e3);
-                                                                } else { sys.boot(4); }
-                                                            }
-                                                        } else {
-                                                            log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) initial entity refresh failed, retrying connection...`, 3);
-                                                            setTimeout(() => { haConnect(haIndex); }, 10e3);
-                                                        }
-                                                    })
-                                                    .catch(err => {
-                                                        log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) an unexpected error occurred during initial entity refresh: ${err}`, 1, 2);
-                                                        setTimeout(() => { haConnect(haIndex); }, 10e3);
-                                                    });
+                                    haConnect(x, done);
+                                }
+                            }
+                            // Called when a server's initial connection attempt finishes
+                            function done() {
+                                completed++;
+                                if (completed === total) {
+                                    sys.boot(4);
+                                }
+                            }
+                        } else { sys.boot(4); }
+                        function haConnect(haIndex, initialDone) {
+                            const tryConnect = () => {
+                                hass[haIndex].status()
+                                    .then(data => {
+                                        log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) service: ${a.color("green", data.message)}`, 1);
+                                        state.ha[haIndex].connected = true;
+                                        state.ha[haIndex].retries = 0;
+                                        state.ha[haIndex].errorStart = false;
+                                        log("stating websocket service...");
+                                        ha.ws(haIndex);
+                                        ha.refreshEntities(haIndex)
+                                            .then(success => {
+                                                if (success) {
+                                                    initialDone?.();
+                                                } else {
+                                                    log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) initial entity refresh failed, retrying...`, 3);
+                                                    initialDone?.(); // Proceed with boot even if refresh fails
+                                                    setTimeout(tryConnect, 10000);
+                                                }
                                             })
                                             .catch(err => {
-                                                setTimeout(() => {
-                                                    log("Legacy API (" + a.color("white", cfg.homeAssistant[haIndex].address) + ") service: Connection failed, retrying....", 1, 2)
-                                                    state.ha[haIndex].errorStart = true;
-                                                    haConnect(haIndex);
-                                                }, 10e3);
-                                                log(err, 1, 2);
+                                                log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) unexpected error during refresh: ${err}`, 1, 2);
+                                                initialDone?.();
+                                                setTimeout(tryConnect, 10000);
                                             });
-                                    }
-                                } else if (x == cfg.homeAssistant.length - 1) sys.boot(4);
-                            }
-                        } else sys.boot(4);
+                                    })
+                                    .catch(err => {
+                                        if (state.ha[haIndex].retries === 0) {
+                                            log(`Legacy API (${a.color("white", cfg.homeAssistant[haIndex].address)}) service: Connection failed, retrying....`, 1, 2);
+                                            log(err.message || err, 1, 2);
+                                            state.ha[haIndex].errorStart = true;
+                                        }
+                                        state.ha[haIndex].retries++;
+                                        // If this is the first attempt, call initialDone to allow boot
+                                        if (state.ha[haIndex].retries === 1) {
+                                            initialDone?.();
+                                        }
+                                        setTimeout(tryConnect, 10000);
+                                    });
+                            };
+                            tryConnect();
+                        }
                         break;
                     case 4:     // start system timer - starts when initial HA Fetch completes
                         udp.on('listening', () => { log("starting UDP Server - Interface: 127.0.0.1 Port: 65432"); });
                         udp.on('error', (err) => { console.error(`udp server error:\n${err.stack}`); udp.close(); });
                         udp.on('message', (msg, info) => { sys.udp(msg, info); });
                         udp.bind(65432, "127.0.0.1");
-                        log("stating websocket service...");
-                        if (cfg.homeAssistant != undefined) ha.ws();
                         setInterval(() => { sys.watchDog(); }, 1e3);
                         setTimeout(() => log("TW Core just went online", 0, 2), 20e3);
                         break;
@@ -1138,7 +1158,7 @@ if (!isMainThread) {
                 if (exist == 0)                                                 // dont add this entity if its already in the list 
                     io = state.entity.push({ name: data.config.objectId, type: data.type, id: data.id }) - 1;
                 if (state.boot == false)
-                      log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
+                    // log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
                     parentPort.postMessage({
                         type: "esp", class: "entity", esp: workerData.esp,
                         obj: { id: data.id, io, name: data.config.objectId, type: data.type }
@@ -1168,7 +1188,7 @@ if (!isMainThread) {
                         if (data.config.objectId.includes("wifi"))
                             setTimeout(() => {
                                 log("ESP module - " + a.color("green", espClient.name) + " - connected: " + a.color("white", espClient.ip) + " - "
-                                + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
+                                    + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
                             }, 10);
                         setTimeout(() => { state.boot = true; }, 20);   // indicate booted so not to show entity names again
                     }
