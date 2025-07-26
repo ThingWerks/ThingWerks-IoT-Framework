@@ -16,7 +16,7 @@ let
         ],
         heartbeat: {
             esp: [
-                { name: "lth-myEspEntity", interval: 3 }    // send a heartbeat to an ESP switch, interval in seconds 
+                { name: "myEspSwitchEntity", interval: 3 }    // send a heartbeat to an ESP switch, interval in seconds 
             ]
         },
         myAutomationConfigData: {      // create your own area for non-volatile config data for each function if needed
@@ -24,42 +24,54 @@ let
             params: true
         },
     },
-    automation = [                                                          // create an (index) => {},  array member function for each automation you want to create
-        (index) => {                                                        // each automation is ran with every incoming ESPHome or Home Assistant event  
-            if (!state.auto[index]) init();                                 // initialize automation
-            let st = state.auto[index];                                     // set automation state object's shorthand name to "st" (state) 
+    automation = {                                                          // create an (index) => {},  array member function for each automation you want to create
+        myFunction1: function (name) {                                      // each automation is ran with every incoming ESPHome or Home Assistant event  
+            if (!state.auto[name]) init();                                  // initialize automation
+            let st = state.auto[name];                                      // set automation state object's shorthand name to "st" (state) 
 
             function init() {                                               // the init() function is called only once at the start of each automation
-                state.auto.push({                                           // create object for this automation in local state
-                    name: "My-Auto-System1",                                // give this automation a name 
+                state.auto[name] = {                                           // create object for this automation in local state                             // give this automation a name 
                     example: { started: false, step: time.sec }             // initialize an object for each of this automation's devices or features (volatile data) 
-                });
-                setInterval(() => { automation[index](index); }, 1e3);      // set minimum rerun time, otherwise this automation function will only run on ESP and HA push events
+                };
+                setInterval(() => { automation[name](name); }, 1e3);        // set minimum rerun time, otherwise this automation function will only run on ESP and HA push events
                 setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds (in addition to incoming ESP or Home Assistant events)
-                log("system started", index, 1);                            // log automation start with index number and severity (0: debug, 1:event, 2: warning, 3: error)
+                log("automation starting...", name, 1);                     // log automation start with index number and severity (0: debug, 1:event, 2: warning, 3: error)
                 log(cfg.myAutomationConfigData.test)                        // log some string stored in your non-volatile data
                 em.on("input_button.test", () => button.test());            // create an event emitter for HA or ESP entity that calls a function when data is received
                 em.on("power1-relay1", (newState) => {                      // an event emitter for HA or ESP device that directly performs a function
-                    log("my esp toggle function", index, 1);
+                    log("my esp toggle function", name, 1);
                 });
-                send("coreData", { register: true, name: ["myObject1", "myObject2"] });     // optional - register with core to receive data from other clients
-
             }
 
 
-            let button = {                                                  // example methods of toggling ESP or Home Assistant entities and sensors
-                test: function () {                                         // example object member function called by emitter
-                    ha.send("switch.fan_exhaust_switch", false);            // different methods to set state of HA and ESP entities
-                    ha.send("input_boolean.fan_auto", true);
-                    ha.send("switch.fan_bed_switch", false);
-                    esp.send("myEspEntity", true);                          // call esp device by name
-                    ha.send("volts_dc_Battery_turnicated", ~~parseFloat(st.voltsDC), "v");    // send sensor data to HA. your sensor name, value, unit of your choice
-                    ha.send("volts_dc_Battery_rounded", Math.round(parseFloat(st.voltsDC) * 10) / 10, "v");    // send sensor data to HA. your sensor name, value, unit of your choice
+            send("cdata", {  // optional - register with core to receive data from other clients
+                register: true,
+                name: ["myObject1", "myObject2"]
+            });
+            em.on("test", (newState) => {
+                if (state.entity["test"].state) console.log("coredata listener test: ", newState)
+                else console.log("coredata listener test: false");
+            })
+            send("cdata", {
+                name: "test",
+                state: true,
+                persist: true
+            });
+
+
+
+            let button = {                                      // example methods of toggling ESP or Home Assistant entities and sensors
+                test: function () {                             // example object member function called by emitter
+                    send("switch.fan_exhaust_switch", false);   // different methods to set state of HA and ESP entities
+                    send("input_boolean.fan_auto", true);
+                    send("switch.fan_bed_switch", false);
+                    send("myEspEntity", true);                  // call esp device by name
+                    send("volts_dc_Battery_turnicated", ~~parseFloat(st.voltsDC), "v");     // send sensor data to HA. your sensor name, value, unit of your choice
+                    send("volts_dc_Battery_rounded", Math.round(parseFloat(st.voltsDC) * 10) / 10, "v");    // send sensor data to HA. your sensor name, value, unit of your choice
                     ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
-                    send("coreData", { name: "coreDataName", data: { myData: "data" } });  // broadcast data to the Core for other clients to receive
-                    nv.myAutomation = { myVar: "test" };                    // create non-volatile data structure           
-                    log("writing NV data to disk...", index, 1);            // example log event
-                    file.write.nv();       // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
+                    send("cdata", { name: "coreDataName", state: { myData: "data" } });     // broadcast data to the Core for other clients to receive
+                    nv[name] = { myVar: "test" };               // create non-volatile data structure           
+                    file.write.nv();                            // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
                 }
             };
 
@@ -68,23 +80,19 @@ let
             // "state" is not "st". 
             //      "st" is local volatile memory unique to each automation function - to store your automation data
             //      "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entity states
-            //       state.ha[0]  is  where the incoming data of   cfg.ha[0] entity is stored
-            //       state.esp[0]  is  where the incoming data of   cfg.esp[0] entity is stored
+            //       state.entity["myHaEntity"].state  is  where all incoming entity states are stored
 
-            if (state.ha[0] == true && st.example.started == false) {      // compare a Home Assistant entity with a value in your program - do something
-                log("turning off outside lights", index, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
+            if (state.entity["myHaEntity"].state == true && st.example.started == false) {      // compare a Home Assistant entity with a value in your program - do something
+                log("turning off outside lights", name, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
                 st.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
                 st.example.started = true;                                  // set automation state variable
             }
 
-            if (state.esp[0] == true && st.example.started == false) {      // compare an ESPHome entity with a value in your program - do something
-                log("turning off outside lights", index, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
+            if (state.entity["myHaEntity"].state == true && st.example.started == false) {      // compare an ESPHome entity with a value in your program - do something
+                log("turning off outside lights", name, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
                 st.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
                 st.example.started = true;                                  // set automation state variable
             }
-            // coreData is optional, dont use it if you dont need it
-            if (coreData("mySharedData").myData == "myValue")               // compare a variable from another TW Client using coreData (after register with coreData shown above), coreData returns "data" variable or object
-                log("sensor on other client is a match", index, 1);         // see list of variables in coreData in  127.0.0.1:20000/diag client/state/coreData (use firefox)
 
             /*      Time Variables  
                 time.mil            current time milliseconds 
@@ -102,17 +110,17 @@ let
 
             function timer() { // called once per minute   
                 if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
-                    log("turning on outside lights", index, 1);
-                    ha.send("switch.light_outside_switch", true);
+                    log("turning on outside lights", name, 1);
+                    send("switch.light_outside_switch", true);
                 }
                 if (time.hour == 22 && time.min == 0) {
-                    log("turning off outside lights", index, 1);
-                    ha.send("switch.light_outside_switch", false);
+                    log("turning off outside lights", name, 1);
+                    send("switch.light_outside_switch", false);
                 }
             };
             /*
                 ---Debugging web server---
-                http://127.0.0.1:20000/client/nameOfClient -----show all volatile and non-volatile memory of a specific TWIT client
+                http://127.0.0.1:20000/client/nameOfClient -----show all volatile and non-volatile memory of a specific TWIT client (case sensitive)
                 http://127.0.0.1:20000/ha ------show all entities available from Home Assistant
                 http://127.0.0.1:20000/esp -----show all discovered ESP Home modules
                 http://127.0.0.1:20000/tg ------last 100 received Telegram messages
@@ -122,10 +130,12 @@ let
                 http://127.0.0.1:20000/log -----last 500 log messages
          */
         },
-        (index) => {    // add subsequent automations like this
-
+        myFunction2: function (name) {    // add subsequent automations like this
+            if (!state.auto[name]) init();
+            let st = state.auto[name];
+            function init() { state.auto[name] = {}; }
         }
-    ];
+    };
 let
     sys = {         // ______________________system area, don't need to touch anything below this line__________________________________
         com: function () {
@@ -140,7 +150,7 @@ let
                         state.entity[buf.obj.name].update = time.epoch;
                         if (state.online == true) {
                             em.emit(buf.obj.name, buf.obj.state);
-                            automation.forEach((func, index) => { if (state.auto[index]) func(index); });
+                            for (const name in automation) { if (state.auto[name]) automation[name](name) }
                         }
                         break;
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
@@ -151,7 +161,7 @@ let
                         try { state.entity[buf.obj.name].state = buf.obj.state; } catch { }
                         if (state.online == true) {
                             em.emit(buf.obj.name, buf.obj.state);
-                            automation.forEach((func, index) => { if (state.auto[index]) func(index) });
+                            for (const name in automation) { if (state.auto[name]) automation[name](name) }
                         }
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
@@ -161,7 +171,8 @@ let
                         break;
                     case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
                         log("Core has reconnected to HA, fetching again");
-                        send("espFetch");
+                        udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
+                        udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         break;
                     case "haQueryReply":        // HA device query
                         console.log("Available HA Devices: " + buf.obj);
@@ -176,22 +187,16 @@ let
                         }
                         break;
                     case "coreData":
-                        exist = false;
-                        coreDataNum = null;
-                        for (let x = 0; x < state.coreData.length; x++) {
-                            if (state.coreData[x].name == buf.obj.name) {
-                                state.coreData[x].data = JSON.parse(data);
-                                exist = true;
-                                break;
-                            }
-                        }
-                        if (exist == false) {
-                            coreDataNum = state.coreData.push({ name: buf.obj.name, data: JSON.parse(data).data }) - 1;
-                            log("coreData:" + coreDataNum + " - is registering: " + buf.obj.name + " - " + buf.obj.data);
+                        // console.log("received coreData: ", buf.obj);
+                        if (buf.obj.name && buf.obj.state) {
+                            if (!state.entity[buf.obj.name]) state.entity[buf.obj.name] = {};
+                            state.entity[buf.obj.name].state = buf.obj.state;
+                            state.entity[buf.obj.name].update = time.epoch;
+                            em.emit(buf.obj.name, buf.obj.state);
                         }
                         break;
                     case "diag":                // incoming diag refresh request, then reply object
-                        send("diag", { state, nv });
+                        udp.send(JSON.stringify({ type: "diag", obj: { state, nv } }), 65432, '127.0.0.1');
                         break;
                     case "telegram":
                         // console.log("receiving telegram message: " + buf.obj);
@@ -216,10 +221,23 @@ let
             if (cfg.heartbeat != undefined) {
                 if (cfg.heartbeat.esp != undefined && cfg.heartbeat.esp.length > 0) {
                     cfg.heartbeat.esp.forEach((e, x) => {
-                        clearInterval(heartbeat.timer[x]);
+                        log("registering heartbeat for ESP: " + e.name, 1);
+                        if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
                         heartbeat.timer[x] = setInterval(() => {
-                            if (heartbeat.state) { send(e.name, false); heartbeat.state = false; }
-                            else { send(e.name, true); heartbeat.state = true; }
+                            if (heartbeat.state[x]) {
+                                udp.send(JSON.stringify({
+                                    type: "espState",
+                                    obj: { name: e.name, state: false }
+                                }), 65432, '127.0.0.1')
+                                heartbeat.state[x] = false;
+                            }
+                            else {
+                                udp.send(JSON.stringify({
+                                    type: "espState",
+                                    obj: { name: e.name, state: true }
+                                }), 65432, '127.0.0.1')
+                                heartbeat.state[x] = true;
+                            }
                         }, e.interval * 1e3);
                     });
                 }
@@ -232,11 +250,15 @@ let
                     udp.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: nv.telegram[x].id } }), 65432, '127.0.0.1');
                 }
             }
+            if (cfg.coreData && cfg.coreData.length > 0) {
+                send("cdata", { register: true, name: cfg.coreData });
+            }
         },
         init: function () {
             nv = {};
-            state = { auto: [], entity: {}, onlineHA: false, online: false };
-            heartbeat = { state: false, timer: [] }
+            heartbeat = { timer: [], state: [] };
+            state = { auto: {}, entity: {}, onlineHA: false, online: false };
+            timer = {};
             time = {
                 boot: null,
                 get epochMil() { return Date.now(); },
@@ -322,12 +344,18 @@ let
             file = {
                 write: {
                     nv: function () {  // write non-volatile memory to the disk
-                        // log("writing NV data...")
-                        fs.writeFile(workingDir + "/nv-" + scriptName + "-bak.json", JSON.stringify(nv, null, 2), function () {
-                            fs.copyFile(workingDir + "/nv-" + scriptName + "-bak.json", workingDir + "/nv-" + scriptName + ".json", (err) => {
-                                if (err) throw err;
+                        clearTimeout(timer.fileWrite);
+                        if (time.epoch - timer.fileWriteLast > 10) writeFile();
+                        else timer.fileWrite = setTimeout(() => { writeFile(); }, 10e3);
+                        function writeFile() {
+                            log("writing NV data...");
+                            timer.fileWriteLast = time.epoch;
+                            fs.writeFile(workingDir + "/nv-bak.json", JSON.stringify(nv), function () {
+                                fs.copyFile(workingDir + "/nv-bak.json", workingDir + "/nv.json", (err) => {
+                                    if (err) throw err;
+                                });
                             });
-                        });
+                        }
                     }
                 },
             };
@@ -383,30 +411,29 @@ let
                         return;
                     }
                 }
-                if (name != "coreData")
+                if (name == "cdata") {
+                    udp.send(JSON.stringify({
+                        type: "coreData",
+                        obj: state
+                    }), 65432, '127.0.0.1')
+                } else {
+                    // console.log("sending to HA - name: " + name + " - state: " + state)
                     udp.send(JSON.stringify({
                         type: "haState",
-                        obj: { name: name, state: state, unit: unit, haID: id }
+                        obj: { name: name, state: state, unit: unit, haID: id }  // ID is used to send sensor to HA on core other than ID 0
                     }), 65432, '127.0.0.1')
-                else udp.send(JSON.stringify({
-                    type: "coreData",
-                    obj: state
-                }), 65432, '127.0.0.1')
+                }
             };
-            coreData = function (name) {
-                for (let x = 0; x < state.coreData.length; x++) if (state.coreData[x].name == name) return state.coreData[x].data;
-                return {};
-            };
-            log = function (message, index, level) {
+            log = function (message, name, level) {
                 if (level == undefined) {
                     udp.send(JSON.stringify({
                         type: "log",
-                        obj: { message: message, mod: cfg.moduleName, level: index }
+                        obj: { message: message, mod: cfg.moduleName, level: name }
                     }), 65432, '127.0.0.1');
                 }
                 else udp.send(JSON.stringify({
                     type: "log",
-                    obj: { message: message, mod: state.auto[index].name, level: level }
+                    obj: { message: message, mod: name, level: level }
                 }), 65432, '127.0.0.1');
             };
             sys.boot(0);
@@ -475,7 +502,7 @@ let
                     if (cfg.esp != undefined && cfg.esp.length > 0)
                         log("ESP fetch complete", 1);
                     state.online = true;
-                    automation.forEach((func, index) => { func(index) });
+                    for (const name in automation) { automation[name](name) }
                     setInterval(() => { udp.send(JSON.stringify({ type: "heartbeat" }), 65432, '127.0.0.1'); time.boot++; }, 1e3);
                     break;
             }
