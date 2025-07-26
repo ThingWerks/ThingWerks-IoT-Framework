@@ -8,6 +8,10 @@ let
         ha: [
             "input_boolean.auto_bubon",
             "input_number.profile_bubon",
+            "input_number.oneshot_bubon",
+            "Switch Kitchen Pump",
+            "input_boolean.lights_stairs",
+            "switch.switch_test"
         ],
         esp: [
             "psi-main",
@@ -17,16 +21,25 @@ let
             "shop-relay1-pump",
             "solar-relay3-pump-bubon"
         ],
+        coreData: [
+            "test", "test4"
+        ],
+        heartbeat: {
+            esp: [      // heartbeats for ESPHome devices 
+                { name: "esp_heartbeat_solar", interval: 3 } // interval is in seconds
+            ]
+        },
         dd: [       // config for the Demand/Delivery automation function, 1 object for each DD system
             {   // DD system example
                 name: "Bubon",       // Demand Delivery system 2d
                 ha: {
-                    auto: "input_boolean.auto_bubon",                // home assistant auto toggle ID number (specified above in cfg.ha config)
+                    auto: "input_boolean.auto_bubon",           // home assistant auto toggle ID number (specified above in cfg.ha config)
+                    solar: "input_boolean.auto_solar_bubon",    // solar automation boolean/toggle
                     // turbo: 5,               // secondary high stop pressure point
                     profile: "input_number.profile_bubon",            // pressure profile
                     // reserve: 9,             // ha entity for reserve tank/pump
-                    //  oneShot: 7,             // single shot pump run 
-                    //  oneShotTimer: 8,        // single shot pump run time length
+                    oneShot: "Switch Kitchen Pump",             // single shot pump run 
+                    oneShotTimer: "input_number.oneshot_bubon",        // single shot pump run time length
                 },
                 pump: [
                     {
@@ -110,10 +123,6 @@ let
                 },
             ],
         },
-        heartbeat: {                // heartbeats for ESPHome devices 
-            interval: 3000,         // heartbeat interval
-            list: ["esp_heartbeat_solar"]       // list of switches to toggle 
-        },
     },
     automation = [
         (index) => {
@@ -174,7 +183,7 @@ let
                                             if (dd.press.out.state.meters <= dd.cfg.press.start) {
                                                 log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.meters.toFixed(2)
                                                     + "m) - pump is starting", index, 1);
-                                                pumpStart(true);
+                                                pumpStart();
                                                 return;
                                             }
                                         } else if (dd.state.turbo) {
@@ -182,7 +191,7 @@ let
                                             if (dd.press.out.state.psi <= dd.cfg.press.turbo.start) {
                                                 log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
                                                     + "psi) - pump turbo is starting", index, 1);
-                                                pumpStart(true);
+                                                pumpStart();
                                                 return;
                                             }
                                         } else if (dd.state.profile != null) {
@@ -191,20 +200,20 @@ let
                                             if (dd.press.out.state.psi <= dd.cfg.press.output.profile[dd.state.profile].start) {
                                                 log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
                                                     + "psi) - pump is starting with profile: " + dd.state.profile, index, 1);
-                                                pumpStart(true);
+                                                pumpStart();
                                                 return;
                                             }
                                         } else if (dd.press.out.state.psi <= dd.cfg.press.start) {
                                             //  console.log("current pressure: ", dd.press.out.state.psi)
                                             log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
                                                 + "psi) - pump is starting", index, 1);
-                                            pumpStart(true);
+                                            pumpStart();
                                             return;
                                         }
                                         if (dd.state.timeoutOff == true) {  // after pump has been off for a while
                                             if (dd.pump[dd.state.pump].state === true && dd.sharedPump.run == false) {
                                                 log(dd.cfg.name + " - pump running in HA/ESP but not here - switching pump ON", index, 1);
-                                                pumpStart(true);
+                                                pumpStart();
                                                 return;
                                             } else {
                                                 if (dd.flow != undefined && dd.flow[dd.state.pump].lm > dd.cfg.pump[dd.state.pump].flow.startError
@@ -284,7 +293,7 @@ let
                                 }
                                 if (dd.flow == undefined && dd.state.timeoutOn == true && dd.pump[dd.state.pump].state === false) {
                                     log(dd.cfg.name + " - is out of sync - auto is on, system is RUN but pump is off", index, 2);
-                                    pumpStart(true);
+                                    pumpStart();
                                     return;
                                 }
                                 if (dd.press.in != undefined && dd.press.in.state.meters <= dd.cfg.press.input.minError) {
@@ -316,7 +325,7 @@ let
                                 log(dd.cfg.name + " - is out of sync - auto is off but pump is on - switching auto ON", index, 2);
                                 send(dd.auto.name, true);
                                 dd.auto.state = true;
-                                pumpStart();
+                                pumpStart(false);
                                 return;
                             }
                             if (dd.flow != undefined && dd.flow[dd.state.pump].lm > dd.cfg.pump[dd.state.pump].flow.startError
@@ -402,7 +411,7 @@ let
                         }, dd.cfg.pump[dd.state.pump].flow.startWait * 1000);
                     }
                     dd.state.sendRetries = 0;
-                    if (sendOut) {
+                    if (sendOut !== false) {
                         if (dd.cfg.solenoid != undefined) {
                             log(dd.cfg.name + " - opening solenoid", index, 1);
                             send(dd.cfg.solenoid.entity, true);
@@ -433,8 +442,10 @@ let
                     }
                     setTimeout(() => { dd.state.timeoutOff = true }, 10e3);
                     if (fault == true) {
-                        log(dd.cfg.name + " faulted - solar automation is stopping", index, 2);
-                        send("input_boolean.auto_solar", false);
+                        if (dd.cfg.ha.solar != undefined) {
+                            log(dd.cfg.name + " faulted - solar pump automation: " + dd.cfg.ha.solar + " - is going offline", index, 2);
+                            send(dd.cfg.ha.solar, false);
+                        }
                     }
                     setTimeout(() => {
                         if (dd.cfg.solenoid != undefined) {
@@ -695,8 +706,6 @@ let
                             state.auto[index].dd[x].flow ||= [];
                             state.auto[index].dd[x].flow.push(state.entity[cfg.dd[x].pump[y].flow.entity])
                         }
-
-
                     }
                     if (cfg.dd[x].press != undefined && cfg.dd[x].press.output != undefined
                         && cfg.dd[x].press.output.profile != undefined) {
@@ -710,24 +719,6 @@ let
                     }
                     if (cfg.dd[x].ha.turbo != undefined) {
                         state.auto[index].dd[x].state.turbo = state.entity[cfg.dd[x].ha.turbo].state;
-                    }
-                    if (cfg.heartbeat != undefined && cfg.heartbeat.list.length > 0) {
-                        cfg.heartbeat.list.forEach(element => {
-                            log("starting heartbeat for - " + element, index, 1);
-                        });
-                        setInterval(() => {
-                            if (state.auto[index].dd[x].state.heartbeat) {
-                                cfg.heartbeat.list.forEach(element => {
-                                    send(element, false);
-                                });
-                                state.auto[index].dd[x].state.heartbeat = false;
-                            } else {
-                                cfg.heartbeat.list.forEach(element => {
-                                    send(element, true);
-                                    state.auto[index].dd[x].state.heartbeat = true;
-                                });
-                            }
-                        }, cfg.heartbeat.interval);
                     }
                 }
                 calcFlow();
@@ -806,8 +797,9 @@ let
                     HAsend(config.name + "_percent", entity.percent.toFixed(0), '%');
                     HAsend(config.name + "_meters", entity.meters.toFixed(2), 'm');
                     HAsend(config.name + "_psi", entity.psi.toFixed(0), 'psi');
-                    send("coreData", {
-                        name: config.name, data: {
+                    send("cdata", {
+                        name: config.name,
+                        state: {
                             percent: entity.percent.toFixed(0),
                             meters: entity.meters.toFixed(2),
                             psi: entity.psi.toFixed(0)
@@ -856,18 +848,24 @@ let
                 }
             }
             function listeners() {
+                em.on("Switch Kitchen Pump", (newState) => {
+                    if (newState == "remote_button_long_press") send("input_boolean.auto_bubon", false)
+                    if (newState == "remote_button_double_press") send("input_boolean.auto_bubon", true)
+                })
                 for (let x = 0; x < cfg.dd.length; x++) {
                     if (cfg.dd[x].ha.oneShot != undefined && cfg.dd[x].ha.oneShotTimer != undefined) {
                         log(cfg.dd[x].name + " - creating listener for One Shot operation: " + cfg.dd[x].ha.oneShot, index, 1);
                         em.on(cfg.dd[x].ha.oneShot, (newState) => {
-                            log(cfg.dd[x].name + " - starting one shot operation - stopping in "
-                                + parseInt(state.entity[cfg.dd[x].ha.oneShotTimer].state).toFixed(0) + " minutes", index, 1);
-                            send(cfg.ha[cfg.dd[x].ha.auto], true);
-                            state.auto[index].dd[x].oneShot = setTimeout(() => {
-                                log(cfg.dd[x].name + " - stopping one shot operation after "
+                            if (newState.includes("remote_button_short_press") || !newState.includes("remote_button")) {
+                                log(cfg.dd[x].name + " - starting one shot operation - stopping in "
                                     + parseInt(state.entity[cfg.dd[x].ha.oneShotTimer].state).toFixed(0) + " minutes", index, 1);
-                                send(cfg.ha[cfg.dd[x].ha.auto], false);
-                            }, parseInt(state.entity[cfg.dd[x].ha.oneShotTimer].state) * 60 * 1e3);
+                                send(cfg.dd[x].ha.auto, true);
+                                state.auto[index].dd[x].oneShot = setTimeout(() => {
+                                    log(cfg.dd[x].name + " - stopping one shot operation after "
+                                        + parseInt(state.entity[cfg.dd[x].ha.oneShotTimer].state).toFixed(0) + " minutes", index, 1);
+                                    send(cfg.dd[x].ha.auto, false);
+                                }, parseInt(state.entity[cfg.dd[x].ha.oneShotTimer].state) * 60 * 1e3);
+                            }
                         });
                     }
                     if (cfg.dd[x].ha.turbo != undefined) {
@@ -905,6 +903,15 @@ let
                         });
                     }
                 }
+            }
+        },
+        (index) => { // compound automation 
+            if (state.auto[index] == undefined) init();
+            function init() {
+                state.auto.push({ name: "Compound", });
+                log("compound automation initializing", index, 1);
+                em.on("input_boolean.lights_stairs", (newState) => { send("switch.switch_test", newState); });
+                em.on("switch.switch_test", (newState) => { send("input_boolean.lights_stairs", newState); });
             }
         },
     ];
@@ -1010,22 +1017,16 @@ let
                         }
                         break;
                     case "coreData":
-                        exist = false;
-                        coreDataNum = null;
-                        for (let x = 0; x < state.coreData.length; x++) {
-                            if (state.coreData[x].name == buf.obj.name) {
-                                state.coreData[x].data = JSON.parse(data);
-                                exist = true;
-                                break;
-                            }
-                        }
-                        if (exist == false) {
-                            coreDataNum = state.coreData.push({ name: buf.obj.name, data: JSON.parse(data).data }) - 1;
-                            log("coreData:" + coreDataNum + " - is registering: " + buf.obj.name + " - " + buf.obj.data);
+                        // console.log("received coreData: ", buf.obj);
+                        if (buf.obj.name && buf.obj.state) {
+                            if (!state.entity[buf.obj.name]) state.entity[buf.obj.name] = {};
+                            state.entity[buf.obj.name].state = buf.obj.state;
+                            state.entity[buf.obj.name].update = time.epoch;
+                            em.emit(buf.obj.name, buf.obj.state);
                         }
                         break;
                     case "diag":                // incoming diag refresh request, then reply object
-                        send("diag", { state, nv });
+                        udp.send(JSON.stringify({ type: "diag", obj: { state, nv } }), 65432, '127.0.0.1');
                         break;
                     case "telegram":
                         // console.log("receiving telegram message: " + buf.obj);
@@ -1050,10 +1051,23 @@ let
             if (cfg.heartbeat != undefined) {
                 if (cfg.heartbeat.esp != undefined && cfg.heartbeat.esp.length > 0) {
                     cfg.heartbeat.esp.forEach((e, x) => {
-                        clearInterval(heartbeat.timer[x]);
+                        log("registering heartbeat for ESP: " + e.name, 1);
+                        if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
                         heartbeat.timer[x] = setInterval(() => {
-                            if (heartbeat.state) { send(e.name, false); heartbeat.state = false; }
-                            else { send(e.name, true); heartbeat.state = true; }
+                            if (heartbeat.state[x]) {
+                                udp.send(JSON.stringify({
+                                    type: "espState",
+                                    obj: { name: e.name, state: false }
+                                }), 65432, '127.0.0.1')
+                                heartbeat.state[x] = false;
+                            }
+                            else {
+                                udp.send(JSON.stringify({
+                                    type: "espState",
+                                    obj: { name: e.name, state: true }
+                                }), 65432, '127.0.0.1')
+                                heartbeat.state[x] = true;
+                            }
                         }, e.interval * 1e3);
                     });
                 }
@@ -1066,11 +1080,14 @@ let
                     udp.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: nv.telegram[x].id } }), 65432, '127.0.0.1');
                 }
             }
+            if (cfg.coreData && cfg.coreData.length > 0) {
+                send("cdata", { register: true, name: cfg.coreData });
+            }
         },
         init: function () {
             nv = {};
+            heartbeat = { timer: [], state: [] };
             state = { auto: [], entity: {}, onlineHA: false, online: false };
-            heartbeat = { state: false, timer: [] }
             time = {
                 boot: null,
                 get epochMil() { return Date.now(); },
@@ -1209,7 +1226,7 @@ let
             };
             send = function (name, state, unit, id) {
                 for (let x = 0; x < cfg.esp.length; x++) {
-                    if (name == cfg.esp[x] || name.includes("esp_heartbeat_")) {
+                    if (name == cfg.esp[x]) {
                         udp.send(JSON.stringify({
                             type: "espState",
                             obj: { name: name, state: state }
@@ -1217,22 +1234,18 @@ let
                         return;
                     }
                 }
-                if (name != "coreData") {
+                if (name == "cdata") {
+                    udp.send(JSON.stringify({
+                        type: "coreData",
+                        obj: state
+                    }), 65432, '127.0.0.1')
+                } else {
                     // console.log("sending to HA - name: " + name + " - state: " + state)
                     udp.send(JSON.stringify({
                         type: "haState",
                         obj: { name: name, state: state, unit: unit, haID: id }  // ID is used to send sensor to HA on core other than ID 0
                     }), 65432, '127.0.0.1')
-                } else {
-                    udp.send(JSON.stringify({
-                        type: "coreData",
-                        obj: state
-                    }), 65432, '127.0.0.1')
                 }
-            };
-            coreData = function (name) {
-                for (let x = 0; x < state.coreData.length; x++) if (state.coreData[x].name == name) return state.coreData[x].data;
-                return {};
             };
             log = function (message, index, level) {
                 if (level == undefined) {
