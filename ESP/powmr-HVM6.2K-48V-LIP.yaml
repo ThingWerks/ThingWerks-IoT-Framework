@@ -1,0 +1,403 @@
+esphome:
+  name: powmr-6kw
+  friendly_name: PowMr-6kw
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+logger:
+api:
+  encryption:
+    key: "======"
+ota:
+  - platform: esphome
+    password: "======="
+wifi:
+  ssid: "WhiteHouse"
+  ap:
+    ssid: "Powmr-6Kw Fallback Hotspot"
+    password: "===="
+captive_portal:
+uart:
+  - id: uart_inverter
+    baud_rate: 9600
+    tx_pin: 17
+    rx_pin: 16
+modbus:
+  - id: modbus_inverter
+    uart_id: uart_inverter
+modbus_controller:
+  - id: inverter1    
+    address: 0x01
+    modbus_id: modbus_inverter
+    setup_priority: -10
+    offline_skip_updates: 60
+    update_interval: 1s
+text_sensor:
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Working Mode"
+    id: Working_Mode
+    address: 201
+    entity_category: diagnostic
+    register_type: holding
+    response_size: 1
+    raw_encode: HEXBYTES
+    lambda: |-
+      uint16_t value = modbus_controller::word_from_hex_str(x, 0);
+      switch (value) {
+        case 0: return std::string("Power On Mode");
+        case 1: return std::string("Standby mode");
+        case 2: return std::string("Mains mode");
+        case 3: return std::string("Off-Grid mode");
+        case 4: return std::string("Bypass mode");
+        case 5: return std::string("Charging mode");
+        case 6: return std::string("Fault mode");        
+        default: return std::string(x);
+      } return x;  
+sensor:
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter Voltage"
+    id: inverter_voltage
+    address: 205
+    register_type: holding
+    value_type: U_WORD
+    device_class: voltage
+    state_class: measurement
+    unit_of_measurement: "V"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter Current"
+    id: inverter_current
+    address: 206
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    register_count: 2
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1   
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter Power"
+    id: inverter_power
+    address: 208
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter Charging Power"
+    id: inverter_charging_power
+    address: 209
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    register_count: 4
+    accuracy_decimals: 1
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter Active Power"
+    id: inverter_active_power
+    address: 213
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    register_count: 2
+    accuracy_decimals: 1 
+    filters:
+      - multiply: 1 
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Battery Voltage"
+    id: battery_voltage
+    address: 215
+    register_type: holding
+    value_type: U_WORD
+    device_class: voltage
+    state_class: measurement
+    unit_of_measurement: "V"
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1    
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Battery Current"
+    id: battery_current
+    address: 216
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1  
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Battery Power"
+    id: battery_power
+    address: 217
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 1
+    register_count: 2
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Battery Percentage"
+    id: battery_percentage
+    address: 229
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    device_class: battery
+    unit_of_measurement: "%"
+    accuracy_decimals: 0 
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "PV Voltage"
+    id: pv_voltage
+    address: 219
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.1 
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "PV Current"
+    id: pv_current
+    address: 220
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "A"
+    device_class: current
+    accuracy_decimals: 1
+    register_count: 3
+    filters:
+      - multiply: 0.1 
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "PV Power"
+    id: pv_power
+    address: 223
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "PV Charging Power"
+    id: pv_charging_power
+    address: 224
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 1 
+    register_count: 3 
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Inverter Temp"
+    id: inverter_temp
+    address: 227
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "℃"
+    accuracy_decimals: 1 
+    register_count: 2
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Grid Voltage"
+    id: grid_voltage
+    address: 202
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "V"
+    device_class: voltage
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Grid Frequency"
+    id: grid_frequency
+    address: 203
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    unit_of_measurement: "Hz"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.01
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Grid Power"
+    id: grid_power
+    address: 204
+    register_type: holding
+    value_type: S_WORD
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+select:
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Output priority"
+    entity_category: config
+    address: 301
+    value_type: U_WORD
+    optionsmap:
+      "Utility-PV-Battery": 0
+      "PV-Utility-Battery": 1
+      "PV-Battery-Utility": 2
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Fault code"
+    entity_category: config
+    address: 100
+    register_count: 2
+    value_type: U_DWORD
+    optionsmap:
+      "Over temperature of inverter module":  1
+      "Over temperature of DCDC module": 2
+      "Battery over voltage": 3
+      "Over temperature of PV module": 4
+      "Output short circuited": 5
+      "Over Inverter voltage": 6 
+      "Output over load": 7
+      "Bus over voltage": 8
+      "Bus soft start times out": 9 
+      "PV over current": 10
+      "PV over voltage": 11
+      "Battery over current": 12
+      "Inverter over current": 13
+      "Bus low voltage": 14
+      "Reserve": 15
+      "Inverter DC component is too high": 16
+      "Reserve2": 17
+      "The zero bias of Output current is too large": 18 
+      "The zero bias of inverter current is too large": 19 
+      "The zero bias of battery current is too large": 20 
+      "The zero bias of PV current is too large": 21 
+      "Inverter low voltage": 22
+      "Inverter negative power protection": 23
+      "The host in the parallel system is lost": 24 
+      "Synchronization signal abnormal in the parallel system": 25 
+      "The battery type is incompatible": 26
+      "Parallel versions are incompatible": 27 
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Input voltage range "
+    entity_category: config
+    address: 302
+    value_type: U_WORD
+    optionsmap:
+      "Wide range": 0
+      "Narrow range": 1 
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Buzzer mode"
+    entity_category: config
+    address: 303
+    value_type: U_WORD
+    register_count: 2
+    optionsmap:
+      "Mute all": 0
+      "Beep source": 1
+      "Beep warning": 2
+      "Beep fault": 3  
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Battery charging priority"
+    entity_category: config
+    address: 331
+    value_type: U_WORD
+    optionsmap:
+      "Utility priority": 0
+      "PV priority": 1
+      "PV and Utility": 2
+      "Only PV charging": 3
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Turn on mode"
+    entity_category: config
+    address: 406
+    value_type: U_WORD
+    register_count: 14
+    optionsmap:
+      "locally or remotely": 0
+      "Only local": 1
+      "Only remote": 2
+
+number:
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Maximum charging current"
+    entity_category: config
+    address: 332
+    value_type: U_WORD
+    min_value: 0
+    max_value: 800
+    step: 10
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Maximum mains charging current"
+    entity_category: config
+    address: 333
+    value_type: U_WORD
+    step: 10
+    min_value: 0
+    max_value: 500
+
+switch:
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Remote switch"
+    address: 420
+    register_type: holding
+    entity_category: config
+    icon: "mdi:toggle-switch"  
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "LCD backlight"
+    register_type: holding
+    entity_category: config
+    address: 305
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "LCD return"
+    register_type: holding
+    entity_category: config
+    address: 306
+  - platform: modbus_controller
+    modbus_controller_id: inverter1
+    name: "Energy-saving mode"
+    register_type: holding
+    entity_category: config
+    address: 307
