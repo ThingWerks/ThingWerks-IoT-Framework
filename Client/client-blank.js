@@ -18,7 +18,11 @@ let
                 var state = auto[_name];            // assign state memory shorthand pointer
                 var disk = nv[_name];               // make a short hand reference for your non-volatile storage area 
                 file.write.nv();                    // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
+
+                
             }
+
+            
         }
     };
 let
