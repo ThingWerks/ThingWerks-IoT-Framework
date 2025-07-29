@@ -155,6 +155,7 @@ if (isMainThread) {
                                 if (timeResult > 1000) log("websocket (" + a.color("cyan", config.address) + ") ping is lagging - delay is: " + timeResult + "ms", 1, 0);
                                 break;
                             case "result":
+                                // console.log(buf)
                                 state.ha[haNum].ws.zha.devices ||= {};
                                 if (buf.id == state.ha[haNum].ws.queryRequest && Array.isArray(buf.result)) {
                                     // console.log(buf)
@@ -244,7 +245,7 @@ if (isMainThread) {
                                 break;
                         }
                     });
-                    em.on('haSend' + haNum, function (data) { send(haNum, data) });
+                    em.on('haSend' + haNum, function (data) { send(data) });
                     function send(data) {
                         try { socket.sendUTF(JSON.stringify(data)); }
                         catch (error) { log(error, 1, 3) }
@@ -439,7 +440,7 @@ if (isMainThread) {
                                 if (userName == buf.obj.name) {
                                     haNum = y;
                                     console.log("found ZHE Entity: ", userName, " on HA: ", y);
-                                    em.emit('send' + haNum, {
+                                    em.emit('haSend' + haNum, {
                                         "id": state.ha[haNum].ws.id++,
                                         "type": "call_service",
                                         "domain": "switch",
@@ -470,7 +471,7 @@ if (isMainThread) {
                                 if (buf.obj.name) {
                                     if (buf.obj.name.includes(sort[x])) {
                                         if (cfg.homeAssistant[haNum].legacyAPI == false) {
-                                            em.emit('send' + haNum, {
+                                            em.emit('haSend' + haNum, {
                                                 "id": state.ha[haNum].ws.id++,
                                                 "type": "call_service",
                                                 "domain": sort[x],
