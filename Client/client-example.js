@@ -24,16 +24,17 @@ let
             params: true
         },
     },
-    automation = {                                                          // create an (index) => {},  array member function for each automation you want to create
-        myFunction1: function (name) {                                      // each automation is ran with every incoming ESPHome or Home Assistant event  
-            if (!state.auto[name]) init();                                  // initialize automation
-            let st = state.auto[name];                                      // set automation state object's shorthand name to "st" (state) 
-
-            function init() {                                               // the init() function is called only once at the start of each automation
-                state.auto[name] = {                                           // create object for this automation in local state                             // give this automation a name 
-                    example: { started: false, step: time.sec }             // initialize an object for each of this automation's devices or features (volatile data) 
+    automation = {  // create a new myFunction1: function (autoName) {},  object function for each automation you want to create
+        myFunction1: function (autoName) {
+            logName = autoName;                                             // set automation name for logging
+            if (!auto[autoName]) {                                          // check if automation is initialized, runs only once
+                auto[autoName] = {                                          // create object for this automation in local state                             // give this automation a name 
+                    example: { started: false, step: time.sec }             // customize state memory for each of this automation's devices or features (volatile data) 
                 };
-                setInterval(() => { automation[name](name); }, 1e3);        // set minimum rerun time, otherwise this automation function will only run on ESP and HA push events
+                var state = auto[autoName];                                 // assign state memory shorthand pointer
+
+                // add your customized initialization sequence
+                setInterval(() => { automation[autoName](autoName); }, 1e3);// manually rerun automation?, otherwise this automation function will only run on ESP and HA push events
                 setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds (in addition to incoming ESP or Home Assistant events)
                 log("automation starting...", name, 1);                     // log automation start with index number and severity (0: debug, 1:event, 2: warning, 3: error)
                 log(cfg.myAutomationConfigData.test)                        // log some string stored in your non-volatile data
@@ -49,7 +50,7 @@ let
                 name: ["myObject1", "myObject2"]
             });
             em.on("test", (newState) => {
-                if (state.entity["test"].state) console.log("coredata listener test: ", newState)
+                if (entity["test"].state) console.log("coredata listener test: ", newState)
                 else console.log("coredata listener test: false");
             })
             send("cdata", {
@@ -66,8 +67,8 @@ let
                     send("input_boolean.fan_auto", true);
                     send("switch.fan_bed_switch", false);
                     send("myEspEntity", true);                  // call esp device by name
-                    send("volts_dc_Battery_turnicated", ~~parseFloat(st.voltsDC), "v");     // send sensor data to HA. your sensor name, value, unit of your choice
-                    send("volts_dc_Battery_rounded", Math.round(parseFloat(st.voltsDC) * 10) / 10, "v");    // send sensor data to HA. your sensor name, value, unit of your choice
+                    send("volts_dc_Battery_turnicated", ~~parseFloat(state.voltsDC), "v");     // send sensor data to HA. your sensor name, value, unit of your choice
+                    send("volts_dc_Battery_rounded", Math.round(parseFloat(entity["myESPentity"].state) * 10) / 10, "v");    // send sensor data to HA. your sensor name, value, unit of your choice
                     ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
                     send("cdata", { name: "coreDataName", state: { myData: "data" } });     // broadcast data to the Core for other clients to receive
                     nv[name] = { myVar: "test" };               // create non-volatile data structure           
@@ -77,21 +78,19 @@ let
 
             // "cfg" is config data as specified above
             // "nv" is non-volatile data that is read once during first boot of script and saved whenever you call file.write.nv();
-            // "state" is not "st". 
-            //      "st" is local volatile memory unique to each automation function - to store your automation data
-            //      "state" is global volatile memory that stores incoming data from ESPHome or Home Assistant Entity states
-            //       state.entity["myHaEntity"].state  is  where all incoming entity states are stored
+            // "state" is local volatile memory unique to each automation function - to store your automation data
+            // "entity["myHaEntity"].state"  is  where all incoming entity states are stored
 
-            if (state.entity["myHaEntity"].state == true && st.example.started == false) {      // compare a Home Assistant entity with a value in your program - do something
+            if (entity["myHaEntity"].state == true && state.example.started == false) {      // compare a Home Assistant entity with a value in your program - do something
                 log("turning off outside lights", name, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
-                st.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
-                st.example.started = true;                                  // set automation state variable
+                state.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
+                state.example.started = true;                                  // set automation state variable
             }
 
-            if (state.entity["myHaEntity"].state == true && st.example.started == false) {      // compare an ESPHome entity with a value in your program - do something
+            if (entity["myHaEntity"].state == true && state.example.started == false) {      // compare an ESPHome entity with a value in your program - do something
                 log("turning off outside lights", name, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
-                st.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
-                st.example.started = true;                                  // set automation state variable
+                state.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
+                state.example.started = true;                                  // set automation state variable
             }
 
             /*      Time Variables  
@@ -129,11 +128,14 @@ let
                 http://127.0.0.1:20000/cfg -----show all core configuration
                 http://127.0.0.1:20000/log -----last 500 log messages
          */
-        },
-        myFunction2: function (name) {    // add subsequent automations like this
-            if (!state.auto[name]) init();
-            let st = state.auto[name];
-            function init() { state.auto[name] = {}; }
+        },// // give this automation object any name you want
+        myFunction2: function (autoName) {  // add subsequent automations like this
+            logName = autoName;             // set automation name for logging
+            if (!auto[autoName]) {          // check if automation is initialized, runs only once
+                auto[autoName] = {};        // create object for this automation in local state                             
+                // customize state memory for each of this automation's devices or features (volatile data) 
+                var state = auto[autoName];
+            }
         }
     };
 let
@@ -145,29 +147,29 @@ let
                 switch (buf.type) {
                     case "espState":            // incoming state change (from ESP)
                         // console.log("receiving esp data, name: " + buf.obj.name + " state: " + buf.obj.state);
-                        state.entity[buf.obj.name] ||= {}; // If state.esp[buf.obj.name] is falsy (undefined, null, 0, '', false), assign it an empty object.
-                        state.entity[buf.obj.name].state = buf.obj.state;
-                        state.entity[buf.obj.name].update = time.epoch;
-                        if (state.online == true) {
+                        entity[buf.obj.name] ||= {}; // If state.esp[buf.obj.name] is falsy (undefined, null, 0, '', false), assign it an empty object.
+                        entity[buf.obj.name].state = buf.obj.state;
+                        entity[buf.obj.name].update = time.epoch;
+                        if (online == true) {
                             em.emit(buf.obj.name, buf.obj.state);
-                            for (const name in automation) { if (state.auto[name]) automation[name](name) }
+                            for (const name in automation) { if (auto[name]) automation[name](name) }
                         }
                         break;
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
                         log("receiving HA state data, entity: " + buf.obj.name + " value: " + buf.obj.state, 0);
                         // console.log(buf);
-                        state.entity[buf.obj.name] ||= {};
-                        state.entity[buf.obj.name].update = time.epoch;
-                        try { state.entity[buf.obj.name].state = buf.obj.state; } catch { }
-                        if (state.online == true) {
+                        entity[buf.obj.name] ||= {};
+                        entity[buf.obj.name].update = time.epoch;
+                        try { entity[buf.obj.name].state = buf.obj.state; } catch { }
+                        if (online == true) {
                             em.emit(buf.obj.name, buf.obj.state);
-                            for (const name in automation) { if (state.auto[name]) automation[name](name) }
+                            for (const name in automation) { if (auto[name]) automation[name](name) }
                         }
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
-                        Object.assign(state.entity, buf.obj);
+                        Object.assign(entity, buf.obj);
                         log("receiving fetch data...");
-                        if (state.onlineHA == false) sys.boot(4);
+                        if (onlineHA == false) sys.boot(4);
                         break;
                     case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
                         log("Core has reconnected to HA, fetching again");
@@ -178,7 +180,7 @@ let
                         console.log("Available HA Devices: " + buf.obj);
                         break;
                     case "udpReRegister":       // reregister request from server
-                        if (state.online == true) {
+                        if (online == true) {
                             log("server lost sync, reregistering...");
                             setTimeout(() => {
                                 sys.register();
@@ -189,9 +191,9 @@ let
                     case "coreData":
                         // console.log("received coreData: ", buf.obj);
                         if (buf.obj.name && buf.obj.state) {
-                            if (!state.entity[buf.obj.name]) state.entity[buf.obj.name] = {};
-                            state.entity[buf.obj.name].state = buf.obj.state;
-                            state.entity[buf.obj.name].update = time.epoch;
+                            if (!entity[buf.obj.name]) entity[buf.obj.name] = {};
+                            entity[buf.obj.name].state = buf.obj.state;
+                            entity[buf.obj.name].update = time.epoch;
                             em.emit(buf.obj.name, buf.obj.state);
                         }
                         break;
@@ -209,7 +211,7 @@ let
                                 break;
                         }
                         break;
-                    case "proceed": if (state.online == false) setTimeout(() => { sys.boot(3); }, 1e3); break;
+                    case "proceed": if (online == false) setTimeout(() => { sys.boot(3); }, 1e3); break;
                     case "log": console.log(buf.obj); break;
                 }
             });
@@ -256,8 +258,12 @@ let
         },
         init: function () {
             nv = {};
+            auto = {};
             heartbeat = { timer: [], state: [] };
-            state = { auto: {}, entity: {}, onlineHA: false, online: false };
+            logName = null;
+            entity = {};
+            onlineHA = false;
+            online = false;
             timer = {};
             time = {
                 boot: null,
@@ -348,10 +354,10 @@ let
                         if (time.epoch - timer.fileWriteLast > 10) writeFile();
                         else timer.fileWrite = setTimeout(() => { writeFile(); }, 10e3);
                         function writeFile() {
-                            log("writing NV data...");
+                            // log("writing NV data...");
                             timer.fileWriteLast = time.epoch;
-                            fs.writeFile(workingDir + "/nv-bak.json", JSON.stringify(nv), function () {
-                                fs.copyFile(workingDir + "/nv-bak.json", workingDir + "/nv.json", (err) => {
+                            fs.writeFile(workingDir + "/nv-" + scriptName + "-bak.json", JSON.stringify(nv, null, 2), function () {
+                                fs.copyFile(workingDir + "/nv-" + scriptName + "-bak.json", workingDir + "/nv-" + scriptName + ".json", (err) => {
                                     if (err) throw err;
                                 });
                             });
@@ -390,12 +396,12 @@ let
                     }
                     );
                 },
-                buttonMulti: function (msg, auto, name, array) {
+                buttonMulti: function (msg, auto, array) {
                     buf = { reply_markup: { inline_keyboard: [[]] } };
                     array.forEach(element => {
                         buf.reply_markup.inline_keyboard[0].push({ text: element, callback_data: (auto + element) })
                     });
-                    bot(msg.from.id, name, buf);
+                    bot(msg.from.id, buf);
                 },
             };
             bot = function (id, data, obj) {
@@ -424,16 +430,16 @@ let
                     }), 65432, '127.0.0.1')
                 }
             };
-            log = function (message, name, level) {
+            log = function (message, level) {
                 if (level == undefined) {
                     udp.send(JSON.stringify({
                         type: "log",
-                        obj: { message: message, mod: cfg.moduleName, level: name }
+                        obj: { message: message, mod: cfg.moduleName, level: logName }
                     }), 65432, '127.0.0.1');
                 }
                 else udp.send(JSON.stringify({
                     type: "log",
-                    obj: { message: message, mod: name, level: level }
+                    obj: { message: message, mod: logName, level: level }
                 }), 65432, '127.0.0.1');
             };
             sys.boot(0);
@@ -490,7 +496,7 @@ let
                     clearInterval(bootWait);
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
                         log("Home Assistant fetch complete", 1);
-                        state.onlineHA = true;
+                        onlineHA = true;
                     }
                     if (cfg.esp != undefined && cfg.esp.length > 0) {
                         log("fetching esp entities", 1);
@@ -501,8 +507,8 @@ let
                 case 5:
                     if (cfg.esp != undefined && cfg.esp.length > 0)
                         log("ESP fetch complete", 1);
-                    state.online = true;
-                    for (const name in automation) { automation[name](name) }
+                    online = true;
+                    for (const name in automation) { automation[name](name); }
                     setInterval(() => { udp.send(JSON.stringify({ type: "heartbeat" }), 65432, '127.0.0.1'); time.boot++; }, 1e3);
                     break;
             }
