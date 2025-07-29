@@ -70,7 +70,8 @@ let
                     },
                 },
                 fault: {
-                    retry: 10,          // time in seconds to wait for retry
+                    retryCount: 2,      // times to try pump restart
+                    retryWait: 10,      // time in seconds to wait for retry
                     retryFinal: 2,      // time in minutes to wait for final retry
                     runLongError: 10,   // max run time in minutes
                     runLongWarn: 5,     // max run time in minutes
@@ -130,15 +131,16 @@ let
     },
     automation = {
         Pumper: function (autoName) {
-            logName = autoName;
+
             if (!auto[autoName]) {
                 auto[autoName] = {               // initialize automation volatile memory
                     init: true, dd: [], ha: { pushLast: [] }, fountain: []
                 };
                 var state = auto[autoName];
+                var log = (m, l) => slog(m, l, autoName);
                 if (cfg.sensor.flow != undefined) {
                     if (nv.flow == undefined) {             // initialize flow meter NV memory if no NV data
-                        log("initializing flow meter data...", 1);
+                        log("initializing flow meter data...");
                         nv.flow = {};
                         for (let x = 0; x < cfg.sensor.flow.length; x++) {
                             let flowName = cfg.sensor.flow[x].name;
@@ -148,7 +150,7 @@ let
                             for (let y = 0; y < 24; y++) nv.flow[flowName].hour.push(0);
                             for (let y = 0; y < 30; y++) nv.flow[flowName].day.push(0);
                         }
-                        log("writing NV data to disk...", 1);
+                        log("writing NV data to disk...");
                         file.write.nv();
                     }
                 }
@@ -162,7 +164,7 @@ let
                     state.fountain.push({ step: null, timerFlow: null, flowCheck: false, })
                 }
                 for (let x = 0; x < cfg.dd.length; x++) {
-                    log(cfg.dd[x].name + " - initializing", 1);
+                    log(cfg.dd[x].name + " - initializing");
                     state.dd.push({     // initialize volatile memory for each Demand Delivery system
                         cfg: cfg.dd[x],
                         state: {
@@ -223,10 +225,10 @@ let
                     if (cfg.dd[x].press != undefined && cfg.dd[x].press.output != undefined
                         && cfg.dd[x].press.output.profile != undefined) {
                         if (cfg.dd[x].ha.profile != undefined && cfg.dd[x].press.output.profile.length > 0) {
-                            log(cfg.dd[x].name + " - profile selector enabled", 1);
+                            log(cfg.dd[x].name + " - profile selector enabled");
                             state.dd[x].state.profile = parseInt(entity[cfg.dd[x].ha.profile].state);
                         } else {
-                            log(cfg.dd[x].name + " - no profile entity - selecting profile 0", 1);
+                            log(cfg.dd[x].name + " - no profile entity - selecting profile 0");
                             state.dd[x].state.profile = 0;
                         }
                     }
@@ -249,6 +251,8 @@ let
                     pushSensor(state);
                     for (let x = 0; x < cfg.dd.length; x++) pumpControl(x);
                     // for (let x = 0; x < cfg.fountain.length; x++) fountain(x);
+
+
                 }, 1e3);
                 setInterval(() => { timer(); }, 60e3);
                 listeners();
@@ -267,10 +271,9 @@ let
                     for (let x = 0; x < cfg.dd.length; x++) { state.dd[x].warn.flowDaily = false; } // reset low flow daily warning
                 }
                 if (time.hour == 22 && time.min == 0) {
-                    log("resetting daily flow meters", 1)
-                    for (let x = 0; x < cfg.sensor.flow.length; x++) nv.flow[x].today = 0; // reset daily low meters
+                    log("resetting daily flow meters")
+                    for (const name in nv.flow) { nv.flow[name].today = 0; }  // reset daily low meters
                 }
-
                 calcFlowMeter();
                 file.write.nv();
             }
@@ -308,7 +311,7 @@ let
                                         if (dd.press.out.cfg.unit == "m") {
                                             if (dd.press.out.state.meters <= dd.cfg.press.start) {
                                                 log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.meters.toFixed(2)
-                                                    + "m) - pump is starting", 1);
+                                                    + "m) - pump is starting");
                                                 pumpStart();
                                                 return;
                                             }
@@ -316,7 +319,7 @@ let
                                             //  console.log("turbo ", dd.press.out.state.psi)
                                             if (dd.press.out.state.psi <= dd.cfg.press.turbo.start) {
                                                 log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
-                                                    + "psi) - pump turbo is starting", 1);
+                                                    + "psi) - pump turbo is starting");
                                                 pumpStart();
                                                 return;
                                             }
@@ -325,20 +328,20 @@ let
                                             //     + dd.cfg.press.output.profile[dd.state.profile].start)
                                             if (dd.press.out.state.psi <= dd.cfg.press.output.profile[dd.state.profile].start) {
                                                 log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
-                                                    + "psi) - pump is starting with profile: " + dd.state.profile, 1);
+                                                    + "psi) - pump is starting with profile: " + dd.state.profile);
                                                 pumpStart();
                                                 return;
                                             }
                                         } else if (dd.press.out.state.psi <= dd.cfg.press.start) {
                                             //  console.log("current pressure: ", dd.press.out.state.psi)
                                             log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
-                                                + "psi) - pump is starting", 1);
+                                                + "psi) - pump is starting");
                                             pumpStart();
                                             return;
                                         }
                                         if (dd.state.timeoutOff == true) {  // after pump has been off for a while
                                             if (dd.pump[dd.state.pump].state === true && dd.sharedPump.run == false) {
-                                                log(dd.cfg.name + " - pump running in HA/ESP but not here - switching pump ON", 1);
+                                                log(dd.cfg.name + " - pump running in HA/ESP but not here - switching pump ON");
                                                 pumpStart();
                                                 return;
                                             } else {
@@ -346,7 +349,7 @@ let
                                                     && dd.warn.flowFlush == false && dd.sharedPump.shared == false) {
                                                     log(dd.cfg.name + " - flow is detected (" + dd.flow[dd.state.pump].lm.toFixed(0) + "lpm) possible sensor damage or flush operation", 2);
                                                     dd.warn.flowFlush = true;
-                                                    log(dd.cfg.name + " - shutting down auto system", 1);
+                                                    log(dd.cfg.name + " - shutting down auto system");
                                                     send(dd.auto.name, false);
                                                     dd.auto.state = false;
                                                     pumpStop(true);
@@ -371,20 +374,20 @@ let
                             case true:      // when pump is RUNNING
                                 if (dd.press.out.cfg.unit == "m") {
                                     if (dd.press.out.state.meters >= dd.cfg.press.stop) {
-                                        log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is full - pump is stopping", 1);
+                                        log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is full - pump is stopping");
                                         pumpStop();
                                         return;
                                     }
                                 } else if (dd.state.turbo) {
                                     if (dd.press.out.state.psi >= dd.cfg.press.turbo.stop) {
-                                        log(dd.cfg.name + " - " + dd.press.out.cfg.name + " turbo shutoff pressure reached - pump is stopping", 1);
+                                        log(dd.cfg.name + " - " + dd.press.out.cfg.name + " turbo shutoff pressure reached - pump is stopping");
                                         pumpStop();
                                         return;
                                     }
                                 } else if (dd.state.profile != null) {
                                     if (dd.press.out.state.psi >= dd.cfg.press.output.profile[dd.state.profile].stop) {
                                         log(dd.cfg.name + " - " + dd.press.out.cfg.name + " pump profile: " + dd.state.profile + " pressure reached: "
-                                            + dd.press.out.state.psi.toFixed(0) + " - pump is stopping", 1);
+                                            + dd.press.out.state.psi.toFixed(0) + " - pump is stopping");
                                         pumpStop();
                                         return;
                                     }
@@ -406,7 +409,7 @@ let
                                         }
                                     }
                                 } else if (dd.press.out.state.psi >= dd.cfg.press.stop) {
-                                    log(dd.cfg.name + " - " + dd.press.out.cfg.name + " shutoff pressure reached - pump is stopping", 1);
+                                    log(dd.cfg.name + " - " + dd.press.out.cfg.name + " shutoff pressure reached - pump is stopping");
                                     pumpStop();
                                     return;
                                 }
@@ -431,7 +434,7 @@ let
                                 if (dd.cfg.press.outputRiseTime != undefined) pumpPressCheck();
                                 if (dd.flow != undefined) {
                                     if (dd.cfg.pump[dd.state.pump].flow.stopFlow != undefined && dd.flow[dd.state.pump].lm <= dd.cfg.pump[dd.state.pump].flow.stopFlow) {
-                                        log(dd.cfg.name + " - stop flow rate reached - pump is stopping", 1);
+                                        log(dd.cfg.name + " - stop flow rate reached - pump is stopping");
                                         pumpStop();
                                         return;
                                     }
@@ -531,7 +534,7 @@ let
                     setTimeout(() => { dd.state.timeoutOn = true }, 10e3);
                     if (dd.cfg.pump[dd.state.pump].flow.entity != undefined) {
                         setTimeout(() => {
-                            log(dd.cfg.name + " - checking pump flow", 1);
+                            log(dd.cfg.name + " - checking pump flow");
                             dd.state.flowCheck = true;
                             automation[autoName](autoName);
                         }, dd.cfg.pump[dd.state.pump].flow.startWait * 1000);
@@ -539,13 +542,13 @@ let
                     dd.state.sendRetries = 0;
                     if (sendOut !== false) {
                         if (dd.cfg.solenoid != undefined) {
-                            log(dd.cfg.name + " - opening solenoid", 1);
+                            log(dd.cfg.name + " - opening solenoid");
                             send(dd.cfg.solenoid.entity, true);
                             setTimeout(() => { startMotor(); }, 2e3);
                         } else startMotor();
                         function startMotor() {
                             log(dd.cfg.name + " - starting pump: " + dd.pump[dd.state.pump].cfg.name + " - cycle count: "
-                                + dd.state.cycleCount + "  Time: " + (time.epoch - dd.state.cycleTimer), 1);
+                                + dd.state.cycleCount + "  Time: " + (time.epoch - dd.state.cycleTimer));
                             if (dd.pump[dd.state.pump].cfg.type == "ha") send(cfg.ha[dd.pump[dd.state.pump].entity], true); // if no "sendOut" then auto system is syncing state with HA/ESP
                             else setTimeout(() => { send(dd.pump[dd.state.pump].cfg.entity, true); }, 1e3);
                         }
@@ -575,7 +578,7 @@ let
                     }
                     setTimeout(() => {
                         if (dd.cfg.solenoid != undefined) {
-                            log(dd.cfg.name + " - closing solenoid", 1);
+                            log(dd.cfg.name + " - closing solenoid");
                             send(dd.cfg.solenoid.entity, false);
                         }
                     }, 4e3);
@@ -585,9 +588,9 @@ let
                         log(lbuf + " - pumped "
                             + ((tFlow < 2.0) ? ((tFlow * 1000).toFixed(1) + "L") : (tFlow.toFixed(2) + "m3"))
                             + " - Average: "
-                            + ((tFlow * 1000) / (time.epoch - dd.state.timerRun) * 60).toFixed(1) + "lm", 1);
+                            + ((tFlow * 1000) / (time.epoch - dd.state.timerRun) * 60).toFixed(1) + "lm");
                     }
-                    else log(lbuf, 1);
+                    else log(lbuf);
                     dd.state.timeoutOff = false;
                     dd.state.run = false;
                     dd.pump[dd.state.pump].state = false;
@@ -632,31 +635,40 @@ let
                     if (dd.state.flowCheck == true) {
                         if (dd.flow[dd.state.pump].lm < dd.cfg.pump[dd.state.pump].flow.startError) {
                             dd.fault.flow = true;
-                            if (dd.fault.flowRestarts < 3) {
-                                log(dd.cfg.name + " - flow check FAILED!! (" + dd.flow[dd.state.pump].lm.toFixed(1) + "lm) HA Pump State: "
-                                    + dd.pump[dd.state.pump].state + " - waiting for retry " + (dd.fault.flowRestarts + 1), 2);
-                                dd.fault.flowRestarts++;
-                                dd.state.flowTimer = setTimeout(() => {
-                                    dd.fault.flow = false; log(dd.cfg.name + " - pump restating", 1);
-                                }, dd.cfg.fault.retry * 1000);
-                            } else if (dd.fault.flowRestarts == 3) {
-                                log(dd.cfg.name + " - low flow (" + dd.flow[dd.state.pump].lm.toFixed(1) + "lm) HA State: "
-                                    + dd.pump[dd.state.pump].state + " - retries exceeded - going offline for " + dd.cfg.fault.retryFinal + "m", 3);
-                                dd.fault.flowRestarts++;
-                                dd.state.flowTimer = setTimeout(() => {
-                                    dd.fault.flow = false; log(dd.cfg.name + " - pump restating", 1);
-                                }, dd.cfg.fault.retryFinal * 60 * 1000);
+                            if (dd.cfg.fault.retry && dd.cfg.fault.retry > 0) {
+                                if (dd.fault.flowRestarts < dd.cfg.fault.retryCount) {
+                                    log(dd.cfg.name + " - flow check FAILED!! (" + dd.flow[dd.state.pump].lm.toFixed(1) + "lm) HA Pump State: "
+                                        + dd.pump[dd.state.pump].state + " - waiting for retry " + (dd.fault.flowRestarts + 1), 2);
+                                    dd.fault.flowRestarts++;
+                                    dd.state.flowTimer = setTimeout(() => {
+                                        log(dd.cfg.name + " - no flow retry wait complete, pump reenabled");
+                                        dd.fault.flow = false;
+                                    }, dd.cfg.fault.retryWait * 1000);
+                                } else if (dd.fault.flowRestarts == dd.cfg.fault.retryCount && dd.cfg.fault.retryFinal) {
+                                    log(dd.cfg.name + " - low flow (" + dd.flow[dd.state.pump].lm.toFixed(1) + "lm) HA State: "
+                                        + dd.pump[dd.state.pump].state + " - retries exceeded - going offline for " + dd.cfg.fault.retryFinal + "m", 3);
+                                    dd.fault.flowRestarts++;
+                                    dd.state.flowTimer = setTimeout(() => {
+                                        log(dd.cfg.name + " - no flow retry extended wait complete, pump reenabled", 2);
+                                        dd.fault.flow = false;
+                                    }, dd.cfg.fault.retryFinal * 60 * 1000);
+                                } else {
+                                    dd.fault.flowRestarts++;
+                                    log(dd.cfg.name + " - low flow (" + dd.flow[dd.state.pump].lm.toFixed(1) + "lm) HA State: "
+                                        + dd.pump[dd.state.pump].state + " - all retries failed - going OFFLINE permanently", 3);
+                                    send(dd.auto.name, false);
+                                    dd.auto.state = false;
+                                }
                             } else {
-                                dd.fault.flowRestarts++;
                                 log(dd.cfg.name + " - low flow (" + dd.flow[dd.state.pump].lm.toFixed(1) + "lm) HA State: "
-                                    + dd.pump[dd.state.pump].state + " - all retries failed - going OFFLINE permanently", 3);
-                                ha.send(dd.auto.name, false);
+                                    + dd.pump[dd.state.pump].state + " - pump retry not enabled - going OFFLINE permanently", 3);
+                                send(dd.auto.name, false);
                                 dd.auto.state = false;
                             }
                             pumpStop(true);
                         } else {
                             if (dd.state.flowCheckPassed == false) {
-                                log(dd.cfg.name + " - pump flow check PASSED (" + dd.flow[dd.state.pump].lm.toFixed(1) + "lm)", 1);
+                                log(dd.cfg.name + " - pump flow check PASSED (" + dd.flow[dd.state.pump].lm.toFixed(1) + "lm)");
                                 dd.state.flowCheckPassed = true;
                                 dd.fault.flowRestarts = 0;
                                 if (dd.flow[dd.state.pump].lm < dd.cfg.pump[dd.state.pump].flow.startWarn && dd.warn.flowDaily == false) {
@@ -682,12 +694,12 @@ let
                     }
                 }
                 function listener() {
-                    log(dd.cfg.name + " - creating event listener for HA automation control", 1);
+                    log(dd.cfg.name + " - creating event listener for HA automation control");
                     em.on(dd.auto.name, function (data) {
                         time.sync();
                         switch (data) {
                             case true:
-                                log(dd.cfg.name + " - is going ONLINE", 1);
+                                log(dd.cfg.name + " - is going ONLINE");
                                 dd.auto.state = true;
                                 dd.fault.flow = false;
                                 dd.fault.flowRestarts = 0;
@@ -700,7 +712,7 @@ let
                                 clearTimeout(dd.state.flowTimer);
                                 return;
                             case false:
-                                log(dd.cfg.name + " - is going OFFLINE - pump is stopping", 1);
+                                log(dd.cfg.name + " - is going OFFLINE - pump is stopping");
                                 dd.auto.state = false;
                                 clearTimeout(state.dd[x].oneShot);
                                 clearTimeout(dd.state.flowTimer);
@@ -722,12 +734,12 @@ let
                 let fount = { st: state.fountain[x], cfg: cfg.fountain[x] }
                 fount.state.step = time.epochMin;
                 if (power) {
-                    log(fount.cfg.name + " - is turning on", 1);
+                    log(fount.cfg.name + " - is turning on");
                     send(cfg.esp[fount.cfg.pump], true);
                     if (fount.cfg.flow != undefined && fount.cfg.flow.entity != undefined) {
                         fount.state.timerFlow = setTimeout(() => {
                             let flow = (entity[cfg.flow[fount.cfg.flow.entity].entity].state / 60).toFixed(0);
-                            log(fount.cfg.name + " - checking flow", 1);
+                            log(fount.cfg.name + " - checking flow");
                             if (flow < fount.cfg.flow.startError) {
                                 log(fount.cfg.name + " - flow check FAILED: " + flow + "lpm - auto will shut down", 3);
                                 send(fount.cfg.haAuto, false);
@@ -737,13 +749,13 @@ let
                                 log(fount.cfg.name + " - starting flow less than normal: " + flow + "lpm", 2);
                                 send(fount.cfg.haAuto, false);
                             } else {
-                                log(fount.cfg.name + " - flow check PASSED: " + flow + "lpm", 1);
+                                log(fount.cfg.name + " - flow check PASSED: " + flow + "lpm");
                                 fount.state.flowCheck = true;
                             }
                         }, (fount.cfg.flow.startWait * 1e3));
                     }
                 } else {
-                    log(fount.cfg.name + " - is turning off", 1);
+                    log(fount.cfg.name + " - is turning off");
                     send(cfg.esp[fount.cfg.pump], false);
                     clearTimeout(fount.state.timerFlow);
                     fount.state.flowCheck = false;
@@ -798,7 +810,7 @@ let
                     for (let y = 0; y < entity[name].average.length; y++) calc.sum += entity[name].average[y];
                     calc.average = calc.sum / entity[name].average.length;
                     if (config.voltageMin == 0.5) log("sensor ID: " + x + " is uncalibrated - Average Volts: "
-                        + calc.average.toFixed(3) + "  - WAIT " + config.average + " seconds", 1);
+                        + calc.average.toFixed(3) + "  - WAIT " + config.average + " seconds");
                     calc.psi = (config.pressureRating / 4) * (calc.average - config.voltageMin);
                     calc.meters = 0.703249 * calc.psi;
                     calc.percent[0] = stopPressure - calc.meters;
@@ -867,13 +879,13 @@ let
                     if (cfg.dd[x].ha.oneShot != undefined && cfg.dd[x].ha.oneShotTimer != undefined) {
                         let duration = Math.trunc(entity[cfg.dd[x].ha.oneShotTimer].state);
                         cfg.dd[x].ha.oneShot.forEach(element => {
-                            log(cfg.dd[x].name + " - creating listener for One Shot operation: " + element, 1);
+                            log(cfg.dd[x].name + " - creating listener for One Shot operation: " + element);
                             em.on(element, (newState) => {
                                 if (newState.includes("remote_button_short_press") || !newState.includes("remote_button")) {
-                                    log(cfg.dd[x].name + " - starting one shot operation - stopping in " + duration + " minutes", 1);
+                                    log(cfg.dd[x].name + " - starting one shot operation - stopping in " + duration + " minutes");
                                     send(cfg.dd[x].ha.auto, true);
                                     state.dd[x].oneShot = setTimeout(() => {
-                                        log(cfg.dd[x].name + " - stopping one shot operation after " + duration + " minutes", 1);
+                                        log(cfg.dd[x].name + " - stopping one shot operation after " + duration + " minutes");
                                         send(cfg.dd[x].ha.auto, false);
                                     }, (duration * 60 * 1e3));
                                 }
@@ -881,35 +893,35 @@ let
                         });
                     }
                     if (cfg.dd[x].ha.turbo != undefined) {
-                        log(cfg.dd[x].name + " - creating listener for Turbo operation: " + cfg.dd[x].ha.turbo, 1);
+                        log(cfg.dd[x].name + " - creating listener for Turbo operation: " + cfg.dd[x].ha.turbo);
                         em.on(cfg.dd[x].ha.turbo, (newState) => {
                             if (newState == true) {
-                                log(cfg.dd[x].name + " - enabling pump turbo mode", 1);
+                                log(cfg.dd[x].name + " - enabling pump turbo mode");
                                 state.dd[x].state.turbo = true;
                             } else {
-                                log(cfg.dd[x].name + " - disabling pump turbo mode", 1);
+                                log(cfg.dd[x].name + " - disabling pump turbo mode");
                                 state.dd[x].state.turbo = false;
                             }
                         });
                     }
                     if (cfg.dd[x].press.output != undefined && cfg.dd[x].press.output.profile != undefined &&
                         cfg.dd[x].ha.profile != undefined && cfg.dd[x].press.output.profile.length > 1) {
-                        log(cfg.dd[x].name + " - creating listener for pump profile: " + cfg.dd[x].ha.profile, 1);
+                        log(cfg.dd[x].name + " - creating listener for pump profile: " + cfg.dd[x].ha.profile);
                         em.on(cfg.dd[x].ha.profile, (newState) => {
-                            log(cfg.dd[x].name + " - pump profile changing to mode: " + ~~newState, 1);
+                            log(cfg.dd[x].name + " - pump profile changing to mode: " + ~~newState);
                             state.dd[x].state.profile = parseInt(newState);
                         });
                     }
                 }
                 for (let x = 0; x < cfg.fountain.length; x++) {
                     if (cfg.fountain[x].haAuto != undefined) {
-                        log(cfg.fountain[x].name + " - creating automation Listener: " + cfg.dd[x].ha.profile, 1);
+                        log(cfg.fountain[x].name + " - creating automation Listener: " + cfg.dd[x].ha.profile);
                         em.on(cfg.fountain[x].haAuto, (newState) => {
                             if (newState == true) {
-                                log(cfg.fountain[x].name + " auto is starting", 1);
+                                log(cfg.fountain[x].name + " auto is starting");
                                 pumpFountain(x, true);
                             } else {
-                                log(cfg.fountain[x].name + " auto is stopping", 1);
+                                log(cfg.fountain[x].name + " auto is stopping");
                                 pumpFountain(x, false);
                             }
                         });
@@ -918,10 +930,10 @@ let
             }
         },
         Compound: function (autoName) { // compound automation 
-            logName = autoName;
             if (!auto[autoName]) {
                 auto[autoName] = { freezer: { boot: false } };
                 var state = auto[autoName];
+                var log = (...buf) => slog(...buf, autoName);
                 setInterval(() => { timer(); }, 60e3);
                 em.on("input_boolean.lights_stairs", (newState) => { send("switch.switch_test", newState); });
                 em.on("switch.switch_test", (newState) => { send("input_boolean.lights_stairs", newState); });
@@ -935,7 +947,7 @@ let
                         freezer();
                     }
                     else {
-                        log("Freezer - Turning ON permanently", 1);
+                        log("Freezer - Turning ON permanently");
                         send("switch.relay_bodega_freezer_fujidenzo", true);
                         nv.freezer.update = time.epochMin;
                         file.write.nv();
@@ -944,22 +956,21 @@ let
                 if (entity["input_boolean.auto_freezer"].state) freezer();
                 setInterval(() => { if (entity["input_boolean.auto_freezer"].state) freezer(); }, 60e3);
             }
-
             function timer() {
                 if (time.hour == 0 && time.min == 0) {
-                    log("Lights - Outside Lights - Turning OFF", 1);
+                    log("Lights - Outside Lights - Turning OFF");
                     send("input_boolean.lights_stairs", false);
                     send("switch.lights_bodega_front_1", false);
                     send("switch.lights_outside_entrance", false);
                 }
                 if (time.hour == 6 && time.min == 30) send("input_boolean.auto_bubon", true);
                 if (time.hour == 4 && time.min == 0) {
-                    log("Lights - Outside Lights (bodega front 2) - Turning OFF", 1);
+                    log("Lights - Outside Lights (bodega front 2) - Turning OFF");
                     send("switch.lights_bodega_front_2", false);
                 }
                 if (time.hour == 18 && time.min == 0) send("switch.lights_bodega_front_1", true);
                 if (time.hour == 18 && time.min == 20) {
-                    log("Lights - Outside Lights - Turning ON", 1);
+                    log("Lights - Outside Lights - Turning ON");
                     send("input_boolean.lights_stairs", true);
                     send("switch.lights_bodega_front_2", true);
                     send("switch.lights_outside_bedroom", true);
@@ -973,7 +984,7 @@ let
             function freezer() {
                 if (entity["switch.relay_bodega_freezer_fujidenzo"] != undefined) {
                     if (!nv.freezer) {
-                        log("Freezer - NV mem initializing", 1);
+                        log("Freezer - NV mem initializing");
                         nv.freezer = { update: time.epochMin, state: true };
                         file.write.nv();
                     }
@@ -981,11 +992,11 @@ let
                     let timerOff = entity["input_number.timer_freezer_off"].state;
                     if (entity["switch.relay_bodega_freezer_fujidenzo"].state) {
                         if (!state.freezer.boot) {
-                            log("Freezer - is ON - shutdown in " + (timerOn - (time.epochMin - nv.freezer.update)) + " mins", 1);
+                            log("Freezer - is ON - shutdown in " + (timerOn - (time.epochMin - nv.freezer.update)) + " mins");
                             state.freezer.boot = true;
                         }
                         if (time.epochMin - nv.freezer.update >= timerOn) {
-                            log("Freezer - Turning OFF for - " + timerOff + " mins", 1);
+                            log("Freezer - Turning OFF for - " + timerOff + " mins");
                             send("switch.relay_bodega_freezer_fujidenzo", false);
                             entity["input_number.timer_freezer_on"].state = false;
                             nv.freezer.update = time.epochMin;
@@ -993,11 +1004,11 @@ let
                         }
                     } else {
                         if (!state.freezer.boot) {
-                            log("Freezer - is OFF - Startup in " + (timerOff - (time.epochMin - nv.freezer.update)) + " mins", 1);
+                            log("Freezer - is OFF - Startup in " + (timerOff - (time.epochMin - nv.freezer.update)) + " mins");
                             state.freezer.boot = true;
                         }
                         if (time.epochMin - nv.freezer.update >= timerOff) {
-                            log("Freezer - Turning ON for - " + timerOn + " mins", 1);
+                            log("Freezer - Turning ON for - " + timerOn + " mins");
                             send("switch.relay_bodega_freezer_fujidenzo", true);
                             entity["input_number.timer_freezer_on"].state = true;
                             nv.freezer.update = time.epochMin;
@@ -1079,7 +1090,7 @@ let
                         }
                         break;
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
-                        log("receiving HA state data, entity: " + buf.obj.name + " value: " + buf.obj.state, 0);
+                        slog("receiving HA state data, entity: " + buf.obj.name + " value: " + buf.obj.state, 0);
                         // console.log(buf);
                         entity[buf.obj.name] ||= {};
                         entity[buf.obj.name].update = time.epoch;
@@ -1091,11 +1102,11 @@ let
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
                         Object.assign(entity, buf.obj);
-                        log("receiving fetch data...");
+                        slog("receiving fetch data...");
                         if (onlineHA == false) sys.boot(4);
                         break;
                     case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
-                        log("Core has reconnected to HA, fetching again");
+                        slog("Core has reconnected to HA, fetching again");
                         udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         break;
@@ -1104,7 +1115,7 @@ let
                         break;
                     case "udpReRegister":       // reregister request from server
                         if (online == true) {
-                            log("server lost sync, reregistering...");
+                            slog("server lost sync, reregistering...");
                             setTimeout(() => {
                                 sys.register();
                                 if (cfg.ha != undefined) { udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1'); }
@@ -1146,7 +1157,7 @@ let
             if (cfg.heartbeat != undefined) {
                 if (cfg.heartbeat.esp != undefined && cfg.heartbeat.esp.length > 0) {
                     cfg.heartbeat.esp.forEach((e, x) => {
-                        log("registering heartbeat for ESP: " + e.name, 1);
+                        slog("registering heartbeat for ESP: " + e.name);
                         if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
                         heartbeat.timer[x] = setInterval(() => {
                             if (heartbeat.state[x]) {
@@ -1232,7 +1243,7 @@ let
             udp = udpClient.createSocket('udp4');
             if (process.argv[2] == "-i") {
                 moduleName = cfg.moduleName.toLowerCase();
-                log("installing TWIT-Client-" + cfg.moduleName + " service...");
+                slog("installing TWIT-Client-" + cfg.moduleName + " service...");
                 let service = [
                     "[Unit]",
                     "Description=",
@@ -1257,13 +1268,13 @@ let
                 execSync("systemctl enable twit-client-" + moduleName + ".service");
                 execSync("systemctl start twit-client-" + moduleName);
                 execSync("service twit-client-" + moduleName + " status");
-                log("service installed and started");
+                slog("service installed and started");
                 console.log("type: journalctl -fu twit-client-" + moduleName);
                 process.exit();
             }
             if (process.argv[2] == "-u") {
                 moduleName = cfg.moduleName.toLowerCase();
-                log("uninstalling TWIT-Client-" + cfg.moduleName + " service...");
+                slog("uninstalling TWIT-Client-" + cfg.moduleName + " service...");
                 execSync("systemctl stop twit-client-" + moduleName);
                 execSync("systemctl disable twit-client-" + moduleName + ".service");
                 fs.unlinkSync("/etc/systemd/system/twit-client-" + moduleName + ".service");
@@ -1277,7 +1288,7 @@ let
                         if (time.epoch - timer.fileWriteLast > 10) writeFile();
                         else timer.fileWrite = setTimeout(() => { writeFile(); }, 10e3);
                         function writeFile() {
-                            // log("writing NV data...");
+                            // slog("writing NV data...");
                             timer.fileWriteLast = time.epoch;
                             fs.writeFile(workingDir + "/nv-" + scriptName + "-bak.json", JSON.stringify(nv, null, 2), function () {
                                 fs.copyFile(workingDir + "/nv-" + scriptName + "-bak.json", workingDir + "/nv-" + scriptName + ".json", (err) => {
@@ -1292,7 +1303,7 @@ let
                 sub: function (msg) {
                     let buf = { user: msg.from.first_name + " " + msg.from.last_name, id: msg.from.id }
                     if (!telegram.auth(msg)) {
-                        log("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
+                        slog("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
                         nv.telegram.push(buf);
                         bot(msg.chat.id, 'registered');
                         udp.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
@@ -1353,16 +1364,16 @@ let
                     }), 65432, '127.0.0.1')
                 }
             };
-            log = function (message, level) {
-                if (level == undefined) {
+            slog = function (message, level, system) {
+                if (level == undefined) level = 1;
+                if (!system) {
                     udp.send(JSON.stringify({
                         type: "log",
-                        obj: { message: message, mod: cfg.moduleName, level: logName }
+                        obj: { message: message, mod: (cfg.moduleName + "-System"), level: level }
                     }), 65432, '127.0.0.1');
-                }
-                else udp.send(JSON.stringify({
+                } else udp.send(JSON.stringify({
                     type: "log",
-                    obj: { message: message, mod: logName, level: level }
+                    obj: { message: message, mod: system, level: level }
                 }), 65432, '127.0.0.1');
             };
             sys.boot(0);
@@ -1375,7 +1386,7 @@ let
                     console.log("Loading non-volatile data...");
                     fs.readFile(workingDir + "/nv-" + scriptName + ".json", function (err, data) {
                         if (err) {
-                            log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
+                            slog("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
                                 + ", nv-" + scriptName + ".json file should be in same folder as client.js file (" + workingDir + ")");
                             nv = { telegram: [] };
                         }
@@ -1389,7 +1400,7 @@ let
                     //process.exit();
                     fs.readFile(workingDir + "/config-" + scriptName + ".json", function (err, data) {
                         if (err) {
-                            log("\x1b[33;1mconfig file does not exist\x1b[37;m"
+                            slog("\x1b[33;1mconfig file does not exist\x1b[37;m"
                                 + ", config-" + scriptName + ".json file should be in same folder as client-" + scriptName + ".js file (" + workingDir + ")");
                             process.exit();
                         }
@@ -1399,18 +1410,18 @@ let
                     break;
                 case 2:
                     sys.com();
-                    log("trying to register with TWIT Core", 1);
+                    slog("trying to register with TWIT Core");
                     sys.register();
                     bootWait = setInterval(() => { sys.register(); }, 10e3);
                     break;
                 case 3:
                     clearInterval(bootWait);
-                    log("registered with TWIT Core", 1);
+                    slog("registered with TWIT Core");
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
-                        log("fetching Home Assistant entities", 1);
+                        slog("fetching Home Assistant entities");
                         udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         bootWait = setInterval(() => {
-                            log("HA fetch is failing, retrying...", 2);
+                            slog("HA fetch is failing, retrying...", 2);
                             udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         }, 10e3);
                     } else sys.boot(4);
@@ -1418,21 +1429,21 @@ let
                 case 4:
                     clearInterval(bootWait);
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
-                        log("Home Assistant fetch complete", 1);
+                        slog("Home Assistant fetch complete");
                         onlineHA = true;
                     }
                     if (cfg.esp != undefined && cfg.esp.length > 0) {
-                        log("fetching esp entities", 1);
+                        slog("fetching esp entities");
                         udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         setTimeout(() => { sys.boot(5); }, 1e3);
                     } else sys.boot(5);
                     break;
                 case 5:
                     if (cfg.esp != undefined && cfg.esp.length > 0)
-                        log("ESP fetch complete", 1);
+                        slog("ESP fetch complete");
                     online = true;
                     for (const name in automation) {
-                        log(name + " automation initializing...", 1);
+                        slog(name + " automation initializing...");
                         automation[name](name);
                     }
                     setInterval(() => { udp.send(JSON.stringify({ type: "heartbeat" }), 65432, '127.0.0.1'); time.boot++; }, 1e3);
