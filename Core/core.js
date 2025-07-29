@@ -155,17 +155,19 @@ if (isMainThread) {
                                 if (timeResult > 1000) log("websocket (" + a.color("cyan", config.address) + ") ping is lagging - delay is: " + timeResult + "ms", 1, 0);
                                 break;
                             case "result":
-                                state.ha[haNum].ws.zhaDevices ||= {};
-                                if (buf.id == 2 && Array.isArray(buf.result)) {
+                                state.ha[haNum].ws.zha.devices ||= {};
+                                if (buf.id == state.ha[haNum].ws.queryRequest && Array.isArray(buf.result)) {
+                                    // console.log(buf)
                                     buf.result.forEach(dev => {
                                         if (dev.user_given_name) {
                                             logs.zhaDevices[haNum] ||= [];
                                             logs.zhaDevices[haNum].push(dev.user_given_name);
-                                            state.ha[haNum].ws.zhaDevices[dev.device_reg_id] = { userName: dev.user_given_name, name: dev.name };
+                                            state.ha[haNum].ws.zha.devices[dev.device_reg_id] = { userName: dev.user_given_name, name: dev.name };
                                         }
                                     });
-                                    log("Fetching Zigbee Devices", 1);
-                                    console.log(state.ha[haNum].ws.zhaDevices);
+                                    log("Websocket (" + a.color("cyan", config.address) + ") received ZHA device list", 1);
+                                    //console.log(state.ha[haNum].ws.zha.devices);
+                                    clearTimeout(state.ha[haNum].ws.queryReply);
                                 }
                                 break;
                             case "auth_required":
@@ -174,7 +176,7 @@ if (isMainThread) {
                                 break;
                             case "auth_ok":
                                 send({ id: client.id++, type: "subscribe_events", event_type: "zha_event" });
-                                send({ id: client.id++, type: "zha/devices" });
+                                zhaQuery();
                                 state.client.forEach(element => { udp.send(JSON.stringify({ type: "haFetchAgain" }), element.port); });
                                 log("Websocket (" + a.color("cyan", config.address) + ") authentication accepted", 1);
                                 log("Websocket (" + a.color("cyan", config.address) + ") subscribing to event listener", 1);
@@ -186,11 +188,11 @@ if (isMainThread) {
                             case "event":
                                 switch (buf.event.event_type) {
                                     case "zha_event":
-                                        // console.log(state.ha[haNum].ws.zhaDevices)
-                                        if (state.ha[haNum].ws.zhaDevices[buf.event.data.device_id] != undefined
+                                        // console.log(state.ha[haNum].ws.zha.devices)
+                                        if (state.ha[haNum].ws.zha.devices[buf.event.data.device_id] != undefined
                                             && buf.event.data.command != 'press_type') {
-                                            let name = state.ha[haNum].ws.zhaDevices[buf.event.data.device_id].userName;
-                                            //  console.log(state.ha[haNum].ws.zhaDevices[buf.event.data.device_id], " - action: " + buf.event.data.command);
+                                            let name = state.ha[haNum].ws.zha.devices[buf.event.data.device_id].userName;
+                                            //  console.log(state.ha[haNum].ws.zha.devices[buf.event.data.device_id], " - action: " + buf.event.data.command);
                                             for (let x = 0; x < state.client.length; x++) {
                                                 for (let y = 0; y < state.client[x].ha.length; y++) {
                                                     if (state.client[x].ha[y] == name) {
@@ -242,7 +244,7 @@ if (isMainThread) {
                                 break;
                         }
                     });
-                    em.on('send' + haNum, function (data) { send(data) });
+                    em.on('haSend' + haNum, function (data) { send(haNum, data) });
                     function send(data) {
                         try { socket.sendUTF(JSON.stringify(data)); }
                         catch (error) { log(error, 1, 3) }
@@ -267,6 +269,16 @@ if (isMainThread) {
                         log("websocket (" + a.color("cyan", config.address) + ") " + error.toString(), 1, 3);
                         ws[haNum].connect("ws://" + config.address + ":" + config.port + "/api/websocket");
                         setTimeout(() => { if (client.reply == false) { haReconnect("retrying..."); } }, 10e3);
+                    }
+                    em.on('zhaQuery' + haNum, function (num) { zhaQuery(); });
+                    function zhaQuery() {
+                        log("Websocket (" + a.color("cyan", config.address) + ") querying ZHA device list...", 1);
+                        state.ha[haNum].ws.queryRequest = client.id;
+                        send({ id: client.id++, type: "zha/devices" });
+                        state.ha[haNum].ws.queryReply = setTimeout(() => {
+                            log("Websocket (" + a.color("cyan", config.address) + ") never replied to ZHA Device query, retrying...", 1);
+                            zhaQuery();
+                        }, 10e3);
                     }
                 });
             },
@@ -421,9 +433,9 @@ if (isMainThread) {
                                 }
                             }
 
-                            // not used yet
+                            // not used yet - this is used to send data directly to ZHA devices
                             /*
-                            for (const userName in state.ha[y].ws.zhaDevices) {
+                            for (const userName in state.ha[y].ws.zha.devices) {
                                 if (userName == buf.obj.name) {
                                     haNum = y;
                                     console.log("found ZHE Entity: ", userName, " on HA: ", y);
@@ -437,7 +449,7 @@ if (isMainThread) {
                                     break;
                                 }
                             }
-                            let name = state.ha[y].ws.zhaDevices[buf.obj.name].userName;
+                            let name = state.ha[y].ws.zha.devices[buf.obj.name].userName;
                             */
                         }
                         if (sensor == undefined) {
@@ -544,7 +556,7 @@ if (isMainThread) {
                                     for (let y = 0; y < state.client[x].coreData.length; y++) {
                                         if (state.coreData[state.client[x].coreData[y]]) {
                                             log("sending coreData: " + buf.obj.name + "  to client: " + a.color("cyan", state.client[id].name), 3, 0);
-                                            // console.log("name", buf.obj.name, " state", buf.obj.state,)
+                                            console.log("name", buf.obj.name, " state", buf.obj.state,)
                                             udp.send(JSON.stringify({
                                                 type: "coreData",
                                                 obj: { name: buf.obj.name, state: buf.obj.state, }
@@ -673,15 +685,14 @@ if (isMainThread) {
                         sys.init();
                         log("initializing system states done");
                         log("Loading non-volatile data...");
-                        fs.readFile(workingDir + "/nv.json", function (err, data) {
+                        fs.readFile(workingDir + "/nv-core.json", function (err, data) {
                             if (err) {
                                 log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
                                     + "\nnv.json file should be in same folder as core.js file");
                                 nv = { coreData: {}, telegram: [] };
                                 file.write.nv();
                                 sys.boot(2);
-                            }
-                            else {
+                            } else {
                                 nv = JSON.parse(data);
                                 log("deep merging NV coreData into live state memory");
                                 deepMerge(state.coreData, nv.coreData);
@@ -717,10 +728,13 @@ if (isMainThread) {
                             express.get("/ha", function (request, response) {
                                 for (let x = 0; x < cfg.homeAssistant.length; x++) {
                                     logs.haInputs[x] = [];
+                                    em.emit('zhaQuery' + x);
                                     hass[x].states.list()
                                         .then(data => {
                                             data.forEach(element => { logs.haInputs[x].push(element.entity_id) });
-                                            if (cfg.homeAssistant.length - 1 == x) response.send({ ZHA: logs.zhaDevices, HA: logs.haInputs });
+                                            if (cfg.homeAssistant.length - 1 == x) setTimeout(() => {
+                                                response.send({ ZHA: logs.zhaDevices, HA: logs.haInputs });
+                                            }, 200);
                                         })
                                         .catch(err => { log("fetching failed", 0, 2); });
                                 }
@@ -891,7 +905,7 @@ if (isMainThread) {
                             reply: true,
                             pingsLost: 0,
                             timeStart: 0,
-                            zhaDevices: {},
+                            zha: { devices: {}, queryRequest: null, queryReply: null },
                         };
                         state.perf.ha.push(
                             {
@@ -960,8 +974,8 @@ if (isMainThread) {
                             function writeFile() {
                                 log("writing NV data...");
                                 timer.fileWriteLast = time.epoch;
-                                fs.writeFile(workingDir + "/nv-bak.json", JSON.stringify(nv), function () {
-                                    fs.copyFile(workingDir + "/nv-bak.json", workingDir + "/nv.json", (err) => {
+                                fs.writeFile(workingDir + "/nv-core-bak.json", JSON.stringify(nv), function () {
+                                    fs.copyFile(workingDir + "/nv-core-bak.json", workingDir + "/nv-core.json", (err) => {
                                         if (err) throw err;
                                     });
                                 });
