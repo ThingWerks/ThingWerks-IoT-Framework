@@ -26,7 +26,6 @@ let
     },
     automation = {  // create a new myFunction1: function (autoName) {},  object function for each automation you want to create
         myFunction1: function (autoName) {
-            logName = autoName;                                             // set automation name for logging
             if (!auto[autoName]) {                                          // check if automation is initialized, runs only once
                 auto[autoName] = {                                          // create object for this automation in local state                             // give this automation a name 
                     example: { started: false, step: time.sec }             // customize state memory for each of this automation's devices or features (volatile data) 
@@ -141,12 +140,15 @@ let
                 http://127.0.0.1:20000/log -----last 500 log messages
          */
         },// // give this automation object any name you want
-        myFunction2: function (autoName) {  // add subsequent automations like this
-            logName = autoName;             // set automation name for logging
-            if (!auto[autoName]) {          // check if automation is initialized, runs only once
-                auto[autoName] = {};        // create object for this automation in local state                             
+        myFunction2: function (_name) {  // add subsequent automations like this
+            if (!auto[_name]) {          // check if automation is initialized, runs only once
+                auto[_name] = {};        // create object for this automation in local state                             
                 // customize state memory for each of this automation's devices or features (volatile data) 
-                var state = auto[autoName];
+                nv[_name] ||= { myVar: "test" };    // create non-volatile data structure  
+                var log = (m, l) => slog(m, l, a);  // setup automation logging
+                var state = auto[_name];            // assign state memory shorthand pointer
+                var disk = nv[_name];               // make a short hand reference for your non-volatile storage area 
+                file.write.nv();                    // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
             }
         }
     };
