@@ -31,23 +31,37 @@ let
                 auto[autoName] = {                                          // create object for this automation in local state                             // give this automation a name 
                     example: { started: false, step: time.sec }             // customize state memory for each of this automation's devices or features (volatile data) 
                 };
+                nv[autoName] ||= { myVar: "test" };                         // create non-volatile data structure  
+                var log = (m, l) => slog(m, l, autoName);                   // setup automation logging
                 var state = auto[autoName];                                 // assign state memory shorthand pointer
+                var disk = nv[autoName];                                    // make a short hand reference for your non-volatile storage area 
+                file.write.nv();                                            // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
 
                 // add your customized initialization sequence
                 setInterval(() => { automation[autoName](autoName); }, 1e3);// manually rerun automation?, otherwise this automation function will only run on ESP and HA push events
                 setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds (in addition to incoming ESP or Home Assistant events)
-                log("automation starting...", name, 1);                     // log automation start with index number and severity (0: debug, 1:event, 2: warning, 3: error)
-                log(cfg.myAutomationConfigData.test)                        // log some string stored in your non-volatile data
+                log("automation initializing", 1);                          // Log SOMETHING,  severity (0: debug, 1:event, 2: warning, 3: error) if omitted, 1 is assumed
+                log(cfg.myAutomationConfigData.test)                        // log some string stored in your configs
                 em.on("input_button.test", () => button.test());            // create an event emitter for HA or ESP entity that calls a function when data is received
                 em.on("power1-relay1", (newState) => {                      // an event emitter for HA or ESP device that directly performs a function
-                    log("my esp toggle function", name, 1);
+                    log("my esp toggle function");
+                });
+
+                // bi-directionally sync a switch between two different Home Assistant Servers
+                em.on("input_boolean.lights_stairs", (newState) => { send("switch.switch_test", newState); });
+                em.on("switch.switch_test", (newState) => { send("input_boolean.lights_stairs", newState); });
+
+                em.on("Switch Kitchen Pump", (newState) => {    // Zigbee ZHA button test example
+                    if (newState == "remote_button_long_press") send("input_boolean.auto_pump", false);
+                    if (newState == "remote_button_double_press") send("input_boolean.auto_pump", true);
+                    if (newState.includes("remote_button_short_press")) log("Switch Kitchen Pump - was short pressed");
                 });
             }
 
 
             send("cdata", {  // optional - register with core to receive data from other clients
                 register: true,
-                name: ["myObject1", "myObject2"]
+                name: ["test", "myObject2"]
             });
             em.on("test", (newState) => {
                 if (entity["test"].state) console.log("coredata listener test: ", newState)
@@ -71,8 +85,6 @@ let
                     send("volts_dc_Battery_rounded", Math.round(parseFloat(entity["myESPentity"].state) * 10) / 10, "v");    // send sensor data to HA. your sensor name, value, unit of your choice
                     ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
                     send("cdata", { name: "coreDataName", state: { myData: "data" } });     // broadcast data to the Core for other clients to receive
-                    nv[name] = { myVar: "test" };               // create non-volatile data structure           
-                    file.write.nv();                            // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
                 }
             };
 
@@ -82,13 +94,13 @@ let
             // "entity["myHaEntity"].state"  is  where all incoming entity states are stored
 
             if (entity["myHaEntity"].state == true && state.example.started == false) {      // compare a Home Assistant entity with a value in your program - do something
-                log("turning off outside lights", name, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
+                log("turning off outside lights", 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
                 state.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
                 state.example.started = true;                                  // set automation state variable
             }
 
             if (entity["myHaEntity"].state == true && state.example.started == false) {      // compare an ESPHome entity with a value in your program - do something
-                log("turning off outside lights", name, 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
+                log("turning off outside lights", 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
                 state.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
                 state.example.started = true;                                  // set automation state variable
             }
@@ -109,11 +121,11 @@ let
 
             function timer() { // called once per minute   
                 if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
-                    log("turning on outside lights", name, 1);
+                    log("turning on outside lights", 1);
                     send("switch.light_outside_switch", true);
                 }
                 if (time.hour == 22 && time.min == 0) {
-                    log("turning off outside lights", name, 1);
+                    log("turning off outside lights", 1);
                     send("switch.light_outside_switch", false);
                 }
             };
@@ -156,7 +168,7 @@ let
                         }
                         break;
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
-                        log("receiving HA state data, entity: " + buf.obj.name + " value: " + buf.obj.state, 0);
+                        slog("receiving HA state data, entity: " + buf.obj.name + " value: " + buf.obj.state, 0);
                         // console.log(buf);
                         entity[buf.obj.name] ||= {};
                         entity[buf.obj.name].update = time.epoch;
@@ -168,11 +180,11 @@ let
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
                         Object.assign(entity, buf.obj);
-                        log("receiving fetch data...");
+                        slog("receiving fetch data...");
                         if (onlineHA == false) sys.boot(4);
                         break;
                     case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
-                        log("Core has reconnected to HA, fetching again");
+                        slog("Core has reconnected to HA, fetching again");
                         udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         break;
@@ -181,7 +193,7 @@ let
                         break;
                     case "udpReRegister":       // reregister request from server
                         if (online == true) {
-                            log("server lost sync, reregistering...");
+                            slog("server lost sync, reregistering...");
                             setTimeout(() => {
                                 sys.register();
                                 if (cfg.ha != undefined) { udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1'); }
@@ -223,7 +235,7 @@ let
             if (cfg.heartbeat != undefined) {
                 if (cfg.heartbeat.esp != undefined && cfg.heartbeat.esp.length > 0) {
                     cfg.heartbeat.esp.forEach((e, x) => {
-                        log("registering heartbeat for ESP: " + e.name, 1);
+                        slog("registering heartbeat for ESP: " + e.name);
                         if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
                         heartbeat.timer[x] = setInterval(() => {
                             if (heartbeat.state[x]) {
@@ -309,7 +321,7 @@ let
             udp = udpClient.createSocket('udp4');
             if (process.argv[2] == "-i") {
                 moduleName = cfg.moduleName.toLowerCase();
-                log("installing TWIT-Client-" + cfg.moduleName + " service...");
+                slog("installing TWIT-Client-" + cfg.moduleName + " service...");
                 let service = [
                     "[Unit]",
                     "Description=",
@@ -334,13 +346,13 @@ let
                 execSync("systemctl enable twit-client-" + moduleName + ".service");
                 execSync("systemctl start twit-client-" + moduleName);
                 execSync("service twit-client-" + moduleName + " status");
-                log("service installed and started");
+                slog("service installed and started");
                 console.log("type: journalctl -fu twit-client-" + moduleName);
                 process.exit();
             }
             if (process.argv[2] == "-u") {
                 moduleName = cfg.moduleName.toLowerCase();
-                log("uninstalling TWIT-Client-" + cfg.moduleName + " service...");
+                slog("uninstalling TWIT-Client-" + cfg.moduleName + " service...");
                 execSync("systemctl stop twit-client-" + moduleName);
                 execSync("systemctl disable twit-client-" + moduleName + ".service");
                 fs.unlinkSync("/etc/systemd/system/twit-client-" + moduleName + ".service");
@@ -354,7 +366,7 @@ let
                         if (time.epoch - timer.fileWriteLast > 10) writeFile();
                         else timer.fileWrite = setTimeout(() => { writeFile(); }, 10e3);
                         function writeFile() {
-                            // log("writing NV data...");
+                            // slog("writing NV data...");
                             timer.fileWriteLast = time.epoch;
                             fs.writeFile(workingDir + "/nv-" + scriptName + "-bak.json", JSON.stringify(nv, null, 2), function () {
                                 fs.copyFile(workingDir + "/nv-" + scriptName + "-bak.json", workingDir + "/nv-" + scriptName + ".json", (err) => {
@@ -369,7 +381,7 @@ let
                 sub: function (msg) {
                     let buf = { user: msg.from.first_name + " " + msg.from.last_name, id: msg.from.id }
                     if (!telegram.auth(msg)) {
-                        log("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
+                        slog("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
                         nv.telegram.push(buf);
                         bot(msg.chat.id, 'registered');
                         udp.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
@@ -430,16 +442,16 @@ let
                     }), 65432, '127.0.0.1')
                 }
             };
-            log = function (message, level) {
-                if (level == undefined) {
+            slog = function (message, level, system) {
+                if (level == undefined) level = 1;
+                if (!system) {
                     udp.send(JSON.stringify({
                         type: "log",
-                        obj: { message: message, mod: cfg.moduleName, level: logName }
+                        obj: { message: message, mod: (cfg.moduleName + "-System"), level: level }
                     }), 65432, '127.0.0.1');
-                }
-                else udp.send(JSON.stringify({
+                } else udp.send(JSON.stringify({
                     type: "log",
-                    obj: { message: message, mod: logName, level: level }
+                    obj: { message: message, mod: system, level: level }
                 }), 65432, '127.0.0.1');
             };
             sys.boot(0);
@@ -452,7 +464,7 @@ let
                     console.log("Loading non-volatile data...");
                     fs.readFile(workingDir + "/nv-" + scriptName + ".json", function (err, data) {
                         if (err) {
-                            log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
+                            slog("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
                                 + ", nv-" + scriptName + ".json file should be in same folder as client.js file (" + workingDir + ")");
                             nv = { telegram: [] };
                         }
@@ -466,7 +478,7 @@ let
                     //process.exit();
                     fs.readFile(workingDir + "/config-" + scriptName + ".json", function (err, data) {
                         if (err) {
-                            log("\x1b[33;1mconfig file does not exist\x1b[37;m"
+                            slog("\x1b[33;1mconfig file does not exist\x1b[37;m"
                                 + ", config-" + scriptName + ".json file should be in same folder as client-" + scriptName + ".js file (" + workingDir + ")");
                             process.exit();
                         }
@@ -476,18 +488,18 @@ let
                     break;
                 case 2:
                     sys.com();
-                    log("trying to register with TWIT Core", 1);
+                    slog("trying to register with TWIT Core");
                     sys.register();
                     bootWait = setInterval(() => { sys.register(); }, 10e3);
                     break;
                 case 3:
                     clearInterval(bootWait);
-                    log("registered with TWIT Core", 1);
+                    slog("registered with TWIT Core");
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
-                        log("fetching Home Assistant entities", 1);
+                        slog("fetching Home Assistant entities");
                         udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         bootWait = setInterval(() => {
-                            log("HA fetch is failing, retrying...", 2);
+                            slog("HA fetch is failing, retrying...", 2);
                             udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         }, 10e3);
                     } else sys.boot(4);
@@ -495,20 +507,23 @@ let
                 case 4:
                     clearInterval(bootWait);
                     if (cfg.ha != undefined && cfg.ha.length > 0) {
-                        log("Home Assistant fetch complete", 1);
+                        slog("Home Assistant fetch complete");
                         onlineHA = true;
                     }
                     if (cfg.esp != undefined && cfg.esp.length > 0) {
-                        log("fetching esp entities", 1);
+                        slog("fetching esp entities");
                         udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         setTimeout(() => { sys.boot(5); }, 1e3);
                     } else sys.boot(5);
                     break;
                 case 5:
                     if (cfg.esp != undefined && cfg.esp.length > 0)
-                        log("ESP fetch complete", 1);
+                        slog("ESP fetch complete");
                     online = true;
-                    for (const name in automation) { automation[name](name); }
+                    for (const name in automation) {
+                        slog(name + " automation initializing...");
+                        automation[name](name);
+                    }
                     setInterval(() => { udp.send(JSON.stringify({ type: "heartbeat" }), 65432, '127.0.0.1'); time.boot++; }, 1e3);
                     break;
             }
