@@ -5,34 +5,39 @@ let
         telegram: {
             password: "test",
         },
-        ha: [
-            "input_boolean.auto_bubon",
-            "input_number.profile_bubon",
-            "input_number.oneshot_bubon",
-            "Switch Kitchen Pump",
-            "input_boolean.lights_stairs",
-            "switch.switch_test",
-            "input_number.timer_freezer_on",
-            "input_number.timer_freezer_off",
-            "switch.relay_bodega_freezer_fujidenzo",
-            "input_boolean.auto_freezer",
-        ],
-        esp: [
-            "psi-main",
-            "flow-raw-bubon",
-            "flow-raw-carbon-shop",
-            "flow-raw-carbon-groogies",
-            "shop-relay1-pump",
-            "solar-relay3-pump-bubon"
-        ],
+        ha: {
+            subscribe: [
+                "input_boolean.auto_bubon",
+                "input_number.profile_bubon",
+                "input_number.oneshot_bubon",
+                "Switch Kitchen Pump",
+                "input_number.timer_freezer_on",
+                "input_number.timer_freezer_off",
+                "switch.relay_bodega_freezer_fujidenzo",
+                "input_boolean.auto_freezer",
+            ],
+            sync: [
+                ["switch.switch_test", "input_boolean.lights_stairs",],
+                ["switch.lights_outside_bedroom", "input_boolean.lights_bedroom_outside"],
+                ["switch.lights_outside_entrance", "input_boolean.lights_house_entrance"],
+            ]
+        },
+        esp: {
+            subscribe: [
+                "psi-main",
+                "flow-raw-bubon",
+                "flow-raw-carbon-shop",
+                "flow-raw-carbon-groogies",
+                "shop-relay1-pump",
+                "solar-relay3-pump-bubon"
+            ],
+            heartbeat: [      // heartbeats for ESPHome devices 
+                { name: "esp_heartbeat_solar", interval: 3 } // interval is in seconds
+            ],
+        },
         coreData: [
             "test", "test4",
         ],
-        heartbeat: {
-            esp: [      // heartbeats for ESPHome devices 
-                { name: "esp_heartbeat_solar", interval: 3 } // interval is in seconds
-            ]
-        },
         dd: [       // config for the Demand/Delivery automation function, 1 object for each DD system
             {   // DD system example
                 name: "Bubon",       // Demand Delivery system 2d
@@ -549,8 +554,7 @@ let
                         function startMotor() {
                             log(dd.cfg.name + " - starting pump: " + dd.pump[dd.state.pump].cfg.name + " - cycle count: "
                                 + dd.state.cycleCount + "  Time: " + (time.epoch - dd.state.cycleTimer));
-                            if (dd.pump[dd.state.pump].cfg.type == "ha") send(cfg.ha[dd.pump[dd.state.pump].entity], true); // if no "sendOut" then auto system is syncing state with HA/ESP
-                            else setTimeout(() => { send(dd.pump[dd.state.pump].cfg.entity, true); }, 1e3);
+                            send(dd.pump[dd.state.pump].cfg.entity, true);
                         }
                     }
                 }
@@ -563,8 +567,7 @@ let
                     pumpShared();
                     if (dd.sharedPump.run == false) {
                         lbuf = dd.cfg.name + " - stopping pump: " + dd.pump[dd.state.pump].cfg.name + " - Runtime: " + hours + "h:" + minutes + "m:" + extraSeconds + "s";
-                        if (dd.pump[dd.state.pump].cfg.type == "ha") send(cfg.ha[dd.pump[dd.state.pump].entity], false);
-                        else send(dd.pump[dd.state.pump].cfg.entity, false);
+                        send(dd.pump[dd.state.pump].cfg.entity, false);
                     } else {
                         lbuf = dd.cfg.name + " - stopping " + dd.pump[dd.state.pump].cfg.name + " but pump still in use by "
                             + cfg.dd[dd.sharedPump.num].name + " - Runtime: " + hours + "h:" + minutes + "m:" + extraSeconds + "s";
@@ -635,7 +638,7 @@ let
                     if (dd.state.flowCheck == true) {
                         if (dd.flow[dd.state.pump].lm < dd.cfg.pump[dd.state.pump].flow.startError) {
                             dd.fault.flow = true;
-                            if (dd.cfg.fault.retry && dd.cfg.fault.retry > 0) {
+                            if (dd.cfg.fault.retryCount && dd.cfg.fault.retryCount > 0) {
                                 if (dd.fault.flowRestarts < dd.cfg.fault.retryCount) {
                                     log(dd.cfg.name + " - flow check FAILED!! (" + dd.flow[dd.state.pump].lm.toFixed(1) + "lm) HA Pump State: "
                                         + dd.pump[dd.state.pump].state + " - waiting for retry " + (dd.fault.flowRestarts + 1), 2);
@@ -935,8 +938,6 @@ let
                 var state = auto[autoName];
                 var log = (...buf) => slog(...buf, autoName);
                 setInterval(() => { timer(); }, 60e3);
-                em.on("input_boolean.lights_stairs", (newState) => { send("switch.switch_test", newState); });
-                em.on("switch.switch_test", (newState) => { send("input_boolean.lights_stairs", newState); });
                 em.on("Switch Kitchen Pump", (newState) => {
                     if (newState == "remote_button_long_press") send("input_boolean.auto_bubon", false)
                     if (newState == "remote_button_double_press") send("input_boolean.auto_bubon", true)
@@ -1101,6 +1102,7 @@ let
                         }
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
+                        // console.log(buf.obj)
                         Object.assign(entity, buf.obj);
                         slog("receiving fetch data...");
                         if (onlineHA == false) sys.boot(4);
@@ -1153,10 +1155,10 @@ let
         register: function () {
             let obj = {};
             if (cfg.ha != undefined) obj.ha = cfg.ha;
-            if (cfg.esp != undefined) obj.esp = cfg.esp;
-            if (cfg.heartbeat != undefined) {
-                if (cfg.heartbeat.esp != undefined && cfg.heartbeat.esp.length > 0) {
-                    cfg.heartbeat.esp.forEach((e, x) => {
+            if (cfg.esp) {
+                if (cfg.esp.subscribe) obj.esp = cfg.esp.subscribe;
+                if (cfg.esp.heartbeat != undefined && cfg.esp.heartbeat.length > 0) {
+                    cfg.esp.heartbeat.forEach((e, x) => {
                         slog("registering heartbeat for ESP: " + e.name);
                         if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
                         heartbeat.timer[x] = setInterval(() => {
@@ -1177,6 +1179,7 @@ let
                         }, e.interval * 1e3);
                     });
                 }
+
             }
             if (cfg.telegram != undefined) obj.telegram = true;
             udp.send(JSON.stringify({ type: "register", obj, name: cfg.moduleName }), 65432, '127.0.0.1');
@@ -1342,8 +1345,8 @@ let
                 udp.send(JSON.stringify({ type: "telegram", obj: { class: "send", id, data, obj } }), 65432, '127.0.0.1');
             };
             send = function (name, state, unit, id) {
-                for (let x = 0; x < cfg.esp.length; x++) {
-                    if (name == cfg.esp[x]) {
+                for (let x = 0; x < cfg.esp.subscribe.length; x++) {
+                    if (name == cfg.esp.subscribe[x]) {
                         udp.send(JSON.stringify({
                             type: "espState",
                             obj: { name: name, state: state }
@@ -1417,7 +1420,7 @@ let
                 case 3:
                     clearInterval(bootWait);
                     slog("registered with TWIT Core");
-                    if (cfg.ha != undefined && cfg.ha.length > 0) {
+                    if (cfg.ha) {
                         slog("fetching Home Assistant entities");
                         udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         bootWait = setInterval(() => {
@@ -1428,18 +1431,26 @@ let
                     break;
                 case 4:
                     clearInterval(bootWait);
-                    if (cfg.ha != undefined && cfg.ha.length > 0) {
+                    if (cfg.ha) {
                         slog("Home Assistant fetch complete");
+                        if (cfg.ha.sync && cfg.ha.sync.length > 0) {
+                            slog("setting up HA sync partners");
+                            cfg.ha.sync.forEach(element => {
+                                // console.log("partners: ", element[0], "  -  ", element[1]);
+                                em.on(element[0], (newState) => { send(element[1], newState); });
+                                em.on(element[1], (newState) => { send(element[0], newState); });
+                            });
+                        }
                         onlineHA = true;
                     }
-                    if (cfg.esp != undefined && cfg.esp.length > 0) {
+                    if (cfg.esp && cfg.esp.subscribe && cfg.esp.subscribe.length > 0) {
                         slog("fetching esp entities");
                         udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         setTimeout(() => { sys.boot(5); }, 1e3);
                     } else sys.boot(5);
                     break;
                 case 5:
-                    if (cfg.esp != undefined && cfg.esp.length > 0)
+                    if (cfg.esp && cfg.esp.subscribe && cfg.esp.subscribe.length > 0)
                         slog("ESP fetch complete");
                     online = true;
                     for (const name in automation) {
