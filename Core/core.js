@@ -326,8 +326,7 @@ if (isMainThread) {
         },
         sys = {
             udp: function (data, info) {
-                let buf, port = info.port, id = undefined,
-                    haNum = undefined;
+                let buf, port = info.port, id = undefined;
                 try { buf = JSON.parse(data); }
                 catch (error) { log("A UDP client (" + info.address + ") is sending invalid JSON data: " + error, 3, 3); return; }
                 // console.log(buf)
@@ -495,9 +494,14 @@ if (isMainThread) {
                     case "register":    // incoming registrations
                         state.client[id].name = buf.name;
                         log("client " + id + " - " + a.color("cyan", buf.name) + " - is initiating new connection", 3, 1);
-                        if (buf.obj.ha != undefined && buf.obj.ha.length > 0) {
-                            //  log("client " + id + " - " + a.color("cyan", buf.name) + " - is registering Home Assistant entities", 3, 1);
-                            buf.obj.ha.forEach(element => { state.client[id].ha.push(element) });
+                        if (buf.obj.ha != undefined) {
+                            log("client " + id + " - " + a.color("cyan", buf.name) + " - is registering Home Assistant entities", 3, 1);
+                            if (buf.obj.ha.subscribe != undefined && buf.obj.ha.subscribe.length > 0)
+                                buf.obj.ha.subscribe.forEach(element => { state.client[id].ha.push(element) });
+                            if (buf.obj.ha.sync != undefined && buf.obj.ha.sync.length > 0)
+                                buf.obj.ha.sync.forEach(element => {
+                                    element.forEach(element2 => { state.client[id].ha.push(element2) });
+                                });
                         }
                         if (buf.obj.esp != undefined && buf.obj.esp.length > 0) {
                             buf.obj.esp.forEach(element => {
@@ -1033,8 +1037,7 @@ if (isMainThread) {
                         }
                     }
                     if (port != undefined) {
-                        if (level == 0 && cfg.debugging == true) console.log(ubuf);
-                        else if (cfg.logging.client) console.log(ubuf);
+                        if (level != 0 && cfg.logging.client) console.log(ubuf);
                         udp.send(JSON.stringify({ type: "log", obj: ubuf }), port);
                     }
                     else if (level == 0 && cfg.debugging == true) console.log(cbuf);
