@@ -2,14 +2,147 @@
 let
     cfg = {
         moduleName: "NewClientModule",      // give this NodeJS Client a name for notification
-        ha: [                               // add all your home assistant entities here
-        ],
-        esp: [                              // add all your ESP entities here
-        ],
-        myFunction : { },
+        telegram: {                         // delete this object if you don't use Telegram
+            password: "password",           // password for telegram registration
+        },
+        ha: {
+            subscribe: [                     // add all your home assistant entities here
+                "myHaEntity",
+            ],
+            sync: [                         // add array for each home assistant entity you want to sync as a pair
+                ["entityFromHA1", "entityFromHA1"]  // this entity pair will be bidirectionally synced
+            ]
+        },
+        esp: {
+            subscribe: [                    // add all your ESP entities here
+                "myEspEntity",
+            ],
+            heartbeat: [
+                { name: "myEspSwitchEntity", interval: 3 }    // send a heartbeat to an ESP switch, interval in seconds 
+            ],
+        },
+        myAutomationConfigData: {      // create your own area for non-volatile config data for each function if needed
+            test: "a test string",
+            params: true
+        },
     },
     automation = {  // create a new myFunction1: function (autoName) {},  object function for each automation you want to create
-        myFunction: function (_name) {  // add subsequent automations like this
+        myFunction1: function (autoName) {
+            if (!auto[autoName]) {                                          // check if automation is initialized, runs only once
+                auto[autoName] = {                                          // create object for this automation in local state                             // give this automation a name 
+                    example: { started: false, step: time.sec }             // customize state memory for each of this automation's devices or features (volatile data) 
+                };
+                nv[autoName] ||= { myVar: "test" };                         // create non-volatile data structure  
+                var log = (m, l) => slog(m, l, autoName);                   // setup automation logging
+                var state = auto[autoName];                                 // assign state memory shorthand pointer
+                var disk = nv[autoName];                                    // make a short hand reference for your non-volatile storage area 
+                file.write.nv();                                            // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
+
+                // add your customized initialization sequence
+                setInterval(() => { automation[autoName](autoName); }, 1e3);// manually rerun automation?, otherwise this automation function will only run on ESP and HA push events
+                setInterval(() => { timer(); }, 60e3);                      // run this automation timer function every 60 seconds (in addition to incoming ESP or Home Assistant events)
+                log("automation initializing", 1);                          // Log SOMETHING,  severity (0: debug, 1:event, 2: warning, 3: error) if omitted, 1 is assumed
+                log(cfg.myAutomationConfigData.test)                        // log some string stored in your configs
+                em.on("input_button.test", () => button.test());            // create an event emitter for HA or ESP entity that calls a function when data is received
+                em.on("power1-relay1", (newState) => {                      // an event emitter for HA or ESP device that directly performs a function
+                    log("my esp toggle function");
+                });
+
+                // bi-directionally sync a switch between two different Home Assistant Servers
+                em.on("input_boolean.lights_stairs", (newState) => { send("switch.switch_test", newState); });
+                em.on("switch.switch_test", (newState) => { send("input_boolean.lights_stairs", newState); });
+
+                em.on("Switch Kitchen Pump", (newState) => {    // Zigbee ZHA button test example
+                    if (newState == "remote_button_long_press") send("input_boolean.auto_pump", false);
+                    if (newState == "remote_button_double_press") send("input_boolean.auto_pump", true);
+                    if (newState.includes("remote_button_short_press")) log("Switch Kitchen Pump - was short pressed");
+                });
+            }
+
+
+            send("cdata", {  // optional - register with core to receive data from other clients
+                register: true,
+                name: ["test", "myObject2"]
+            });
+            em.on("test", (newState) => {
+                if (entity["test"].state) console.log("coredata listener test: ", newState)
+                else console.log("coredata listener test: false");
+            })
+            send("cdata", {
+                name: "test",
+                state: true,
+                persist: true
+            });
+
+
+
+            let button = {                                      // example methods of toggling ESP or Home Assistant entities and sensors
+                test: function () {                             // example object member function called by emitter
+                    send("switch.fan_exhaust_switch", false);   // different methods to set state of HA and ESP entities
+                    send("input_boolean.fan_auto", true);
+                    send("switch.fan_bed_switch", false);
+                    send("myEspEntity", true);                  // call esp device by name
+                    send("volts_dc_Battery_turnicated", ~~parseFloat(state.voltsDC), "v");     // send sensor data to HA. your sensor name, value, unit of your choice
+                    send("volts_dc_Battery_rounded", Math.round(parseFloat(entity["myESPentity"].state) * 10) / 10, "v");    // send sensor data to HA. your sensor name, value, unit of your choice
+                    ////////////////////////////////////////////////////////////////////////// first time data is sent, HA will create this sensor, find in entities list
+                    send("cdata", { name: "coreDataName", state: { myData: "data" } });     // broadcast data to the Core for other clients to receive
+                }
+            };
+
+            // "cfg" is config data as specified above
+            // "nv" is non-volatile data that is read once during first boot of script and saved whenever you call file.write.nv();
+            // "state" is local volatile memory unique to each automation function - to store your automation data
+            // "entity["myHaEntity"].state"  is  where all incoming entity states are stored
+
+            if (entity["myHaEntity"].state == true && state.example.started == false) {      // compare a Home Assistant entity with a value in your program - do something
+                log("turning off outside lights", 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
+                state.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
+                state.example.started = true;                                  // set automation state variable
+            }
+
+            if (entity["myHaEntity"].state == true && state.example.started == false) {      // compare an ESPHome entity with a value in your program - do something
+                log("turning off outside lights", 1);                // log must contain "index" followed by logging level: 0 debug, 1 event, 2 warning, 3 error    
+                state.example.step = time.sec;                                 // record time of now, time.sec and time.min are unix epoch time in seconds or minutes
+                state.example.started = true;                                  // set automation state variable
+            }
+
+            /*      Time Variables  
+                time.mil            current time milliseconds 
+                time.min            current minute
+                time.sec            current second
+                time.hour           current hour
+                time.day            current day of the month (ie 1-30)
+                time.dow            current day of the week (ie 1-7)
+                time.boot           time elapsed from first boot in seconds
+                time.epoch          unix epoch time in seconds
+                time.epochMin       unix epoch time in minutes
+                time.epochMil       unix epoch time in milliseconds
+                time.stamp          current time in string format ie. 10-16 11:07:18.560
+            */
+
+            function timer() { // called once per minute   
+                if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
+                    log("turning on outside lights", 1);
+                    send("switch.light_outside_switch", true);
+                }
+                if (time.hour == 22 && time.min == 0) {
+                    log("turning off outside lights", 1);
+                    send("switch.light_outside_switch", false);
+                }
+            };
+            /*
+                ---Debugging web server---
+                http://127.0.0.1:20000/client/nameOfClient -----show all volatile and non-volatile memory of a specific TWIT client (case sensitive)
+                http://127.0.0.1:20000/ha ------show all entities available from Home Assistant
+                http://127.0.0.1:20000/esp -----show all discovered ESP Home modules
+                http://127.0.0.1:20000/tg ------last 100 received Telegram messages
+                http://127.0.0.1:20000/nv ------show all core non-volatile memory
+                http://127.0.0.1:20000/state ---show all core volatile memory
+                http://127.0.0.1:20000/cfg -----show all core configuration
+                http://127.0.0.1:20000/log -----last 500 log messages
+         */
+        },// // give this automation object any name you want
+        myFunction2: function (_name) {  // add subsequent automations like this
             if (!auto[_name]) {          // check if automation is initialized, runs only once
                 auto[_name] = {};        // create object for this automation in local state                             
                 // customize state memory for each of this automation's devices or features (volatile data) 
@@ -18,11 +151,7 @@ let
                 var state = auto[_name];            // assign state memory shorthand pointer
                 var disk = nv[_name];               // make a short hand reference for your non-volatile storage area 
                 file.write.nv();                    // write non-volatile data to hard disk, use any variable names you want. file is named nv-client-nameOfYouClient.json in the app directory
-
-                
             }
-
-            
         }
     };
 let
@@ -54,6 +183,7 @@ let
                         }
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
+                        // console.log(buf.obj)
                         Object.assign(entity, buf.obj);
                         slog("receiving fetch data...");
                         if (onlineHA == false) sys.boot(4);
@@ -106,10 +236,10 @@ let
         register: function () {
             let obj = {};
             if (cfg.ha != undefined) obj.ha = cfg.ha;
-            if (cfg.esp != undefined) obj.esp = cfg.esp;
-            if (cfg.heartbeat != undefined) {
-                if (cfg.heartbeat.esp != undefined && cfg.heartbeat.esp.length > 0) {
-                    cfg.heartbeat.esp.forEach((e, x) => {
+            if (cfg.esp) {
+                if (cfg.esp.subscribe) obj.esp = cfg.esp.subscribe;
+                if (cfg.esp.heartbeat != undefined && cfg.esp.heartbeat.length > 0) {
+                    cfg.esp.heartbeat.forEach((e, x) => {
                         slog("registering heartbeat for ESP: " + e.name);
                         if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
                         heartbeat.timer[x] = setInterval(() => {
@@ -130,6 +260,7 @@ let
                         }, e.interval * 1e3);
                     });
                 }
+
             }
             if (cfg.telegram != undefined) obj.telegram = true;
             udp.send(JSON.stringify({ type: "register", obj, name: cfg.moduleName }), 65432, '127.0.0.1');
@@ -295,8 +426,8 @@ let
                 udp.send(JSON.stringify({ type: "telegram", obj: { class: "send", id, data, obj } }), 65432, '127.0.0.1');
             };
             send = function (name, state, unit, id) {
-                for (let x = 0; x < cfg.esp.length; x++) {
-                    if (name == cfg.esp[x]) {
+                for (let x = 0; x < cfg.esp.subscribe.length; x++) {
+                    if (name == cfg.esp.subscribe[x]) {
                         udp.send(JSON.stringify({
                             type: "espState",
                             obj: { name: name, state: state }
@@ -370,7 +501,7 @@ let
                 case 3:
                     clearInterval(bootWait);
                     slog("registered with TWIT Core");
-                    if (cfg.ha != undefined && cfg.ha.length > 0) {
+                    if (cfg.ha) {
                         slog("fetching Home Assistant entities");
                         udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         bootWait = setInterval(() => {
@@ -381,18 +512,26 @@ let
                     break;
                 case 4:
                     clearInterval(bootWait);
-                    if (cfg.ha != undefined && cfg.ha.length > 0) {
+                    if (cfg.ha) {
                         slog("Home Assistant fetch complete");
+                        if (cfg.ha.sync && cfg.ha.sync.length > 0) {
+                            slog("setting up HA sync partners");
+                            cfg.ha.sync.forEach(element => {
+                                // console.log("partners: ", element[0], "  -  ", element[1]);
+                                em.on(element[0], (newState) => { send(element[1], newState); });
+                                em.on(element[1], (newState) => { send(element[0], newState); });
+                            });
+                        }
                         onlineHA = true;
                     }
-                    if (cfg.esp != undefined && cfg.esp.length > 0) {
+                    if (cfg.esp && cfg.esp.subscribe && cfg.esp.subscribe.length > 0) {
                         slog("fetching esp entities");
                         udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         setTimeout(() => { sys.boot(5); }, 1e3);
                     } else sys.boot(5);
                     break;
                 case 5:
-                    if (cfg.esp != undefined && cfg.esp.length > 0)
+                    if (cfg.esp && cfg.esp.subscribe && cfg.esp.subscribe.length > 0)
                         slog("ESP fetch complete");
                     online = true;
                     for (const name in automation) {
