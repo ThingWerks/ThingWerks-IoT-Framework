@@ -5,19 +5,21 @@ let
         telegram: {                         // delete this object if you don't use Telegram
             password: "password",           // password for telegram registration
         },
-        ha: [                               // add all your home assistant entities here
-            "myHaEntity",                   // this index order is used for incoming state events and output calls as well (ie state.ha[0] etc...)
-        ],
-        esp: [                              // add all your ESP entities here
-            "myEspEntity",                  // this index order is used for incoming state events and output calls as well (ie state.esp[0] etc...)
-        ],
-        udp: [                              // UDP API is under development
-            "myUdpEntity",
-        ],
-        heartbeat: {
-            esp: [
-                { name: "myEspSwitchEntity", interval: 3 }    // send a heartbeat to an ESP switch, interval in seconds 
+        ha: {
+            subscribe: [                     // add all your home assistant entities here
+                "myHaEntity",
+            ],
+            sync: [                         // add array for each home assistant entity you want to sync as a pair
+                ["entityFromHA1", "entityFromHA1"]  // this entity pair will be bidirectionally synced
             ]
+        },
+        esp: {
+            subscribe: [                    // add all your ESP entities here
+                "myEspEntity",
+            ],
+            heartbeat: [
+                { name: "myEspSwitchEntity", interval: 3 }    // send a heartbeat to an ESP switch, interval in seconds 
+            ],
         },
         myAutomationConfigData: {      // create your own area for non-volatile config data for each function if needed
             test: "a test string",
@@ -181,6 +183,7 @@ let
                         }
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
+                        // console.log(buf.obj)
                         Object.assign(entity, buf.obj);
                         slog("receiving fetch data...");
                         if (onlineHA == false) sys.boot(4);
@@ -233,10 +236,10 @@ let
         register: function () {
             let obj = {};
             if (cfg.ha != undefined) obj.ha = cfg.ha;
-            if (cfg.esp != undefined) obj.esp = cfg.esp;
-            if (cfg.heartbeat != undefined) {
-                if (cfg.heartbeat.esp != undefined && cfg.heartbeat.esp.length > 0) {
-                    cfg.heartbeat.esp.forEach((e, x) => {
+            if (cfg.esp) {
+                if (cfg.esp.subscribe) obj.esp = cfg.esp.subscribe;
+                if (cfg.esp.heartbeat != undefined && cfg.esp.heartbeat.length > 0) {
+                    cfg.esp.heartbeat.forEach((e, x) => {
                         slog("registering heartbeat for ESP: " + e.name);
                         if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
                         heartbeat.timer[x] = setInterval(() => {
@@ -257,6 +260,7 @@ let
                         }, e.interval * 1e3);
                     });
                 }
+
             }
             if (cfg.telegram != undefined) obj.telegram = true;
             udp.send(JSON.stringify({ type: "register", obj, name: cfg.moduleName }), 65432, '127.0.0.1');
@@ -422,8 +426,8 @@ let
                 udp.send(JSON.stringify({ type: "telegram", obj: { class: "send", id, data, obj } }), 65432, '127.0.0.1');
             };
             send = function (name, state, unit, id) {
-                for (let x = 0; x < cfg.esp.length; x++) {
-                    if (name == cfg.esp[x]) {
+                for (let x = 0; x < cfg.esp.subscribe.length; x++) {
+                    if (name == cfg.esp.subscribe[x]) {
                         udp.send(JSON.stringify({
                             type: "espState",
                             obj: { name: name, state: state }
@@ -497,7 +501,7 @@ let
                 case 3:
                     clearInterval(bootWait);
                     slog("registered with TWIT Core");
-                    if (cfg.ha != undefined && cfg.ha.length > 0) {
+                    if (cfg.ha) {
                         slog("fetching Home Assistant entities");
                         udp.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         bootWait = setInterval(() => {
@@ -508,18 +512,26 @@ let
                     break;
                 case 4:
                     clearInterval(bootWait);
-                    if (cfg.ha != undefined && cfg.ha.length > 0) {
+                    if (cfg.ha) {
                         slog("Home Assistant fetch complete");
+                        if (cfg.ha.sync && cfg.ha.sync.length > 0) {
+                            slog("setting up HA sync partners");
+                            cfg.ha.sync.forEach(element => {
+                                // console.log("partners: ", element[0], "  -  ", element[1]);
+                                em.on(element[0], (newState) => { send(element[1], newState); });
+                                em.on(element[1], (newState) => { send(element[0], newState); });
+                            });
+                        }
                         onlineHA = true;
                     }
-                    if (cfg.esp != undefined && cfg.esp.length > 0) {
+                    if (cfg.esp && cfg.esp.subscribe && cfg.esp.subscribe.length > 0) {
                         slog("fetching esp entities");
                         udp.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         setTimeout(() => { sys.boot(5); }, 1e3);
                     } else sys.boot(5);
                     break;
                 case 5:
-                    if (cfg.esp != undefined && cfg.esp.length > 0)
+                    if (cfg.esp && cfg.esp.subscribe && cfg.esp.subscribe.length > 0)
                         slog("ESP fetch complete");
                     online = true;
                     for (const name in automation) {
