@@ -367,6 +367,7 @@ if (isMainThread) {
                         break;
                     case "espState":    // incoming state change (ESP)
                         if (cfg.esp.enable == true) {
+                            let found = false;
                             for (let x = 0; x < cfg.esp.devices.length; x++) {
                                 //console.log
                                 for (let y = 0; y < state.esp[x].entity.length; y++) {
@@ -374,6 +375,7 @@ if (isMainThread) {
                                         if (state.esp[x].entity[y]?.name == buf.obj.name) {
                                             thread.esp[x].postMessage(
                                                 { type: "espSend", obj: { name: buf.obj.name, id: state.esp[x].entity[y].id, state: buf.obj.state } });
+                                            found = true;
                                             break;
                                         }
                                     } catch {
@@ -381,8 +383,9 @@ if (isMainThread) {
                                     }
                                 }
                             }
+                            if (found) log("incoming ESP state: " + buf.obj.name + " data: " + buf.obj.state, 3, 0);
+                            else log("incoming ESP state change failed, ID does not exist: " + buf.obj.name + " data: " + buf.obj.state + " - Client: " + state.client[id].name, 3, 2);
                         }
-                        log("incoming ESP state: " + buf.obj.name + " data: " + buf.obj.state, 3, 0);
                         break;
                     case "espFetch":    // incoming ESP fetch request from TWIT client
                         log("incoming ESP Fetch request from client: " + state.client[id].name, 3, 0);
@@ -642,7 +645,7 @@ if (isMainThread) {
                                 //   console.log(state.esp[data.esp])
                                 break;
                             case "reset":
-                                log("resetting esp entity array for ESP: " + data.esp, 0, 1);
+                                log("resetting esp entity array for ESP: " + data.esp, 0, 0);
                                 if (state.esp[data.esp] != undefined) state.esp[data.esp].entity = [];
                                 break;
                             case "state":
@@ -1229,9 +1232,9 @@ if (!isMainThread) {
             }
         }
         function clientConnect() {
-            // if (state.reconnect == false) {     // client connection function, ran for each ESP device
-            log("ESP module - " + a.color("cyan", espClient.name) + " - trying to connect...", 2);
-            //}
+            if (state.reconnect == false) {     // client connection function, ran for each ESP device
+                log("ESP module - " + a.color("cyan", espClient.name) + " - trying to connect...", 2);
+            }
             parentPort.postMessage({ type: "esp", class: "reset", esp: workerData.esp });
             state.entity = [];
             client.on('error', (error) => {
@@ -1271,11 +1274,11 @@ if (!isMainThread) {
                 if (exist == 0)                                                 // dont add this entity if its already in the list 
                     io = state.entity.push({ name: data.config.objectId, type: data.type, id: data.id }) - 1;
                 if (state.boot == false)
-                   // log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
-                parentPort.postMessage({
-                    type: "esp", class: "entity", esp: workerData.esp,
-                    obj: { id: data.id, io, name: data.config.objectId, type: data.type }
-                });
+                    // log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
+                    parentPort.postMessage({
+                        type: "esp", class: "entity", esp: workerData.esp,
+                        obj: { id: data.id, io, name: data.config.objectId, type: data.type }
+                    });
                 if (data.type === "Switch") {                                 // if this is a switch, register the emitter
                     // console.log(data.config.objectId)
                     em.on(data.config.objectId, function (id, state) {        // emitter for this connection 
