@@ -227,7 +227,7 @@ if (isMainThread) {
                                                     else if (ibuf === null || ibuf == undefined) log("HA (" + a.color("cyan", config.address) + ") is sending bogus (null/undefined) data: " + ibuf, 1, 2);
                                                     else if (ibuf === "unavailable") {
                                                         if (cfg.telegram.logESPDisconnect == true)
-                                                            log("HA (" + a.color("cyan", config.address) + "): ESP Module has gone offline: " + buf.event.data.new_state.entity_id + ibuf, 1, 2);
+                                                            log("HA (" + a.color("cyan", config.address) + "): Entity is unavailable or offline: " + buf.event.data.new_state.entity_id, 1, 2);
                                                     }
                                                     else if (!isNaN(parseFloat(Number(ibuf))) == true
                                                         && isFinite(Number(ibuf)) == true && ibuf != null) obuf = ibuf;
@@ -370,10 +370,14 @@ if (isMainThread) {
                             for (let x = 0; x < cfg.esp.devices.length; x++) {
                                 //console.log
                                 for (let y = 0; y < state.esp[x].entity.length; y++) {
-                                    if (state.esp[x].entity[y].name == buf.obj.name) {
-                                        thread.esp[x].postMessage(
-                                            { type: "espSend", obj: { name: buf.obj.name, id: state.esp[x].entity[y].id, state: buf.obj.state } });
-                                        break;
+                                    try {
+                                        if (state.esp[x].entity[y]?.name == buf.obj.name) {
+                                            thread.esp[x].postMessage(
+                                                { type: "espSend", obj: { name: buf.obj.name, id: state.esp[x].entity[y].id, state: buf.obj.state } });
+                                            break;
+                                        }
+                                    } catch {
+                                        log("incoming ESP state change failed: " + buf.obj.name + " data: " + buf.obj.state + " - Client: " + state.client[id].name, 3, 2);
                                     }
                                 }
                             }
@@ -1201,17 +1205,18 @@ if (!isMainThread) {
                 host: espClient.ip,
                 port: 6053,
                 encryptionKey: espClient.key,
-                reconnect: true,
+                reconnect: false,
                 reconnectInterval: 5000,
                 pingInterval: 3000,
                 pingAttempts: 3,
-                tryReconnect: true,
+                tryReconnect: false,
             });
             try { clientConnect(); } catch (error) { log(error) };
         }
         function espReset() {
-            if (state.resetting == false) {
-                state.resetting = true;
+            if (state.resetting == false) {  // this is to prevent multiple errors at the same time from issuing multiple resets
+                state.resetting = true;      // failed new connections will reinitiate a reset
+                state.reconnect = true;
                 try { client.disconnect(); } catch (error) { log("ESP module - " + a.color("cyan", espClient.name) + " - disconnect failed...", 2); }
                 clearTimeout(state.errorResetTimeout);
                 clearTimeout(state.keepaliveTimer);
@@ -1224,14 +1229,16 @@ if (!isMainThread) {
             }
         }
         function clientConnect() {
-            if (state.reconnect == false) {     // client connection function, ran for each ESP device
-                log("ESP module - " + a.color("cyan", espClient.name) + " - trying to connect...", 2);
-            }
+            // if (state.reconnect == false) {     // client connection function, ran for each ESP device
+            log("ESP module - " + a.color("cyan", espClient.name) + " - trying to connect...", 2);
+            //}
+            parentPort.postMessage({ type: "esp", class: "reset", esp: workerData.esp });
+            state.entity = [];
             client.on('error', (error) => {
                 if (state.reconnect == false) {
                     log("ESP module - " + a.color("cyan", espClient.name) + " - had a connection error, resetting connection..."
                         , 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
-                    state.reconnect = true;
+                    //state.reconnect = true;
                     espReset();
                 }
             });
@@ -1240,7 +1247,7 @@ if (!isMainThread) {
                     log("ESP module - " + a.color("cyan", espClient.name) + " - disconnected, resetting ESP connection..."
                         , 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
                     espReset();
-                    state.reconnect = true;
+                    // state.reconnect = true;
                 }
             });
             client.on('newEntity', data => {
@@ -1264,11 +1271,11 @@ if (!isMainThread) {
                 if (exist == 0)                                                 // dont add this entity if its already in the list 
                     io = state.entity.push({ name: data.config.objectId, type: data.type, id: data.id }) - 1;
                 if (state.boot == false)
-                    // log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
-                    parentPort.postMessage({
-                        type: "esp", class: "entity", esp: workerData.esp,
-                        obj: { id: data.id, io, name: data.config.objectId, type: data.type }
-                    });
+                   // log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
+                parentPort.postMessage({
+                    type: "esp", class: "entity", esp: workerData.esp,
+                    obj: { id: data.id, io, name: data.config.objectId, type: data.type }
+                });
                 if (data.type === "Switch") {                                 // if this is a switch, register the emitter
                     // console.log(data.config.objectId)
                     em.on(data.config.objectId, function (id, state) {        // emitter for this connection 
