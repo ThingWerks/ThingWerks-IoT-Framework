@@ -1159,8 +1159,7 @@ if (!isMainThread) {
                 client = null;
                 state = {
                     entity: [], reconnect: false, reconnectState: false, boot: false, errorResetTimeout: null,
-                    keepaliveTimer: null, heartBeat: false, resetting: false, checkTimer: null, checkUpdate: Math.floor(Date.now() / 1000),
-                    checkConnect: null,
+                    checkTimer: null, checkUpdate: Math.floor(Date.now() / 1000), checkConnect: null, connected: false,
                 };
                 sys.lib();
             },
@@ -1208,11 +1207,10 @@ if (!isMainThread) {
                 pingInterval: 3000,
                 pingAttempts: 3,
                 tryReconnect: false,
-                connected: false,
             });
             try { clientConnect(); } catch (error) { log(error) };
             state.checkConnect = setTimeout(() => {
-                if (!client.connected) {
+                if (!state.connected) {
                     if (state.reconnect == false) {
                         log("ESP module - " + a.color("cyan", espClient.name) + " - failed to connect, trying to reconnect...", 2);
                         state.reconnect = true;
@@ -1230,12 +1228,13 @@ if (!isMainThread) {
                     }, 1e3);
                 }
             }, 10e3);
-
         }
         function espReset() {
             //  log("ESP module - " + a.color("cyan", espClient.name) + " - resetting", 2);
-            client.connected = false;
+            state.connected = false;
             state.reconnectState = true;
+            state.entity = [];
+            parentPort.postMessage({ type: "esp", class: "reset", esp: workerData.esp });
             try { client.disconnect(); } catch (error) { log("ESP module - " + a.color("cyan", espClient.name) + " - disconnect failed...", 2); }
             clearTimeout(state.errorResetTimeout);
             clearTimeout(state.keepaliveTimer);
@@ -1246,7 +1245,6 @@ if (!isMainThread) {
                 client = {};
                 setTimeout(() => { espInit(); }, 1e3);
             }, 5e3);
-            // }
         }
         function clientConnect() {
             if (state.reconnect == false) {     // client connection function, ran for each ESP device
@@ -1269,50 +1267,30 @@ if (!isMainThread) {
             });
             client.on('newEntity', data => {
                 let exist = 0, io = null;
-                if (!client.connected) {
-                    state.entity = [];
-                    parentPort.postMessage({ type: "esp", class: "reset", esp: workerData.esp });
-                    client.connected = true;
-                }
-                state.resetting = false;
                 for (let x = 0; x < state.entity.length; x++) {        // scan for this entity in the entity list
                     if (state.entity[x].id == data.id) { exist++; io = x; break; };
                     // console.log("object ID: ", data.config.objectId + " - HB ID: ", cfg.esp.devices[workerData.esp].heartbeat )
-                    if (data.config.objectId == cfg.esp.devices[workerData.esp].heartbeat) {
-                        if (state.keepaliveTimer == null) {
-                            log("ESP module - " + a.color("cyan", espClient.name) + " - registering heartbeat - "
-                                + a.color("green", data.config.objectId), 2);
-                            em.emit(data.config.objectId, data.id, true);
-                            state.keepaliveTimer = setInterval(() => {
-                                if (state.heartBeat) { em.emit(data.config.objectId, data.id, false); state.heartBeat = false; }
-                                else { em.emit(data.config.objectId, data.id, true); state.heartBeat = true; }
-                            }, 3e3);
-                        }
-                    }
                 }
                 if (exist == 0)                                                 // dont add this entity if its already in the list 
                     io = state.entity.push({ name: data.config.objectId, type: data.type, id: data.id }) - 1;
-                if (state.boot == false)
-                    // log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
-                    parentPort.postMessage({
-                        type: "esp", class: "entity", esp: workerData.esp,
-                        obj: { id: data.id, io, name: data.config.objectId, type: data.type }
-                    });
+                // if (state.boot == false) log("new entity - connected - ID: " + data.id + " - " + a.color("green", data.config.objectId), 2);
+                parentPort.postMessage({
+                    type: "esp", class: "entity", esp: workerData.esp,
+                    obj: { id: data.id, io, name: data.config.objectId, type: data.type }
+                });
                 if (data.type === "Switch") {                                 // if this is a switch, register the emitter
                     // console.log(data.config.objectId)
                     em.on(data.config.objectId, function (id, state) {        // emitter for this connection 
                         try { data.connection.switchCommandService({ key: id, state: state }); }
                         catch (e) {
-                            if (state.resetting == false) {
-                                log("ESP module - " + a.color("cyan", espClient.name)
-                                    + " - error sending command - resetting...", 2, 3);
-                                espReset();
-                            }
+                            log("ESP module - " + a.color("cyan", espClient.name)
+                                + " - error sending command - resetting...", 2, 3);
+                            espReset();
                         }
                     });
                 }
                 data.on('state', (update) => {
-                    client.connected = true;
+                    state.connected = true;
                     state.checkUpdate = Math.floor(Date.now() / 1000);
                     if (state.boot == false) {
                         if (data.config.objectId.includes("wifi"))
