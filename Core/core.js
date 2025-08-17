@@ -633,13 +633,6 @@ if (isMainThread) {
                 switch (data.type) {
                     case "esp":
                         switch (data.class) {
-                            case "init":
-                                if (~state.esp[data.esp].boot) {
-                                    log("initializing esp worker: " + data.esp, 0, 1);
-                                    state.esp[data.esp].boot = true;
-                                }
-                                state.esp[data.esp].entities = data.entities;
-                                break;
                             case "entity":
                                 state.esp[data.esp].entity[data.obj.io] = { id: data.obj.id, name: data.obj.name, type: data.obj.type, state: undefined };
                                 //   console.log(state.esp[data.esp])
@@ -934,7 +927,7 @@ if (isMainThread) {
                     };
                 }
                 if (cfg.esp != undefined)
-                    cfg.esp.devices.forEach((_, x) => { state.esp.push({ entity: [], boot: false }); })
+                    cfg.esp.devices.forEach((_, x) => { state.esp.push({ entity: [] }); })
                 state.telegram = { started: false };
             },
             lib: function () {
@@ -1165,8 +1158,9 @@ if (!isMainThread) {
                 cfg = {};
                 client = null;
                 state = {
-                    entity: [], reconnect: false, boot: false, errorResetTimeout: null,
-                    keepaliveTimer: null, heartBeat: false, resetting: false,
+                    entity: [], reconnect: false, reconnectState: false, boot: false, errorResetTimeout: null,
+                    keepaliveTimer: null, heartBeat: false, resetting: false, checkTimer: null, checkUpdate: Math.floor(Date.now() / 1000),
+                    checkConnect: null,
                 };
                 sys.lib();
             },
@@ -1209,52 +1203,77 @@ if (!isMainThread) {
                 port: 6053,
                 encryptionKey: espClient.key,
                 reconnect: false,
-                reconnectInterval: 5000,
+                reconnectState: false,
+                //  reconnectInterval: 5000,
                 pingInterval: 3000,
                 pingAttempts: 3,
                 tryReconnect: false,
+                connected: false,
             });
             try { clientConnect(); } catch (error) { log(error) };
+            state.checkConnect = setTimeout(() => {
+                if (!client.connected) {
+                    if (state.reconnect == false) {
+                        log("ESP module - " + a.color("cyan", espClient.name) + " - failed to connect, trying to reconnect...", 2);
+                        state.reconnect = true;
+                    }
+                    espReset();
+                } else {
+                    state.checkTimer = setInterval(() => {
+                        if ((Math.floor(Date.now() / 1000) - state.checkUpdate) >= 20) {
+                            if (state.reconnect == false) {
+                                log("ESP module - " + a.color("cyan", espClient.name) + " - isnt communicating, trying to reconnect...", 2);
+                                state.reconnect = true;
+                            }
+                            espReset();
+                        }
+                    }, 1e3);
+                }
+            }, 10e3);
+
         }
         function espReset() {
-            if (state.resetting == false) {  // this is to prevent multiple errors at the same time from issuing multiple resets
-                state.resetting = true;      // failed new connections will reinitiate a reset
-                state.reconnect = true;
-                try { client.disconnect(); } catch (error) { log("ESP module - " + a.color("cyan", espClient.name) + " - disconnect failed...", 2); }
-                clearTimeout(state.errorResetTimeout);
-                clearTimeout(state.keepaliveTimer);
-                state.keepaliveTimer = null;
-                state.errorResetTimeout = setTimeout(() => {
-                    em.removeAllListeners();
-                    client = null;
-                    setTimeout(() => { espInit(); }, 5e3);
-                }, 10e3);
-            }
+            //  log("ESP module - " + a.color("cyan", espClient.name) + " - resetting", 2);
+            client.connected = false;
+            state.reconnectState = true;
+            try { client.disconnect(); } catch (error) { log("ESP module - " + a.color("cyan", espClient.name) + " - disconnect failed...", 2); }
+            clearTimeout(state.errorResetTimeout);
+            clearTimeout(state.keepaliveTimer);
+            clearTimeout(state.checkTimer);
+            clearTimeout(state.checkConnect);
+            state.errorResetTimeout = setTimeout(() => {
+                em.removeAllListeners();
+                client = {};
+                setTimeout(() => { espInit(); }, 1e3);
+            }, 5e3);
+            // }
         }
         function clientConnect() {
             if (state.reconnect == false) {     // client connection function, ran for each ESP device
                 log("ESP module - " + a.color("cyan", espClient.name) + " - trying to connect...", 2);
             }
-            parentPort.postMessage({ type: "esp", class: "reset", esp: workerData.esp });
-            state.entity = [];
             client.on('error', (error) => {
                 if (state.reconnect == false) {
                     log("ESP module - " + a.color("cyan", espClient.name) + " - had a connection error, resetting connection..."
                         , 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
-                    //state.reconnect = true;
+                    state.reconnect = true;
                     espReset();
                 }
             });
             client.on('disconnected', () => {
                 if (state.reconnect == false) {
-                    log("ESP module - " + a.color("cyan", espClient.name) + " - disconnected, resetting ESP connection..."
-                        , 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
+                    log("ESP module - " + a.color("cyan", espClient.name) + " - disconnected", 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
                     espReset();
-                    // state.reconnect = true;
+                    state.reconnect = true;
                 }
             });
             client.on('newEntity', data => {
                 let exist = 0, io = null;
+                if (!client.connected) {
+                    state.entity = [];
+                    parentPort.postMessage({ type: "esp", class: "reset", esp: workerData.esp });
+                    client.connected = true;
+                }
                 state.resetting = false;
                 for (let x = 0; x < state.entity.length; x++) {        // scan for this entity in the entity list
                     if (state.entity[x].id == data.id) { exist++; io = x; break; };
@@ -1293,13 +1312,8 @@ if (!isMainThread) {
                     });
                 }
                 data.on('state', (update) => {
-                    if (state.reconnect == true) {
-                        if (data.config.objectId.includes("wifi"))
-                            log("ESP module - " + a.color("cyan", espClient.name) + " - reconnected: " + a.color("cyan", espClient.ip) + " - "
-                                + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2
-                                , ((cfg.telegram.logESPDisconnect == true) ? 2 : 1));
-                        state.reconnect = false;
-                    }
+                    client.connected = true;
+                    state.checkUpdate = Math.floor(Date.now() / 1000);
                     if (state.boot == false) {
                         if (data.config.objectId.includes("wifi"))
                             setTimeout(() => {
@@ -1307,6 +1321,15 @@ if (!isMainThread) {
                                     + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2, 1);
                             }, 10);
                         setTimeout(() => { state.boot = true; }, 20);   // indicate booted so not to show entity names again
+                    } else {
+                        if (state.reconnectState == true) {
+                            if (data.config.objectId.includes("wifi-")) {
+                                log("ESP module - " + a.color("cyan", espClient.name) + " - reconnected: " + a.color("cyan", espClient.ip) + " - "
+                                    + a.color("green", data.config.objectId) + " - Signal: " + update.state, 2
+                                    , ((cfg.telegram.logESPDisconnect == true) ? 2 : 1));
+                                state.reconnectState = false;
+                            }
+                        }
                     }
                     for (let x = 0; x < state.entity.length; x++) {
                         if (state.entity[x].id == update.key) {         // identify this entity request with local object
@@ -1333,9 +1356,6 @@ if (!isMainThread) {
                     espInit();
                     break;
                 case "espSend":
-                    em.emit(data.obj.name, data.obj.id, data.obj.state);
-                    break;
-                case "reset":
                     em.emit(data.obj.name, data.obj.id, data.obj.state);
                     break;
             }
