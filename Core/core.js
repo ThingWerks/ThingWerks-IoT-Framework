@@ -1229,12 +1229,11 @@ if (!isMainThread) {
                 }
             }, 10e3);
         }
-        function espReset() {
+        function espReset(reconnect) {
             //  log("ESP module - " + a.color("cyan", espClient.name) + " - resetting", 2);
+            if (reconnect) state.reconnect = true;
             state.connected = false;
             state.reconnectState = true;
-            state.entity = [];
-            parentPort.postMessage({ type: "esp", class: "reset", esp: workerData.esp });
             try { client.disconnect(); } catch (error) { log("ESP module - " + a.color("cyan", espClient.name) + " - disconnect failed...", 2); }
             clearTimeout(state.errorResetTimeout);
             clearTimeout(state.keepaliveTimer);
@@ -1247,22 +1246,22 @@ if (!isMainThread) {
             }, 5e3);
         }
         function clientConnect() {
-            if (state.reconnect == false) {     // client connection function, ran for each ESP device
-                log("ESP module - " + a.color("cyan", espClient.name) + " - trying to connect...", 2);
-            }
+            if (state.reconnect == true) {     // client connection function, ran for each ESP device
+                state.entity = [];
+                parentPort.postMessage({ type: "esp", class: "reset", esp: workerData.esp });
+                state.reconnect = false;
+            } else log("ESP module - " + a.color("cyan", espClient.name) + " - trying to connect...", 2);
             client.on('error', (error) => {
                 if (state.reconnect == false) {
                     log("ESP module - " + a.color("cyan", espClient.name) + " - had a connection error, resetting connection..."
                         , 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
-                    state.reconnect = true;
-                    espReset();
+                    espReset(true);
                 }
             });
             client.on('disconnected', () => {
                 if (state.reconnect == false) {
                     log("ESP module - " + a.color("cyan", espClient.name) + " - disconnected", 2, (cfg.telegram.logESPDisconnect) ? 2 : 0);
-                    espReset();
-                    state.reconnect = true;
+                    espReset(true);
                 }
             });
             client.on('newEntity', data => {
@@ -1283,9 +1282,11 @@ if (!isMainThread) {
                     em.on(data.config.objectId, function (id, state) {        // emitter for this connection 
                         try { data.connection.switchCommandService({ key: id, state: state }); }
                         catch (e) {
-                            log("ESP module - " + a.color("cyan", espClient.name)
-                                + " - error sending command - resetting...", 2, 3);
-                            espReset();
+                            if (state.reconnect == false) {
+                                log("ESP module - " + a.color("cyan", espClient.name)
+                                    + " - error sending command - resetting...", 2, 3);
+                                espReset(true);
+                            }
                         }
                     });
                 }
