@@ -1152,7 +1152,7 @@ let
                 if (time.hour == 18 && time.min == 0) {
                     send("input_boolean.auto_bubon", false);
                     send("switch.lights_bodega_front_1", true);
-                    send("switch.relay_bodega_freezer_fujidenzo", false);
+                 //   send("switch.relay_bodega_freezer_fujidenzo", false);
                 }
                 if (time.hour == 18 && time.min == 10) {
                     log("Lights - Outside Lights - Turning ON");
