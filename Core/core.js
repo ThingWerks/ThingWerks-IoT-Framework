@@ -1249,7 +1249,6 @@ if (!isMainThread) {
             if (state.reconnect == true) {     // client connection function, ran for each ESP device
                 state.entity = [];
                 parentPort.postMessage({ type: "esp", class: "reset", esp: workerData.esp });
-                state.reconnect = false;
             } else log("ESP module - " + a.color("cyan", espClient.name) + " - trying to connect...", 2);
             client.on('error', (error) => {
                 if (state.reconnect == false) {
@@ -1265,6 +1264,7 @@ if (!isMainThread) {
                 }
             });
             client.on('newEntity', data => {
+                state.reconnect = false;
                 let exist = 0, io = null;
                 for (let x = 0; x < state.entity.length; x++) {        // scan for this entity in the entity list
                     if (state.entity[x].id == data.id) { exist++; io = x; break; };
@@ -1292,6 +1292,7 @@ if (!isMainThread) {
                 }
                 data.on('state', (update) => {
                     state.connected = true;
+                    state.reconnect = false;
                     state.checkUpdate = Math.floor(Date.now() / 1000);
                     if (state.boot == false) {
                         if (data.config.objectId.includes("wifi"))
