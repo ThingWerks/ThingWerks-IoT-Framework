@@ -13,6 +13,30 @@ let
         },
         esp: {                              // add all your ESP entities here
             subscribe: [
+                "pzem-alvarez_watts",
+                "pzem-daren_watts",
+                "pzem-daren_meter",
+                "pzem-alvarez_meter",
+                "pzem-sofia_meter",
+                "pzem-sofia_watts",
+                "pzem-carwash_meter",
+                "pzem-butsoy_meter",
+                "pzem-groogies_meter",
+                "pzem-mamigo_meter",
+                "battery-current",
+                "battery-voltage",
+                "battery-voltage-raw",
+                "solar-relay1-alvarez",
+                "solar-relay2-daren",
+                "solar-relay5-inverter-10kw",
+                "solar-relay8-sofing",
+                "solar-ram-relay1-water",
+                "solar-ram-relay2-house",
+                "pzem-ram-water_watts",
+                "pzem-ram-water_meter",
+                "pzem-ram-house_watts",
+                "pzem-ram-house_meter",
+                "sunlight"
 
             ],
             heartbeat: [
@@ -64,22 +88,22 @@ let
             inverterAuto: "input_boolean.auto_inverter",            // HA Toggle automation id
             inverterDelaySwitch: 15,    // time sensor must maintain reading before switching inverter state
             inverterRapidSwitch: 10,    // inverter minimum switch cycle time for before faulting
-            //sunlight: 10,            // sunlight sensor esp ID
+            sunlight: "sunlight",            // sunlight sensor esp ID
             watts: {
-                inverterPower: "pzem_power"    // local sensor - total inverter power - used for welder detection
+                inverterPower: "inverter_1"    // local sensor - total inverter power - used for welder detection
             },
             priority: {
                 entityAuto: "input_boolean.auto_priority",
                 battery: 0,
-                delaySwitchOn: 5,    // 60s time to observe changes in amps/sun before toggling priorities on
-                delaySwitchOff: 5,  // 30s time to observe changes in amps/sun before toggling priorities off
+                delaySwitchOn: 20,    // 60s time to observe changes in amps/sun before toggling priorities on
+                delaySwitchOff: 60,  // 30s time to observe changes in amps/sun before toggling priorities off
                 queue: [
                     {
                         name: "Alvarez ATS",
                         enable: true,
                         onVolts: 54.5,
                         offVolts: 52.0,
-                        entities: ["solar-relay1-alvarez", "solar-relay5-sofing"]
+                        entities: ["solar-relay1-alvarez", "solar-relay8-sofing"]
                     },
                     {
                         name: "Daren ATS",
@@ -89,24 +113,26 @@ let
                         entities: ["solar-relay2-daren"]
                     },
                     {
-                        name: "Ram-Water ATS",
+                        name: "Inverter 10kw",
                         enable: true,
-                        onVolts: 54.5,
-                        // offVolts: 51.0,
-                        onAmps: 50.0,
-                        offAmps: 10.0,
+                        onVolts: 54.0,
+                        onAmps: 10.0,
+                        offAmps: -10.0,
                         offAmpsFloat: -10.0,
-                        entities: ["solar-ram-relay1-water"]
+                        entities: ["solar-relay5-inverter-10kw"]
                     },
                     {
                         name: "Ram-Water ATS",
                         enable: true,
-                        onVolts: 54.0,
+                        onVolts: 54.5,
+                        // offVolts: 51.0,
+                        onSun: 0.6,
                         onAmps: 50.0,
                         offAmps: -10.0,
                         offAmpsFloat: -10.0,
-                        entities: ["solar-relay6-inverter-10kw"]
+                        entities: ["solar-ram-relay1-water"]
                     },
+
                     /*
                     {
                       name: "Compressor", // name of system or entity being controlled 
@@ -212,16 +238,27 @@ let
                     record: false
                 },
                 {
-                    name: "pzem_power",         // all inverters
-                    entity: ["pzem-alvarez_watts", "pzem-daren_watts", "pzem-sofia_watts"
-                        , "pzem-ram-water_watts", "pzem-ram-house_watts"],
+                    name: "inverter_11kw",         // all inverters
+                    entity: ["pzem-alvarez_watts", "pzem-daren_watts", "pzem-sofia_watts"],
+                    solarPower: false,
+                    record: true
+                },
+                {
+                    name: "inverter_10kw",         // all inverters
+                    entity: ["pzem-ram-water_watts", "pzem-ram-house_watts"],
+                    solarPower: false,
+                    record: true
+                },
+                {
+                    name: "inverter_all",         // all inverters
+                    entity: ["inverter_11kw", "inverter_10kw"],
                     solarPower: false,
                     record: true
                 },
                 {
                     name: "solar_power",
                     solarPower: true,               // this is a solar power sensor
-                    entity: ["pzem_power"],         // the esp IDs for inverter amps
+                    entity: ["inverter_all"],         // the esp IDs for inverter amps
                     batteryWatt: ["battery_power"], // must have battery watt sensor for Solar Power Calc
                     record: true
                 },
@@ -551,11 +588,17 @@ let
                             if (sun != undefined && member.cfg.onSun != undefined) {
                                 if (member.cfg.offAmpsFloat == undefined || member.cfg.offAmpsFloat != undefined
                                     && nv.battery[config.battery].floating == true) {
-                                    //  console.log("checking sun: " + sun + " float:" + nv.battery[config.battery].floating)
                                     if (sun >= member.cfg.onSun) {
-                                        console.log("checking sun: " + sun + " float:" + nv.battery[config.battery].floating)
-                                        trigger(x, "sun is high (" + sun + "v) - starting ", true);
-                                        return;
+                                        console.log("checking sun: " + sun + " floating:" + nv.battery[config.battery].floating)
+                                        if (member.delayStepSun == false) {
+                                            member.delayTimerSun = time.epoch;
+                                            member.delayStepSun = true;
+                                            return;
+                                        } else if (time.epoch - member.delayTimerSun >= config.delaySwitchOn) {
+                                            log("sun is high (" + sun + "v) - starting " + member.cfg.name);
+                                            sendOutput(x, newState);
+                                            return;
+                                        }
                                     } else member.delayStepSun = false;
                                 }
                             } else if (member.cfg.onAmps != undefined) {
@@ -570,13 +613,13 @@ let
                             }
                         }
                     }
-                    function trigger(x, message, newState) {
+                    function trigger(x, message, newState, isSun) {
                         let member = state.priority.queue[x]; member.cfg = config.queue[x];
                         if (member.delayStep == false) {
                             member.delayTimer = time.epoch;
                             member.delayStep = true;
                             return;
-                        } else if (time.epoch - member.delayTimer >= config.delaySwitchOn) {
+                        } else if (time.epoch - member.delayTimer >= (newState ? config.delaySwitchOn : config.delaySwitchOff)) {
                             log(message + member.cfg.name);
                             sendOutput(x, newState);
                             return;
@@ -594,8 +637,7 @@ let
                 }
                 function pointers() {
                     volts = Math.round(entity[cfg.battery[config.battery].sensorVolt].state * 100) / 100;
-                    if (cfg.solar.espSunlight != undefined && entity[cfg.solar.espSunlight])
-                        sun = Math.round(entity[cfg.solar.sunlight].state * 100) / 100;
+                    sun = Math.round(entity[cfg.solar.sunlight]?.state * 100) / 100;
                     if (config.battery != undefined) {
                         if (Array.isArray(cfg.battery[config.battery].sensorAmp)) {
                             let temp = 0;
@@ -1253,7 +1295,7 @@ let
                     if (config.entity != undefined) {
                         if (config.entity.length > 1 || config.solarPower == true) {
                             for (let y = 0; y < config.entity.length; y++) {
-                                let value = parseFloat(entity[config.entity[y]].state)
+                                let value = parseFloat(entity[config.entity[y]]?.state)
                                 if (Number.isFinite(value)) {
                                     if (config.combineNegative === true) { sum += entity[config.entity[y]].state }
                                     else if (Math.sign(value) != -1) { sum += entity[config.entity[y]].state }
@@ -1492,8 +1534,8 @@ let
                             // should add something to turn all queue entities off or remove device array and make single, hard to manage that
                         });
                         log("syncing priority queue: " + queue.name + "  with entity: " + element
-                            + " - state: " + entity[element].state);
-                        state.priority.queue[x].state = entity[element].state;
+                            + " - state: " + entity[element]?.state);
+                        state.priority.queue[x].state = entity[element]?.state;
                     });
                     state.priority.step = time.epoch;
                 }
