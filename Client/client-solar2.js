@@ -95,7 +95,7 @@ let
             priority: {
                 entityAuto: "input_boolean.auto_priority",
                 battery: 0,
-                delaySwitchOn: 20,    // 60s time to observe changes in amps/sun before toggling priorities on
+                delaySwitchOn: 10,    // 60s time to observe changes in amps/sun before toggling priorities on
                 delaySwitchOff: 60,  // 30s time to observe changes in amps/sun before toggling priorities off
                 queue: [
                     {
@@ -109,22 +109,21 @@ let
                         name: "Daren ATS",
                         enable: true,
                         onVolts: 52.5,
-                        offVolts: 51.0,
+                        offVolts: 52.0,
                         entities: ["solar-relay2-daren"]
                     },
                     {
                         name: "Inverter 10kw",
                         enable: true,
-                        onVolts: 54.0,
                         onAmps: 10.0,
-                        offAmps: -10.0,
-                        offAmpsFloat: -10.0,
+                        onSun: 0.5,
+                        offAmps: -30.0,
+                        offAmpsFloat: -30.0,
                         entities: ["solar-relay5-inverter-10kw"]
                     },
                     {
                         name: "Ram-Water ATS",
                         enable: true,
-                        onVolts: 54.5,
                         // offVolts: 51.0,
                         onSun: 0.6,
                         onAmps: 50.0,
@@ -180,11 +179,10 @@ let
                     endAmps: 20,                // optional - amps needed to end night mode
                 },
                 power: {
-                    id: undefined,              // optional - Power switch ESP ID
-                    //   type: "esp",                // optional - output type esp/udp/ha
+                    entityActive: 0,              // required - entity that indicates 
+                    entityPower: undefined,     // optional - Power switch ESP ID
                     delayOff: undefined,        // optional - delay power off switch after shutdown
                     startAuto: true,            // optional - state the inverter on system boot if voltage is good to go
-                    //  ha: 7                       // Inverter Home Assistant Power Button 
                 },
                 transfer: {                     // required!!
                     switchOn: [                 // transfer switch on sequence
@@ -196,11 +194,11 @@ let
                     ],
                 },
                 // espWattGrid: 8,              // optional - esp ID for grid watt sensor - needed to switch back fromm gid (comparing power)
-                watts: 5,                       // optional - used for transfer switch 
+                // watts: 5,                       // optional - used for transfer switch 
                 // volts: 26,                   // optional - used to sense inverter output voltage fault
                 // blackout: true,               // optional - switch to inverter on blackout if voltage is less than (voltsRun)
-                blackoutVoltMin: 54.0,          // optional - minimum voltage needed to recover from blackout 
-                voltsRun: 52.0,                 // volts to start inverter - in addition to sunlight/amps if configured
+                // blackoutVoltMin: 54.0,          // optional - minimum voltage needed to recover from blackout 
+                voltsRun: 53.0,                 // volts to start inverter - in addition to sunlight/amps if configured
                 voltsStop: 51.4,                // volts to stop inverter - will stop Independent of sunlight level
                 floatRetryInterval: undefined,
                 // ampsRun: 20.0,               // optional - charger amp level to transfer load to inverter - (must use espWattGrid if not)
@@ -530,7 +528,7 @@ let
                 }
                 if (time.epoch - state.priority.step >= 3) { pointers(); priorityCheck(); } else return;  // delay start of priority queue
                 function priorityCheck() {
-                    for (let x = config.queue.length - 1; x > -1; x--) {    // when priority is running
+                    for (let x = config.queue.length - 1; x > -1; x--) {    // when member is running
                         let member = state.priority.queue[x]; member.cfg = config.queue[x];
                         if (member.state == true || member.state == null) {
                             //  console.log("checking x:" + x + " amps: " + amps);
@@ -589,19 +587,20 @@ let
                                 if (member.cfg.offAmpsFloat == undefined || member.cfg.offAmpsFloat != undefined
                                     && nv.battery[config.battery].floating == true) {
                                     if (sun >= member.cfg.onSun) {
-                                        console.log("checking sun: " + sun + " floating:" + nv.battery[config.battery].floating)
+                                        // console.log("checking sun: " + sun + " floating:" + nv.battery[config.battery].floating)
                                         if (member.delayStepSun == false) {
                                             member.delayTimerSun = time.epoch;
                                             member.delayStepSun = true;
                                             return;
                                         } else if (time.epoch - member.delayTimerSun >= config.delaySwitchOn) {
                                             log("sun is high (" + sun + "v) - starting " + member.cfg.name);
-                                            sendOutput(x, newState);
+                                            sendOutput(x, true);
                                             return;
                                         }
                                     } else member.delayStepSun = false;
                                 }
-                            } else if (member.cfg.onAmps != undefined) {
+                            }
+                            if (member.cfg.onAmps != undefined) {
                                 if (amps >= member.cfg.onAmps) {
                                     trigger(x, "charge amps is high (" + amps + "a) volts: " + volts + " on volts: "
                                         + member.cfg.onVolts + " - starting ", true);
@@ -1285,7 +1284,7 @@ let
                         amps.state = (Math.round(sum * 10) / 10);
                         amps.update = time.epoch;
                         // console.log("entity: " + config.name + " -  state: " + amps.state)
-                        send("amp_" + config.name, (Math.round(sum * 10) / 10), "A");
+                        send("amp_" + config.name, amps.state, "A");
                     }
                 }
                 for (let x = 0; x < cfg.sensor.watt.length; x++) {
@@ -1306,15 +1305,15 @@ let
                             if (config.solarPower == true) {
                                 let batWatts = entity[config.batteryWatt].state;
                                 if (Math.sign(batWatts) == -1 && batWatts <= ((sum) * -1)) {
-                                    send("watt_" + config.name, 0, "W");
+                                    send("watt_" + config.name, 0, "kW");
                                 } else {
                                     if (Number.isFinite(batWatts))
                                         watts.state = batWatts + sum;
-                                    send("watt_" + config.name, ~~(batWatts + sum), "W");
+                                    send("watt_" + config.name, ((batWatts + sum) / 1000).toFixed(2), "kW");
                                 }
                             } else {
                                 watts.state = ~~sum;
-                                send("watt_" + config.name, ~~(sum), "W");
+                                send("watt_" + config.name, (sum / 1000).toFixed(2), "kW");
                             }
                         }
                     } else if (config.sensorAmp != undefined && config.sensorVolt != undefined) {
@@ -1322,7 +1321,7 @@ let
                             , volts = entity[config.sensorVolt].state;
                         if (Number.isFinite(volts * amps)) watts.state = volts * amps;
                         else (watts.state = 0.0);
-                        send("watt_" + config.name, ~~watts.state, "W");
+                        send("watt_" + config.name, (watts.state / 1000).toFixed(2), "kW");
                     }
                     if (config.record == true) {
                         if (Number.isFinite(watts.state) && Math.sign(watts.state) != -1)
