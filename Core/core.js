@@ -155,20 +155,25 @@ if (isMainThread) {
                                 if (timeResult > 1000) log("websocket (" + a.color("cyan", config.address) + ") ping is lagging - delay is: " + timeResult + "ms", 1, 0);
                                 break;
                             case "result":
-                                // console.log(buf)
+                                //console.log(buf)
                                 state.ha[haNum].ws.zha.devices ||= {};
-                                if (buf.id == state.ha[haNum].ws.queryRequest && Array.isArray(buf.result)) {
-                                    // console.log(buf)
-                                    buf.result.forEach(dev => {
-                                        if (dev.user_given_name) {
-                                            logs.zhaDevices[haNum] ||= [];
-                                            logs.zhaDevices[haNum].push(dev.user_given_name);
-                                            state.ha[haNum].ws.zha.devices[dev.device_reg_id] = { userName: dev.user_given_name, name: dev.name };
-                                        }
-                                    });
-                                    log("Websocket (" + a.color("cyan", config.address) + ") received ZHA device list", 1);
-                                    //console.log(state.ha[haNum].ws.zha.devices);
-                                    clearTimeout(state.ha[haNum].ws.queryReply);
+                                if (buf.id == state.ha[haNum].ws.queryRequest) {
+                                    if (Array.isArray(buf.result)) {
+                                         // console.log(buf)
+                                        buf.result.forEach(dev => {
+                                            if (dev.user_given_name) {
+                                                // logs.zhaDevices[haNum] ||= [];
+                                                logs.zhaDevices[haNum].push(dev.user_given_name);
+                                                state.ha[haNum].ws.zha.devices[dev.device_reg_id] = { userName: dev.user_given_name, name: dev.name };
+                                            }
+                                        });
+                                        log("Websocket (" + a.color("cyan", config.address) + ") received ZHA device list", 1);
+                                        //console.log(state.ha[haNum].ws.zha.devices);
+                                        clearTimeout(state.ha[haNum].ws.queryReply);
+                                    } else if (buf.error.code == 'unknown_command') {
+                                        log("Websocket (" + a.color("cyan", config.address) + ") no ZHA devices - disabling", 1);
+                                        clearTimeout(state.ha[haNum].ws.queryReply);
+                                    }
                                 }
                                 break;
                             case "auth_required":
@@ -189,7 +194,7 @@ if (isMainThread) {
                             case "event":
                                 switch (buf.event.event_type) {
                                     case "zha_event":
-                                        // console.log(state.ha[haNum].ws.zha.devices)
+                                          // console.log(buf.event)
                                         if (state.ha[haNum].ws.zha.devices[buf.event.data.device_id] != undefined
                                             && buf.event.data.command != 'press_type') {
                                             let name = state.ha[haNum].ws.zha.devices[buf.event.data.device_id].userName;
@@ -273,7 +278,8 @@ if (isMainThread) {
                     }
                     em.on('zhaQuery' + haNum, function (num) { zhaQuery(); });
                     function zhaQuery() {
-                        log("Websocket (" + a.color("cyan", config.address) + ") querying ZHA device list...", 1);
+                        log("Websocket (" + a.color("cyan", config.address) + ") querying ZHA device list... (id: " + client.id + ")", 1);
+                        logs.zhaDevices[haNum] = [];
                         state.ha[haNum].ws.queryRequest = client.id;
                         send({ id: client.id++, type: "zha/devices" });
                         state.ha[haNum].ws.queryReply = setTimeout(() => {
@@ -329,7 +335,7 @@ if (isMainThread) {
                 let buf, port = info.port, id = undefined;
                 try { buf = JSON.parse(data); }
                 catch (error) { log("A UDP client (" + info.address + ") is sending invalid JSON data: " + error, 3, 3); return; }
-                // console.log(buf)
+                // if (buf.type == "haState" && buf.obj?.unit == undefined) console.log(buf)
                 checkUDPreg();
                 switch (buf.type) {
                     case "heartBeat": try { state.client[id].heartBeat = true; } catch (e) { } break; // start heartbeat 
@@ -357,6 +363,7 @@ if (isMainThread) {
                                 }
                             }
                         }
+
                         log("incoming UDP state: " + buf.obj.name + " data: " + buf.obj.state, 3, 0);
                         break;
                     case "udpTele":     // incoming UDP telemetry data from UDP Simplex client
@@ -383,7 +390,10 @@ if (isMainThread) {
                                     }
                                 }
                             }
-                            if (found) log("incoming ESP state: " + buf.obj.name + " data: " + buf.obj.state, 3, 0);
+                            if (found) {
+                                if (!buf.obj.name.includes("heartbeat"))
+                                    log("incoming ESP state: " + buf.obj.name + " data: " + buf.obj.state, 3, 0);
+                            }
                             else log("incoming ESP state change failed, ID does not exist: " + buf.obj.name + " data: " + buf.obj.state + " - Client: " + state.client[id].name, 3, 2);
                         }
                         break;
@@ -425,77 +435,95 @@ if (isMainThread) {
                         let sensor = undefined;
                         let haNum;
                         // console.log(buf)
-                        for (let y = 0; y < cfg.homeAssistant.length; y++) {
-                            for (let z = 0; z < logs.haInputs[y].length; z++) {
-                                if (buf.obj.name == logs.haInputs[y][z]) {
-                                    haNum = y;
-                                    sensor = false;
-                                    break;
-                                } else {        // identify HA num even if no match
-                                    if (z == logs.haInputs[y].length - 1 && buf.obj.ip == cfg.homeAssistant[y].address) {
-                                        haNum = y;
-                                        sensor = true;
-                                        break;
+                        if (buf.obj?.unit != undefined) {
+                          //  if (buf.obj?.unit == "V") console.log(buf)
+                            if (cfg.comCache) {
+                                state.cache ||= {};
+                                state.cache[buf.obj.name] ||= {};
+                                if (state.cache[buf.obj.name]) {
+                                    if (state.cache[buf.obj.name].state != buf.obj.state) {
+                                        state.cache[buf.obj.name].state = buf.obj.state;
+                                        state.cache[buf.obj.name].update = time.epoch;
+                                        state.cache[buf.obj.name].stamp = time.stamp;
+                                        process();
                                     }
                                 }
-                            }
+                            } else process();
+                        } else process();
 
-                            // not used yet - this is used to send data directly to ZHA devices
-                            /*
-                            for (const userName in state.ha[y].ws.zha.devices) {
-                                if (userName == buf.obj.name) {
-                                    haNum = y;
-                                    console.log("found ZHE Entity: ", userName, " on HA: ", y);
-                                    em.emit('haSend' + haNum, {
-                                        "id": state.ha[haNum].ws.id++,
-                                        "type": "call_service",
-                                        "domain": "switch",
-                                        "service": buf.obj.state == false ? 'turn_off' : 'turn_on',
-                                        "target": { "entity_id": buf.obj.name }
-                                    })
-                                    break;
-                                }
-                            }
-                            let name = state.ha[y].ws.zha.devices[buf.obj.name].userName;
-                            */
-                        }
-                        if (sensor == undefined) {
-                            if (buf.obj.unit != undefined && buf.obj.name != undefined) {
-                                log("sensor name: " + buf.obj.name + "  value: " + buf.obj.state + " unit: " + buf.obj.unit, 0, 0);
-                                hass[(buf.obj.haID == undefined) ? 0 : buf.obj.haID].states.update('sensor', "sensor." + buf.obj.name,
-                                    { state: buf.obj.state, attributes: { state_class: 'measurement', unit_of_measurement: buf.obj.unit } });
-                                return;
-                            } else log("received invalid HA state, entity does not exist: " + JSON.stringify(buf), 3, 3); return;
-                        }
-                        state.perf.ha[haNum].start = Date.now();
-                        state.perf.ha[haNum].wait = true;
-                        state.perf.ha[haNum].id = state.ha[haNum].ws.id;
-                        let sort = ["input_boolean", "input_button", "switch"];
-                        if (buf.obj.unit == undefined) {
-                            log("Client: " + state.client[id].name + " is setting HA entity: " + buf.obj.name + " to value: " + buf.obj.state, 3, 0);
-                            for (let x = 0; x < sort.length; x++) {
-                                if (buf.obj.name) {
-                                    if (buf.obj.name.includes(sort[x])) {
-                                        if (cfg.homeAssistant[haNum].legacyAPI == false) {
-                                            em.emit('haSend' + haNum, {
-                                                "id": state.ha[haNum].ws.id++,
-                                                "type": "call_service",
-                                                "domain": sort[x],
-                                                "service": buf.obj.state == false ? 'turn_off' : 'turn_on',
-                                                "target": { "entity_id": buf.obj.name }
-                                            })
-                                        } else {
-                                            hass[haNum].services.call(buf.obj.state == false ? 'turn_off' : 'turn_on', sort[x], { entity_id: buf.obj.name })
-                                                .then(dbuf => {
-                                                    let delay = ha.perf(haNum);
-                                                    log("delay was: " + delay, 0, 0);
-                                                });
+                        function process() {
+                            for (let y = 0; y < cfg.homeAssistant.length; y++) {
+                                for (let z = 0; z < logs.haInputs[y].length; z++) {
+                                    if (buf.obj.name == logs.haInputs[y][z]) {
+                                        haNum = y;
+                                        sensor = false;
+                                        break;
+                                    } else {        // identify HA num even if no match
+                                        if (z == logs.haInputs[y].length - 1 && buf.obj.ip == cfg.homeAssistant[y].address) {
+                                            haNum = y;
+                                            sensor = true;
+                                            break;
                                         }
+                                    }
+                                }
+
+                                // not used yet - this is used to send data directly to ZHA devices
+                                /*
+                                for (const userName in state.ha[y].ws.zha.devices) {
+                                    if (userName == buf.obj.name) {
+                                        haNum = y;
+                                        console.log("found ZHE Entity: ", userName, " on HA: ", y);
+                                        em.emit('haSend' + haNum, {
+                                            "id": state.ha[haNum].ws.id++,
+                                            "type": "call_service",
+                                            "domain": "switch",
+                                            "service": buf.obj.state == false ? 'turn_off' : 'turn_on',
+                                            "target": { "entity_id": buf.obj.name }
+                                        })
                                         break;
                                     }
                                 }
+                                let name = state.ha[y].ws.zha.devices[buf.obj.name].userName;
+                                */
                             }
-                            return;
+                            if (sensor == undefined) {
+                                if (buf.obj.unit != undefined && buf.obj.name != undefined) {
+                                    // log("sensor name: " + buf.obj.name + "  value: " + buf.obj.state + " unit: " + buf.obj.unit, 0, 0);
+                                    hass[(buf.obj.haID == undefined) ? 0 : buf.obj.haID].states.update('sensor', "sensor." + buf.obj.name,
+                                        { state: buf.obj.state, attributes: { state_class: 'measurement', unit_of_measurement: buf.obj.unit } });
+                                    return;
+                                } else log("received invalid HA state, entity does not exist: " + JSON.stringify(buf), 3, 3); return;
+                            }
+                            state.perf.ha[haNum].start = Date.now();
+                            state.perf.ha[haNum].wait = true;
+                            state.perf.ha[haNum].id = state.ha[haNum].ws.id;
+                            let sort = ["input_boolean", "input_button", "switch"];
+                            if (buf.obj.unit == undefined) {
+                                log("Client: " + state.client[id].name + " is setting HA entity: " + buf.obj.name + " to value: " + buf.obj.state, 3, 0);
+                                for (let x = 0; x < sort.length; x++) {
+                                    if (buf.obj.name) {
+                                        if (buf.obj.name.includes(sort[x])) {
+                                            if (cfg.homeAssistant[haNum].legacyAPI == false) {
+                                                em.emit('haSend' + haNum, {
+                                                    "id": state.ha[haNum].ws.id++,
+                                                    "type": "call_service",
+                                                    "domain": sort[x],
+                                                    "service": buf.obj.state == false ? 'turn_off' : 'turn_on',
+                                                    "target": { "entity_id": buf.obj.name }
+                                                })
+                                            } else {
+                                                hass[haNum].services.call(buf.obj.state == false ? 'turn_off' : 'turn_on', sort[x], { entity_id: buf.obj.name })
+                                                    .then(dbuf => {
+                                                        let delay = ha.perf(haNum);
+                                                        log("delay was: " + delay, 0, 0);
+                                                    });
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                                return;
+                            }
                         }
                         break;
                     case "register":    // incoming registrations
@@ -668,7 +696,6 @@ if (isMainThread) {
             boot: function (step) {
                 switch (step) {
                     case 0:     // read config.json file
-
                         fs = require('fs')
                         workingDir = require('path').dirname(require.main.filename);
                         console.log("Loading config data...");
@@ -746,7 +773,7 @@ if (isMainThread) {
                             });
                             express.get("/client/:name", async function (request, response) {
                                 const clientName = request.params.name;  // Extract client name from the URL
-                                const client = state.client.find(c => c.name === clientName);  // Find the client by name
+                                const client = state.client.find(c => c.name.toLowerCase() === clientName);  // Find the client by name
                                 if (client == undefined) return response.status(404).send({ error: `Client with name "${clientName}" not found` });
                                 try {
                                     const result = await sendDiagCommand(client, 1000);  // Timeout of 1000ms
@@ -766,7 +793,8 @@ if (isMainThread) {
                                         let buf = JSON.parse(msg);
                                         if (buf.clientId === client.id) {
                                             clearTimeout(timer); // Clear the timeout if response received
-                                            resolve({ client: client.name, state: buf.obj.state, nv: buf.obj.nv });
+                                            resolve({ client: client.name, config: buf.obj?.config, state: buf.obj?.state, nv: buf.obj?.nv });
+                                            console.log(buf.obj?.state)
                                         }
                                     };
                                     udp.once("message", onDiagResponse); // Use `once` to only listen for one response per client
@@ -807,6 +835,7 @@ if (isMainThread) {
                         sys.boot(3);
                         break;
                     case 3:     // connect to Home Assistant
+                        if (cfg.comCache) log(a.color("green", "communications caching is enabled"), 1);
                         process.on('unhandledRejection', (reason, promise) => {
                             // console.error('Unhandled Rejection:', reason);
                         });
@@ -879,7 +908,9 @@ if (isMainThread) {
                         udp.on('message', (msg, info) => { sys.udp(msg, info); });
                         udp.bind(65432, "127.0.0.1");
                         setInterval(() => { sys.watchDog(); }, 1e3);
-                        setTimeout(() => log("TW Core just went online", 0, 2), 20e3);
+                        setTimeout(() => {
+                            log("TW Core just went online", 0, 2);
+                        }, 20e3);
                         break;
                 }
             },
@@ -941,6 +972,16 @@ if (isMainThread) {
                     HomeAssistant = require('homeassistant');
                     WebSocketClient = require('websocket').client;
                 }
+                https = require("https");
+                http = require("http");
+                rocket = {
+                    enable: false,
+                    server: "10.21.0.1",
+                    port: 3000,
+                    user: "xBD2x76tdL8KYqXpe",
+                    token: "lDwlkylzC9nQ1O95tAfnYY9VtG_xFUT8XaZC4t2NfCp",
+                    channel: "TWIT-Mambaroto",
+                };
                 events = require('events');
                 em = new events.EventEmitter();
                 udpServer = require('dgram');
@@ -989,8 +1030,7 @@ if (isMainThread) {
                     },
                 };
                 log = function (message, mod, level, port) {      // add a new case with the name of your automation function
-                    let
-                        buf = time.stamp, cbuf = buf + "\x1b[3", lbuf = "", mbuf = "", ubuf = buf + "\x1b[3";
+                    let buf = time.stamp, cbuf = buf + "\x1b[3", lbuf = "", mbuf = "", ubuf = buf + "\x1b[3";
                     if (level == undefined) level = 1;
                     switch (level) {
                         case 0: ubuf += "6"; cbuf += "6"; lbuf += "|--debug--|"; break;
@@ -1017,12 +1057,11 @@ if (isMainThread) {
                     buf += mbuf + message;
                     cbuf += mbuf + message;
                     ubuf += mbuf + message;
-                    if (logs.sys[logs.step] == undefined) logs.sys.push(buf);
-                    else logs.sys[logs.step] = buf;
+                    if (logs.sys[logs.step] == undefined) logs.sys.push(buf); else logs.sys[logs.step] = buf;
                     if (logs.step < 500) logs.step++; else logs.step = 0;
+                    if (cfg.rocket.enable && level > 0) sendRocket(buf);
                     if (cfg.telegram != undefined && cfg.telegram.enable == true && state.telegram.started == true) {
-                        if (level >= cfg.telegram.logLevel
-                            || level == 0 && cfg.telegram.logDebug == true) {
+                        if (level >= cfg.telegram.logLevel || level == 0 && cfg.telegram.logDebug == true) {
                             try {
                                 for (let x = 0; x < cfg.telegram.users.length; x++) {
                                     if (cfg.telegram.logESPDisconnect == false) {
@@ -1037,10 +1076,11 @@ if (isMainThread) {
                         }
                     }
                     if (port != undefined) {
-                        if (level != 0 && cfg.logging.client) console.log(ubuf);
-                        udp.send(JSON.stringify({ type: "log", obj: ubuf }), port);
-                    }
-                    else if (level == 0 && cfg.debugging == true) console.log(cbuf);
+                        if (level != 0) {
+                            if (cfg.logging.client) console.log(ubuf);
+                            udp.send(JSON.stringify({ type: "log", obj: ubuf }), port);
+                        } else if (cfg.logging.debug == true) udp.send(JSON.stringify({ type: "log", obj: ubuf }), port);
+                    } else if (level == 0 && cfg.logging.debug == true) console.log(cbuf);
                     else if (level != 0) console.log(cbuf);
                     return buf;
                 };
@@ -1087,7 +1127,30 @@ if (isMainThread) {
                             target[key] = source[key];
                         }
                     }
-                }
+                };
+                sendRocket = function (text) {
+                    const postData = JSON.stringify({ channel: cfg.rocket.channel, text: text, });
+                    const options = {
+                        hostname: cfg.rocket.server,
+                        port: cfg.rocket.port,
+                        path: "/api/v1/chat.postMessage",
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Content-Length": Buffer.byteLength(postData),
+                            "X-Auth-Token": cfg.rocket.token,
+                            "X-User-Id": cfg.rocket.user,
+                        },
+                    };
+                    const req = http.request(options, (res) => {
+                        let data = "";
+                        res.on("data", (chunk) => (data += chunk));
+                        //   res.on("end", () => { console.log("Response:", data); });
+                    });
+                    req.on("error", (e) => { console.error("Rocket Error:", e.message); });
+                    req.write(postData);
+                    req.end();
+                };
                 time.startTime();
             },
             checkArgs: function () {
@@ -1128,7 +1191,7 @@ if (isMainThread) {
                         "RestartSec=5\n",
                     ];
                     fs.writeFileSync("/etc/systemd/system/twit-core.service", service.join("\n"));
-                    // execSync("mkdir /apps/ha -p");
+                    // execSync("mkdir /apps/ -p");
                     // execSync("cp " + process.argv[1] + " /apps/ha/");
                     execSync("systemctl daemon-reload");
                     execSync("systemctl enable twit-core.service");
