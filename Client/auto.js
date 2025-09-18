@@ -12,14 +12,7 @@ module.exports = {
     automation: {
         example: function (_name, push) {
             let st, cfg, nv;
-            if (push) {
-                pointers();
-                /*
-
-                    event based logic goes here
-
-                */
-            } else {
+            if (!push) {
                 config[_name] = {};     // initialize automation's configurations
                 state[_name] = {};      // initialize automation's volatile memory
                 pointers();
@@ -28,10 +21,17 @@ module.exports = {
                     initialization logic goes here
 
                 */
+            } else {
+                pointers();
+                /*
+
+                    event based logic goes here
+
+                */
             }
             /*
 
-                    common functions (initialization and event) go here
+                    common functions (for initialization and event shared functions) go here
 
             */
             if (!hotReload[_name]) {
