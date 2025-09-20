@@ -215,42 +215,119 @@ let
             }
         }
     },
+    // ensure these exist at top-level (they already do in your codebase)
     auto = {
+        // map resolvedModulePath -> [automationName, ...]
+        moduleAutomations: {},
+        // call currently-registered automations (existing behavior kept)
         call: function (data) {
-            for (const name in automation) { try { automation[name](name, data) } catch (e) { console.error(e) } }
+            for (const name in automation) {
+                try { automation[name](name, data); } catch (e) { console.error(e); }
+            }
         },
+        // load a module and register its automations (records which names belong to the file)
         load: function (automationFile) {
             try {
                 const automationPath = path.resolve(automationFile);
-                // console.log("State of 'automation' before Object.assign():", automation);
+                const resolvedPath = require.resolve(automationPath);
+
+                // require fresh copy (caller should delete cache if reloading; keeping this
+                // here is harmless for first-time loads)
                 const clientModule = require(automationPath);
-                //console.log(clientModule)
+
                 if (!clientModule.automation) throw new Error("Module does not export an 'automation' object.");
-                const automationName = path.parse(automationPath).name;
-                Object.assign(automation, clientModule.automation);
-                console.log(`Successfully processed automation: ${automationFile}`);
-                // console.log(automation)
+
+                // register each exported automation function under the global 'automation' object
+                const names = Object.keys(clientModule.automation);
+                for (const name of names) {
+                    automation[name] = clientModule.automation[name];
+                }
+
+                // remember which names belong to this module file
+                auto.moduleAutomations[resolvedPath] = names;
+
+                slog(`Successfully processed automation: ${automationFile}`);
                 return clientModule;
             } catch (error) {
                 console.error(`Error processing automation file "${automationFile}":`, error.message);
                 return null;
             }
         },
+        // clear only this module's automation names and the module cache (no global wipe)
+        clear: function (modulePath) {
+            const automationPath = path.resolve(modulePath);
+            const resolvedPath = require.resolve(automationPath);
+
+            // Remove registered automation functions that were recorded for this module
+            const prev = auto.moduleAutomations[resolvedPath] || [];
+            for (const name of prev) {
+                if (automation[name]) delete automation[name];
+            }
+
+            // remove bookkeeping for this module
+            delete auto.moduleAutomations[resolvedPath];
+
+            // remove Node's module cache so next require() loads fresh code
+            if (require.cache[resolvedPath]) delete require.cache[resolvedPath];
+        },
+        // reload workflow: cleanup previous automations for this file, clear cache, load new file, start new automations
         reload: function (automationFilePath) {
             try {
-                const oldName = path.parse(automationFilePath).name;
-                const reloadedModule = auto.clear(automationFilePath);
+                const automationPath = path.resolve(automationFilePath);
+                const resolvedPath = require.resolve(automationPath);
+
+                // 1) get previous automation names for this module
+                const prevNames = auto.moduleAutomations[resolvedPath] || [];
+
+                // 2) ask each previous automation to clean itself (reload=true)
+                for (const name of prevNames) {
+                    if (automation[name]) {
+                        try {
+                            // call the automation with reload flag so it can cancel timers/listeners
+                            automation[name](name, null, true);
+                        } catch (e) {
+                            console.error(`Error cleaning automation "${name}"`, e);
+                        }
+
+                        // defensive cleanup in case automation.reload didn't clear everything
+                        if (state[name]?.timer) {
+                            try { clearInterval(state[name].timer); } catch (e) { }
+                        }
+                        // remove module-specific runtime state/config — automation can recreate on init
+                        delete state[name];
+                        delete config[name];
+
+                        // remove it from the global registry (clear() will also attempt this)
+                        if (automation[name]) delete automation[name];
+                    }
+                }
+
+                // 3) clear module cache and bookkeeping
+                if (require.cache[resolvedPath]) delete require.cache[resolvedPath];
+                delete auto.moduleAutomations[resolvedPath];
+
+                // 4) load the new module and register its automations
                 const newModuleExports = auto.load(automationFilePath);
-                auto.call();
-                // auto.call();
-                state.cache = {};
+
+                // 5) start (= initialize) each automation that the new module provides
+                const newNames = auto.moduleAutomations[resolvedPath] || [];
+                for (const name of newNames) {
+                    if (automation[name]) {
+                        try {
+                            // pass undefined for push to trigger the init path
+                            automation[name](name, undefined);
+                        } catch (e) {
+                            console.error(`Error starting automation "${name}"`, e);
+                        }
+                    }
+                }
+                // 6) housekeeping: reset caches/watchers and re-register watchers for config
+                state.cache = {};   // reset entity cache
                 auto.watcher(automationFilePath, auto.reload);
                 const configPath = auto.paths[automationFilePath];
-                if (configPath) {
-                    auto.watcher(configPath, auto.reload);
-                }
+                if (configPath) { auto.watcher(configPath, auto.reload); }
+                const oldName = path.parse(automationFilePath).name;
                 slog(`Successfully reloaded and restarted automation: ${oldName}`);
-                sys.register();
                 if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                 if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
             } catch (error) {
@@ -258,6 +335,8 @@ let
                 slog(`Failed to reload automation: ${automationFilePath}. Error: ${error.message}`, 3, "HOT-RELOAD-FAIL");
             }
         },
+
+        // no change here — keep your debounced watcher
         watcher: function (filePath, reloadCallback) {
             if (fileWatchers[filePath]) {
                 fileWatchers[filePath].close();
@@ -277,12 +356,7 @@ let
                 }
             });
             fileWatchers[filePath] = watcher;
-        },
-        clear: function (modulePath) {
-            const resolvedPath = require.resolve(modulePath);
-            if (require.cache[resolvedPath]) delete require.cache[resolvedPath];
-            return require(resolvedPath);
-        },
+        }
     },
     user = {        // user configurable block - Telegram 
         telegram: { // enter a case matching your desirable input 
@@ -410,7 +484,7 @@ let
                                     if (buf.obj.name == element[1]) send(element[0], buf.obj.state);
                                 });
                             }
-                        }// else auto.call({ name: buf.obj.name, newState: buf.obj.state, only: true });
+                        }
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
                         // console.log(buf.obj)
