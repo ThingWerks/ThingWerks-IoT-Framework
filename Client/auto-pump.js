@@ -1,6 +1,5 @@
 #!/usr/bin/node
-hotReload = {};
-module.exports = {
+module.exports = { // exports added to clean up layout
     ha: {
         subscribe: [
             "input_boolean.auto_bubon",
@@ -41,8 +40,15 @@ module.exports = {
         ],
     },
     automation: {
-        Pumper: function (_name, push) {
-            let st, cfg, nv;
+        Pumper: function (_name, push, reload) {
+            let st, cfg, nv, log; pointers();
+            if (reload) {
+                log("hot reload initiated");
+                clearInterval(st.timer.hour);
+                clearInterval(st.timer.minute);
+                clearInterval(st.timer.second);
+                return;
+            }
             if (!push) {
                 state[_name] = {               // initialize automation volatile memory
                     init: true, dd: [], ha: { pushLast: [] }, fountain: [],
@@ -346,9 +352,8 @@ module.exports = {
                 }, 1e3);
                 st.timer.minute = setInterval(() => { timer(); }, 60e3);
             } else {
-                pointers();
                 for (let x = 0; x < cfg.dd.length; x++) {
-                    let dd = st.dd[x];
+                    let dd = st.dd[x], config = cfg.dd[x];
                     // log("dd automation toggle: " + push.name + " state:" + push.newState)
                     if (push.name == dd.auto.name) {
                         time.sync();
@@ -376,34 +381,41 @@ module.exports = {
                         }
                         return;
                     }
-                    if (cfg.dd[x].ha.oneShot && cfg.dd[x].ha.oneShot.includes(push.name)) {
-                        log(cfg.dd[x].name + " - One Shot operation triggered by: " + push.name);
+                    if (config.ha.oneShot && config.ha.oneShot.includes(push.name)) {
                         if (push.newState.includes("remote_button_short_press") || !push.newState.includes("remote_button")) {
-                            let duration = Math.trunc(entity[cfg.dd[x].ha.oneShotTimer].state);
-                            log(cfg.dd[x].name + " - starting one shot operation - stopping in " + duration + " minutes");
-                            send(cfg.dd[x].ha.auto, true);
-                            st.dd[x].state.oneShot = setTimeout(() => {
-                                log(cfg.dd[x].name + " - stopping one shot operation after " + duration + " minutes");
-                                send(cfg.dd[x].ha.auto, false);
+                            let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
+                            log(config.name + " - starting one shot operation - " + "triggered by: "
+                                + push.name + " - stopping in " + duration + " min");
+                            send(config.ha.auto, true);
+                            clearTimeout(dd.state.oneShot);
+                            dd.state.oneShot = setTimeout(() => {
+                                log(config.name + " - stopping one shot operation after " + duration + " minutes");
+                                send(config.ha.auto, false);
                             }, (duration * 60 * 1e3));
+                        } else if (push.newState.includes("remote_button_double_press")) {
+                            log(config.name + " - starting system - " + "triggered by: " + push.name);
+                            send(config.ha.auto, true);
+                        } else if (push.newState.includes("remote_button_long_press")) {
+                            log(config.name + " - STOPPING system - " + "triggered by: " + push.name);
+                            send(config.ha.auto, false);
                         }
                         return;
                     }
-                    if (cfg.dd[x].ha.turbo == push.name) {
-                        log(cfg.dd[x].name + " - Turbo operation triggered by: " + push.name);
+                    if (config.ha.turbo == push.name) {
+                        log(config.name + " - Turbo operation triggered by: " + push.name);
                         if (push.newState == true) {
-                            log(cfg.dd[x].name + " - enabling pump turbo mode");
-                            st.dd[x].state.turbo = true;
+                            log(config.name + " - enabling pump turbo mode");
+                            dd.state.turbo = true;
                         } else {
-                            log(cfg.dd[x].name + " - disabling pump turbo mode");
-                            st.dd[x].state.turbo = false;
+                            log(config.name + " - disabling pump turbo mode");
+                            dd.state.turbo = false;
                         }
                         return;
                     }
-                    if (cfg.dd[x].ha.profile == push.name) {
-                        log(cfg.dd[x].name + " - pump profile change triggered by: " + push.name);
-                        log(cfg.dd[x].name + " - pump profile changing to mode: " + ~~push.newState);
-                        st.dd[x].state.profile = parseInt(push.newState);
+                    if (config.ha.profile == push.name) {
+                        log(config.name + " - pump profile change triggered by: " + push.name);
+                        log(config.name + " - pump profile changing to mode: " + ~~push.newState);
+                        dd.state.profile = parseInt(push.newState);
                         return;
                     }
                 }
@@ -754,14 +766,14 @@ module.exports = {
                     }
                 }
                 function pumpFlowCheck() {
-                    let flow = dd.flow[dd.state.pump].lm, pump = dd.cfg.pump[dd.state.pump].flow, press = dd.press.out.state;
+                    let flow = dd.flow[dd.state.pump].lm, pump = dd.cfg.pump[dd.state.pump].flow, press = dd.press.out.state.psi.toFixed(0);
                     if (dd.state.flowCheck == true) {
                         if (dd.state.flowCheckPassed == false) {
                             if (flow < pump.startError) {
                                 dd.fault.flow = true;
                                 if (dd.cfg.fault.retryCount && dd.cfg.fault.retryCount > 0) {
                                     if (dd.fault.flowRestarts < dd.cfg.fault.retryCount) {
-                                        log(dd.cfg.name + " - flow check FAILED!! (" + flow.toFixed(1) + "lm) - ", press.psi, " psi - HA Pump State: "
+                                        log(dd.cfg.name + " - flow check FAILED!! (" + flow.toFixed(1) + "lm) - ", press, " psi - HA Pump State: "
                                             + dd.pump[dd.state.pump].state + " - waiting for retry " + (dd.fault.flowRestarts + 1), 2);
                                         dd.fault.flowRestarts++;
                                         dd.state.flowTimer = setTimeout(() => {
@@ -803,7 +815,7 @@ module.exports = {
                         } else {
                             if (pump.runStop != undefined) {
                                 if (flow < pump.runStop) {
-                                    trigger((" - RUN flow stop (" + flow.toFixed(1) + "lm) - pump stopping - " + press.psi + " psi"), false);
+                                    trigger((" - RUN flow stop (" + flow.toFixed(1) + "lm) - pump stopping - " + press + " psi"), false);
                                 } else dd.state.flowCheckRunDelay = false;
                             } else if (pump.runError != undefined) {
                                 if (flow < pump.runError) {
@@ -1072,49 +1084,38 @@ module.exports = {
                     entity[flowNameEntity].day = daySum;
                 }
             }
-            if (!hotReload[_name]) {
-                log("hot reload initiated");
-                clearInterval(st.timer.hour);
-                clearInterval(st.timer.minute);
-                clearInterval(st.timer.second);
-                state[_name] = undefined;
-                config[_name] = undefined;
-            }
             function pointers() {
                 log = (m, l) => slog(m, l, _name);
-                hotReload[_name] ||= true;
                 nvMem[_name] ||= {};
                 nv = nvMem[_name];
-                cfg = config[_name];
-                st = state[_name];
+                if (config[_name]) cfg = config[_name];
+                if (state[_name]) st = state[_name];
             }
             /*
             fountain advanced time window - coordinate with solar power profile - fault run time 
             solar fountain controls auto, when low sun, auto fountain resumes with pump stopped (fail safe)
             */
         },
-        Compound: function (_name, push) {
-            let st, cfg, nv;
+        Compound: function (_name, push, reload) {
+            let st, cfg, nv, log; pointers();
+            if (reload) {
+                log("hot reload initiated");
+                clearTimeout(st.timer)
+                return;
+            }
             if (!push) {
                 state[_name] = { boot: false, timer: null };
                 config[_name] ||= {}
                 pointers();
                 log(_name + " automation is starting");
                 st.timer = setInterval(() => { timer(); }, 60e3);
-            } else { pointers(); }
+            } else { }
             function pointers() {
                 log = (m, l) => slog(m, l, _name);
-                hotReload[_name] ||= true;
                 nvMem[_name] ||= {};
                 nv = nvMem[_name];
-                cfg = config[_name];
-                st = state[_name];
-            }
-            if (!hotReload[_name]) {
-                log("hot reload initiated");
-                clearTimeout(st.timer)
-                state[_name] = undefined;
-                config[_name] = undefined;
+                if (config[_name]) cfg = config[_name];
+                if (state[_name]) st = state[_name];
             }
             function timer() {
                 if (time.hour == 0 && time.min == 0) {
