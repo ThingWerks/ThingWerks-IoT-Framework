@@ -83,6 +83,7 @@ let
             }
         }
         const argsString = execStartArgs.join(" ");
+        state.args = argsString;
         for (let i = 0; i < args.length; i++) {
             const option = args[i];
             const value = args[i + 1];
@@ -194,14 +195,44 @@ let
                         auto.paths[automationFile] = configPath;
                         function loadConfig() {
                             if (clientModule.ha) {
-                                slog("importing home assistant entities from automation client")
+                                slog("importing home assistant entities from automation client");
                                 config.ha ||= {};
-                                Object.assign(config.ha, clientModule.ha);
+                                // merge ha.subscribe
+                                if (Array.isArray(clientModule.ha.subscribe) && clientModule.ha.subscribe.length) {
+                                    config.ha.subscribe ||= [];
+                                    config.ha.subscribe.push(...clientModule.ha.subscribe);
+                                }
+                                // merge ha.sync
+                                if (Array.isArray(clientModule.ha.sync) && clientModule.ha.sync.length) {
+                                    config.ha.sync ||= [];
+                                    config.ha.sync.push(...clientModule.ha.sync);
+                                }
+                                // merge any other non-array keys (won’t overwrite arrays)
+                                for (const [k, v] of Object.entries(clientModule.ha)) {
+                                    if (!Array.isArray(v) && !(k in config.ha)) {
+                                        config.ha[k] = v;
+                                    }
+                                }
                             }
                             if (clientModule.esp) {
-                                slog("importing ESP entities from automation client")
+                                slog("importing ESP entities from automation client");
                                 config.esp ||= {};
-                                Object.assign(config.esp, clientModule.esp);
+                                // merge esp.subscribe
+                                if (Array.isArray(clientModule.esp.subscribe) && clientModule.esp.subscribe.length) {
+                                    config.esp.subscribe ||= [];
+                                    config.esp.subscribe.push(...clientModule.esp.subscribe);
+                                }
+                                // merge esp.heartbeat
+                                if (Array.isArray(clientModule.esp.heartbeat) && clientModule.esp.heartbeat.length) {
+                                    config.esp.heartbeat ||= [];
+                                    config.esp.heartbeat.push(...clientModule.esp.heartbeat);
+                                }
+                                // merge any other non-array keys
+                                for (const [k, v] of Object.entries(clientModule.esp)) {
+                                    if (!Array.isArray(v) && !(k in config.esp)) {
+                                        config.esp[k] = v;
+                                    }
+                                }
                             }
                         }
                     }
@@ -238,11 +269,12 @@ let
                 if (!clientModule.automation) throw new Error("Module does not export an 'automation' object.");
 
                 // register each exported automation function under the global 'automation' object
+
+
                 const names = Object.keys(clientModule.automation);
                 for (const name of names) {
                     automation[name] = clientModule.automation[name];
                 }
-
                 // remember which names belong to this module file
                 auto.moduleAutomations[resolvedPath] = names;
 
@@ -276,58 +308,46 @@ let
                 const automationPath = path.resolve(automationFilePath);
                 const resolvedPath = require.resolve(automationPath);
 
-                // 1) get previous automation names for this module
+                // 1) clean up all old automations for this module
                 const prevNames = auto.moduleAutomations[resolvedPath] || [];
-
-                // 2) ask each previous automation to clean itself (reload=true)
                 for (const name of prevNames) {
                     if (automation[name]) {
                         try {
-                            // call the automation with reload flag so it can cancel timers/listeners
+                            // tell automation to clean itself
                             automation[name](name, null, true);
                         } catch (e) {
                             console.error(`Error cleaning automation "${name}"`, e);
                         }
-
-                        // defensive cleanup in case automation.reload didn't clear everything
-                        if (state[name]?.timer) {
-                            try { clearInterval(state[name].timer); } catch (e) { }
-                        }
-                        // remove module-specific runtime state/config — automation can recreate on init
+                        // clear any known timers/listeners
+                        if (state[name]?.timer) clearInterval(state[name].timer);
                         delete state[name];
                         delete config[name];
-
-                        // remove it from the global registry (clear() will also attempt this)
-                        if (automation[name]) delete automation[name];
+                        delete automation[name];            // <-- REMOVE FIRST
                     }
                 }
 
-                // 3) clear module cache and bookkeeping
+                // 2) clear module cache and our bookkeeping
                 if (require.cache[resolvedPath]) delete require.cache[resolvedPath];
                 delete auto.moduleAutomations[resolvedPath];
 
-                // 4) load the new module and register its automations
+                // 3) now load the new module and register fresh automations
                 const newModuleExports = auto.load(automationFilePath);
 
-                // 5) start (= initialize) each automation that the new module provides
+                // 4) initialise only the new automations
                 const newNames = auto.moduleAutomations[resolvedPath] || [];
                 for (const name of newNames) {
                     if (automation[name]) {
-                        try {
-                            // pass undefined for push to trigger the init path
-                            automation[name](name, undefined);
-                        } catch (e) {
-                            console.error(`Error starting automation "${name}"`, e);
-                        }
+                        try { automation[name](name, "init"); }
+                        catch (e) { console.error(`Error starting automation "${name}"`, e); }
                     }
                 }
-                // 6) housekeeping: reset caches/watchers and re-register watchers for config
-                state.cache = {};   // reset entity cache
+
+                // housekeeping…
+                state.cache = {};
                 auto.watcher(automationFilePath, auto.reload);
                 const configPath = auto.paths[automationFilePath];
-                if (configPath) { auto.watcher(configPath, auto.reload); }
-                const oldName = path.parse(automationFilePath).name;
-                slog(`Successfully reloaded and restarted automation: ${oldName}`);
+                if (configPath) auto.watcher(configPath, auto.reload);
+                slog(`Successfully reloaded and restarted automation: ${path.parse(automationFilePath).name}`);
                 if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                 if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
             } catch (error) {
@@ -335,7 +355,6 @@ let
                 slog(`Failed to reload automation: ${automationFilePath}. Error: ${error.message}`, 3, "HOT-RELOAD-FAIL");
             }
         },
-
         // no change here — keep your debounced watcher
         watcher: function (filePath, reloadCallback) {
             if (fileWatchers[filePath]) {
@@ -514,7 +533,7 @@ let
                             if (!entity[buf.obj.name]) entity[buf.obj.name] = {};
                             entity[buf.obj.name].state = buf.obj.state;
                             entity[buf.obj.name].update = time.epoch;
-                            auto.call({ name: buf.obj.name, newState: buf.obj.state });
+                            if (online == true) auto.call({ name: buf.obj.name, newState: buf.obj.state });
                         }
                         break;
                     case "diag":                // incoming diag refresh request, then reply object
@@ -738,12 +757,12 @@ let
                         core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
                         setTimeout(() => { sys.boot(5); }, 1e3);
                     } else sys.boot(5);
-                    auto.call();
                     break;
                 case 5:
                     if (config.esp && config.esp.subscribe && config.esp.subscribe.length > 0)
                         slog("ESP fetch complete");
                     online = true;
+                    auto.call("init");
                     for (const name in automation) {
                         slog(name + " automation initializing...");
                     }
