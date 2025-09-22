@@ -1651,7 +1651,7 @@ module.exports = {
                     if (config[_name]) cfg = config[_name];
                     if (state[_name]) st = state[_name];
                 }
-            } catch (error) { console.error(error) }
+            } catch (error) { console.trace(error) }
         }
     }
 };
