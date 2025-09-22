@@ -10,64 +10,68 @@ module.exports = {
     },
     automation: {
         example: function (_name, _push, _reload) {
-            let st, cfg, nv, log; _pointers();
-            if (_reload) {   // called after modification/reload of this automation file
-                log("hot reload initiated");
-                //clear event timers clearInterval(st.timer.second);
-                return;
-            }
-            if (_push === "init") { // ran only once - your initialization procedure
-                config[_name] = {};     // initialize automation's configurations
-                state[_name] = {};      // initialize automation's volatile memory
-                _pointers();            // call pointers directly after config and state initialization 
-                /*
-    
-                    initialization logic goes here
-    
-                */
-                return;
-            } else {    // called with every incoming push event
+            try {
+                let st, cfg, nv, log; _pointers();
+                if (_reload) {   // called after modification/reload of this automation file
+                    log("hot reload initiated");
+                    //clear event timers clearInterval(st.timer.second);
+                    return;
+                }
+                if (_push === "init") { // ran only once - your initialization procedure
+                    config[_name] = {};     // initialize automation's configurations
+                    state[_name] = {};      // initialize automation's volatile memory
+                    _pointers();            // call pointers directly after config and state initialization 
+                    /*
+        
+                        initialization logic goes here
+        
+                    */
+                    return;
+                } else {    // called with every incoming push event
 
+                    /*
+        
+                        event based logic goes here
+        
+                    */
+                }
                 /*
-    
-                    event based logic goes here
-    
+        
+                        common functions (initialization and push events) go here
+        
                 */
-            }
-            /*
-    
-                    common functions (initialization and push events) go here
-    
-            */
-            function _pointers() {  // dont modify anything here
-                log = (m, l) => slog(m, l, _name);
-                nvMem[_name] ||= {};
-                nv = nvMem[_name];
-                if (config[_name]) cfg = config[_name];
-                if (state[_name]) st = state[_name];
-            }
+                function _pointers() {  // dont modify anything here
+                    log = (m, l) => slog(m, l, _name);
+                    nvMem[_name] ||= {};
+                    nv = nvMem[_name];
+                    if (config[_name]) cfg = config[_name];
+                    if (state[_name]) st = state[_name];
+                }
+            } catch (error) { console.trace(error) }
         },
         example2: function (_name, _push, _reload) {     // add another automation 
-            let st, cfg, nv, log; _pointers();
-            if (_reload) {   // called after modification/reload of this automation file
-                log("hot reload initiated");
-                return;
-            }
-            if (_push === "init") { // ran only once
-                config[_name] = {};     // initialize automation's configurations
-                state[_name] = {};      // initialize automation's volatile memory
-                _pointers();            // call pointers directly after config and state initialization 
-                // init sequence here
-                return;
-            } else { }  // event based logic goes here
-            /* common functions (for initialization and event shared functions) go here */
-            function _pointers() {  // dont modify anything here
-                log = (m, l) => slog(m, l, _name);
-                nvMem[_name] ||= {};
-                nv = nvMem[_name];
-                if (config[_name]) cfg = config[_name];
-                if (state[_name]) st = state[_name];
-            }
+            try {
+                let st, cfg, nv, log; _pointers();
+                if (_reload) {   // called after modification/reload of this automation file
+                    log("hot reload initiated");
+                    return;
+                }
+                if (_push === "init") { // ran only once
+                    config[_name] = {};     // initialize automation's configurations
+                    state[_name] = {};      // initialize automation's volatile memory
+                    _pointers();            // call pointers directly after config and state initialization 
+                    // init sequence here
+                    return;
+                } else { }  // event based logic goes here
+                /* common functions (for initialization and event shared functions) go here */
+                function _pointers() {  // dont modify anything here
+                    log = (m, l) => slog(m, l, _name);
+                    nvMem[_name] ||= {};
+                    nv = nvMem[_name];
+                    if (config[_name]) cfg = config[_name];
+                    if (state[_name]) st = state[_name];
+                }
+            } catch (error) { console.trace(error) }
         },
     },
 }
