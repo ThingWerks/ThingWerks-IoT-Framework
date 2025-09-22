@@ -42,17 +42,17 @@ module.exports = {
         ],
     },
     automation: {
-        Solar: function (_name, push, reload) {
+        Solar: function (_name, _push, _reload) {
             try {
                 let st, cfg, nv, log; pointers();
-                if (reload) {
+                if (_reload) {
                     log("hot reload initiated");
                     clearInterval(st.timer.hour);
                     clearInterval(st.timer.minute);
                     clearInterval(st.timer.second);
                     return;
                 }
-                if (!push) {
+                if (_push === "init") {
                     config[_name] ||= {
                         grid: { // for blackout detection, needed for inverter ATS switching 
                             //    espVoltage: 7,              // change to sensor number <-----------------------------------------
@@ -241,7 +241,7 @@ module.exports = {
                                     multiplier: undefined,           // only devices with multiplier are sent to HA
                                     // zero: 4995,
                                     //zero: 5013,
-                                    zero: 5000,
+                                    zero: 5002,
                                     rating: 380,
                                     scale: 10000,
                                     inverted: true,
@@ -536,9 +536,9 @@ module.exports = {
                     pointers();
                     for (let x = 0; x < cfg.sensor.amp.length; x++) {
                         const config = cfg.sensor.amp[x];
-                        if (config.entity && config.entity[0] === push.name) {
+                        if (config.entity && config.entity[0] === _push.name) {
                             let amps = entity[config.name] ||= {};
-                            let data = push.newState;
+                            let data = _push.newState;
                             let factor = 0, corrected = 0, final = 0;
                             if (config.multiplier != undefined) {
                                 amps.state = parseFloat(data) * config.multiplier;
@@ -558,9 +558,9 @@ module.exports = {
                     }
                     for (let x = 0; x < cfg.sensor.volt.length; x++) {
                         const config = cfg.sensor.volt[x];
-                        if (config.entity === push.name) {
+                        if (config.entity === _push.name) {
                             let volts = entity[config.name] ||= {};
-                            let data = push.newState;
+                            let data = _push.newState;
                             let final = null, voltage = parseFloat(data);
                             const table = config.table;
                             if (table !== undefined) {
@@ -596,9 +596,9 @@ module.exports = {
                     }
                     for (let x = 0; x < cfg.sensor.watt.length; x++) {
                         const config = cfg.sensor.watt[x];
-                        if (config.entity && config.entity.length == 1 && !config.solarPower && config.entity[0] === push.name) {
+                        if (config.entity && config.entity.length == 1 && !config.solarPower && config.entity[0] === _push.name) {
                             let watts = entity[config.name] ||= {};
-                            let data = push.newState;
+                            let data = _push.newState;
                             let newData;
                             if (config.multiplier != undefined) newData = parseFloat(data) * config.multiplier;
                             else newData = parseFloat(data);
@@ -614,9 +614,9 @@ module.exports = {
                     }
                     for (let x = 0; x < cfg.sensor.kwh.length; x++) {
                         const config = cfg.sensor.kwh[x];
-                        if (!Array.isArray(config.entity) && config.entity === push.name) {
+                        if (!Array.isArray(config.entity) && config.entity === _push.name) {
                             let kwh = nv.sensor.kwh[config.name] ||= {};
-                            let data = push.newState;
+                            let data = _push.newState;
                             let newData = parseInt(data);
                             if (Number.isFinite(newData)) {
                                 if (newData < 0) return;
@@ -648,9 +648,9 @@ module.exports = {
                     }
                     for (let x = 0; x < cfg.sensor.temp.length; x++) {
                         const config = cfg.sensor.temp[x];
-                        if (config.entity === push.name) {
+                        if (config.entity === _push.name) {
                             let temp = entity[config.name] ||= {};
-                            let data = push.newState;
+                            let data = _push.newState;
                             if (config.multiplier != undefined) {
                                 temp.state = parseFloat(data) * config.multiplier;
                                 if (temp.state != null && Number.isFinite(temp.state))
@@ -661,8 +661,8 @@ module.exports = {
                             return;
                         }
                     }
-                    if (cfg.solar.inverterAuto != undefined && cfg.solar.inverterAuto == push.name) {
-                        let newState = push.newState;
+                    if (cfg.solar.inverterAuto != undefined && cfg.solar.inverterAuto == _push.name) {
+                        let newState = _push.newState;
                         if (newState == true) log("inverter auto going online");
                         else log("inverter auto going offline");
                         for (let x = 0; x < cfg.inverter.length; x++) {
@@ -678,8 +678,8 @@ module.exports = {
                         return;
                     }
                     for (let x = 0; x < cfg.inverter.length; x++) {
-                        if (cfg.inverter[x].entity && cfg.inverter[x].entity == push.name) {
-                            let newState = push.newState;
+                        if (cfg.inverter[x].entity && cfg.inverter[x].entity == _push.name) {
+                            let newState = _push.newState;
                             if (cfg.inverter[x].enable) {
                                 if (st.inverter[x].state != "faulted" && st.inverter[x].state != newState) {
                                     log("inverter: " + cfg.inverter[x].name + " - operational state entity switching to - syncing power/switches" + newState);
@@ -689,8 +689,8 @@ module.exports = {
                             return;
                         }
                     }
-                    if (cfg.solar.priority.entityAuto != undefined && cfg.solar.priority.entityAuto == push.name) {
-                        let newState = push.newState;
+                    if (cfg.solar.priority.entityAuto != undefined && cfg.solar.priority.entityAuto == _push.name) {
+                        let newState = _push.newState;
                         if (newState == true) log("priority auto going online");
                         else log("priority auto going offline");
                         st.priority.step = time.epoch;
@@ -698,8 +698,8 @@ module.exports = {
                     }
                     for (let x = 0; x < cfg.solar.priority.queue.length; x++) {
                         let queue = cfg.solar.priority.queue[x];
-                        if (queue.entityAuto != undefined && queue.entityAuto == push.name) {
-                            let newState = push.newState;
+                        if (queue.entityAuto != undefined && queue.entityAuto == _push.name) {
+                            let newState = _push.newState;
                             if (newState == true) log("priority queue member" + queue.name + " going online");
                             else log("priority queue member " + queue.name + " going offline");
                             return;
@@ -707,9 +707,9 @@ module.exports = {
 
                         for (let y = 0; y < queue.entities.length; y++) {
                             const element = queue.entities[y];
-                            if (element == push.name) {
+                            if (element == _push.name) {
                                 console.log(queue.entities)
-                                let newState = push.newState;
+                                let newState = _push.newState;
                                 log("syncing priority queue: " + queue.name + "  with entity: " + element + " - new state: " + newState);
                                 st.priority.queue[x].state = newState;
                                 st.priority.step = time.epoch;
