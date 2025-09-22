@@ -253,7 +253,7 @@ let
         // call currently-registered automations (existing behavior kept)
         call: function (data) {
             for (const name in automation) {
-                try { automation[name](name, data); } catch (e) { console.error(e); }
+                try { automation[name](name, data); } catch (e) { console.trace(e); }
             }
         },
         // load a module and register its automations (records which names belong to the file)
