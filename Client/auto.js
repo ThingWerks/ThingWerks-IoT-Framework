@@ -9,23 +9,24 @@ module.exports = {
         heartbeat: []
     },
     automation: {
-        example: function (_name, push, _reload) {
+        example: function (_name, _push, _reload) {
             let st, cfg, nv, log; _pointers();
             if (_reload) {   // called after modification/reload of this automation file
                 log("hot reload initiated");
                 //clear event timers clearInterval(st.timer.second);
                 return;
             }
-            if (!push) { // ran only once
+            if (_push === "init") { // ran only once - your initialization procedure
                 config[_name] = {};     // initialize automation's configurations
                 state[_name] = {};      // initialize automation's volatile memory
-                _pointers();             // call pointers directly after config and state initialization 
+                _pointers();            // call pointers directly after config and state initialization 
                 /*
     
                     initialization logic goes here
     
                 */
-            } else {
+                return;
+            } else {    // called with every incoming push event
 
                 /*
     
@@ -35,7 +36,7 @@ module.exports = {
             }
             /*
     
-                    common functions (for initialization and event shared functions) go here
+                    common functions (initialization and push events) go here
     
             */
             function _pointers() {  // dont modify anything here
@@ -46,16 +47,18 @@ module.exports = {
                 if (state[_name]) st = state[_name];
             }
         },
-        example2: function (_name, push, _reload) {     // add another automation 
+        example2: function (_name, _push, _reload) {     // add another automation 
             let st, cfg, nv, log; _pointers();
             if (_reload) {   // called after modification/reload of this automation file
                 log("hot reload initiated");
                 return;
             }
-            if (!push) { // ran only once
+            if (_push === "init") { // ran only once
                 config[_name] = {};     // initialize automation's configurations
                 state[_name] = {};      // initialize automation's volatile memory
                 _pointers();            // call pointers directly after config and state initialization 
+                // init sequence here
+                return;
             } else { }  // event based logic goes here
             /* common functions (for initialization and event shared functions) go here */
             function _pointers() {  // dont modify anything here
