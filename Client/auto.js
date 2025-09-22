@@ -9,7 +9,7 @@ module.exports = {
         heartbeat: []
     },
     automation: {
-        example: function (_name, _push, _reload) {
+        anyNameYouWant: function (_name, _push, _reload) {
             try {
                 let st, cfg, nv, log; _pointers();
                 if (_reload) {   // called after modification/reload of this automation file
