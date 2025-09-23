@@ -159,7 +159,7 @@ if (isMainThread) {
                                 state.ha[haNum].ws.zha.devices ||= {};
                                 if (buf.id == state.ha[haNum].ws.queryRequest) {
                                     if (Array.isArray(buf.result)) {
-                                         // console.log(buf)
+                                        // console.log(buf)
                                         buf.result.forEach(dev => {
                                             if (dev.user_given_name) {
                                                 // logs.zhaDevices[haNum] ||= [];
@@ -194,7 +194,7 @@ if (isMainThread) {
                             case "event":
                                 switch (buf.event.event_type) {
                                     case "zha_event":
-                                          // console.log(buf.event)
+                                        // console.log(buf.event)
                                         if (state.ha[haNum].ws.zha.devices[buf.event.data.device_id] != undefined
                                             && buf.event.data.command != 'press_type') {
                                             let name = state.ha[haNum].ws.zha.devices[buf.event.data.device_id].userName;
@@ -436,7 +436,7 @@ if (isMainThread) {
                         let haNum;
                         // console.log(buf)
                         if (buf.obj?.unit != undefined) {
-                          //  if (buf.obj?.unit == "V") console.log(buf)
+                            //  if (buf.obj?.unit == "V") console.log(buf)
                             if (cfg.comCache) {
                                 state.cache ||= {};
                                 state.cache[buf.obj.name] ||= {};
@@ -526,38 +526,43 @@ if (isMainThread) {
                             }
                         }
                         break;
+                    case "registerUpdate":
+                        log("client " + id + " - " + a.color("cyan", buf.name) + " - is updating registration", 3, 1);
+                        state.client[id].ha = [];
+                        state.client[id].esp = [];
+                        state.client[id].udp = [];
                     case "register":    // incoming registrations
                         state.client[id].name = buf.name;
-                        log("client " + id + " - " + a.color("cyan", buf.name) + " - is initiating new connection", 3, 1);
+                        if (buf.type == "register") log("client " + id + " - " + a.color("cyan", buf.name) + " - is initiating new connection", 3, 1);
                         if (buf.obj.ha != undefined) {
                             log("client " + id + " - " + a.color("cyan", buf.name) + " - is registering Home Assistant entities", 3, 1);
-                            if (buf.obj.ha.subscribe != undefined && buf.obj.ha.subscribe.length > 0)
+                            if (buf.obj.ha.subscribe?.length > 0)
                                 buf.obj.ha.subscribe.forEach(element => { state.client[id].ha.push(element) });
-                            if (buf.obj.ha.sync != undefined && buf.obj.ha.sync.length > 0)
+                            if (buf.obj.ha.sync?.length > 0)
                                 buf.obj.ha.sync.forEach(element => {
                                     element.forEach(element2 => { state.client[id].ha.push(element2) });
                                 });
                         }
-                        if (buf.obj.esp != undefined && buf.obj.esp.length > 0) {
+                        if (buf.obj.esp?.length > 0) {
                             buf.obj.esp.forEach(element => {
                                 //       log("client " + id + " - " + a.color("cyan", buf.name) + " - is registering ESP entity - "
                                 //         + a.color("green", element), 3, 1);
                                 state.client[id].esp.push(element)
                             });
                         }
-                        if (buf.obj.udp != undefined && buf.obj.udp.length > 0) {
+                        if (buf.obj.udp?.length > 0) {
                             buf.obj.udp.forEach(element => {
                                 log("client " + id + " - " + a.color("cyan", buf.name) + " - is registering UDP entity - "
                                     + a.color("green", element), 3, 1);
                                 state.client[id].udp.push(element)
                             });
                         }
-                        if (buf.obj.telegram != undefined && buf.obj.telegram == true) {
+                        if (buf.obj.telegram) {
                             log("client " + id + " - " + a.color("cyan", buf.name) + " - is registering as telegram agent", 3, 1);
                             state.client[id].telegram = true;
                             // state.telegram.port = info.port;
                         }
-                        udp.send(JSON.stringify({ type: "proceed" }), port);
+                        if (buf.type == "register") udp.send(JSON.stringify({ type: "proceed" }), port);
                         break;
                     case "coreData":    // incoming sensor state from clients
                         if (buf.obj.register) {
@@ -639,7 +644,7 @@ if (isMainThread) {
                         id = state.client.push({ name: buf.name, port: port, ip: info.address, time: time.epochMil, ha: [], esp: [], udp: [] }) - 1;
                         if (buf.type != "register") {
                             log("client " + id + " is unrecognized", 3, 1);
-                            udp.send(JSON.stringify({ type: "udpReRegister" }), port);
+                            udp.send(JSON.stringify({ type: "reRegister" }), port);
                         } else log("creating new registration for client " + id, 3, 0);
                     }
                 }
