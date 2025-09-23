@@ -353,7 +353,7 @@ let
                 delete auto.moduleAutomations[resolvedPath];
 
                 // 3) now load the new module and register fresh automations
-                const newModuleExports = auto.load(automationFilePath);
+                const newModuleExports = auto.load(automationFilePath, internal);
 
                 // 4) initialise only the new automations
                 const newNames = auto.moduleAutomations[resolvedPath] || [];
