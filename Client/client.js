@@ -25,10 +25,6 @@ global.send = function (name, newState, unit, id) {
     }
 };
 global.slog = function (message, level, system) {
-    try { moduleName ||= moduleName } catch {
-        console.log(a.color("red", "you must specify a module name with -n"));
-        process.exit();
-    }
     if (level == undefined) level = 1;
     if (!system) {
         core.send(JSON.stringify({
@@ -144,103 +140,24 @@ let
                         process.exit();
                     }
                     const automationFile = value;
-                    let configLoaded = false;
                     let configPath = null;
+                    let internal = true;
                     if (args[i + 2] === "-c" && args[i + 3]) {
                         const configFile = args[i + 3];
                         configPath = path.resolve(configFile);
-                        const fileExtension = path.extname(configPath).toLowerCase();
-                        try {
-                            let externalCfg = {};
-                            if (fileExtension === '.json') {
-                                externalCfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-                                console.log(externalCfg)
-                                console.log(`Loaded external JSON config from: ${configFile}`);
-                                if (externalCfg.ha) Object.assign(config.ha ||= {}, externalCfg.ha);
-                                if (externalCfg.esp) Object.assign(config.esp ||= {}, externalCfg.esp);
-                                for (const name in externalCfg.config) {
-                                    config[name] ||= {};
-                                    console.log(`Loaded external JSON config for automation: ${name}`);
-                                    Object.assign(config[name], externalCfg.config[name])
-                                }
-                            } else if (fileExtension === '.js') {
-                                externalCfg = require(configPath);
-                                console.log(`Loaded external JS config from: ${configFile}`);
-                                if (externalCfg.ha) Object.assign(config.ha ||= {}, externalCfg.ha);
-                                if (externalCfg.esp) Object.assign(config.esp ||= {}, externalCfg.esp);
-                                for (const name in externalCfg.config) {
-                                    console.log(`Loaded external JSON config for automation: ${name}`);
-                                    Object.assign(config[name] ||= {}, externalCfg.config[name])
-                                }
-                            } else {
-                                console.error(`Error: Unsupported config file type "${fileExtension}". Only .json or .js are supported.`);
-                                continue;
-                            }
-                            configLoaded = true;
-                            // Use the new generic watcher for the config file
-                            auto.watcher(configPath, auto.reload);
-                        } catch (error) {
-                            console.error(`Error loading external config file "${configFile}":`, error.message);
-                        }
+                        auto.loadConfig(configPath);
+                        internal = false;
                         i += 2;
+                    } else {
+                        const clientModule = auto.load(automationFile, internal);
+                        slog(`loading entities from internal config: ${automationFile}`);
                     }
-                    const clientModule = auto.load(automationFile);
-                    if (clientModule) {
-                        if (!configLoaded) {
-                            loadConfig(clientModule);
-                            console.log(`Loaded internal config from: ${automationFile}`);
-                        }
-                        auto.watcher(automationFile, auto.reload);
-                        // Store the config path for this automation
-                        auto.paths[automationFile] = configPath;
-                        function loadConfig() {
-                            if (clientModule.ha) {
-                                slog("importing home assistant entities from automation client");
-                                config.ha ||= {};
-                                // merge ha.subscribe
-                                if (Array.isArray(clientModule.ha.subscribe) && clientModule.ha.subscribe.length) {
-                                    config.ha.subscribe ||= [];
-                                    config.ha.subscribe.push(...clientModule.ha.subscribe);
-                                }
-                                // merge ha.sync
-                                if (Array.isArray(clientModule.ha.sync) && clientModule.ha.sync.length) {
-                                    config.ha.sync ||= [];
-                                    config.ha.sync.push(...clientModule.ha.sync);
-                                }
-                                // merge any other non-array keys (won’t overwrite arrays)
-                                for (const [k, v] of Object.entries(clientModule.ha)) {
-                                    if (!Array.isArray(v) && !(k in config.ha)) {
-                                        config.ha[k] = v;
-                                    }
-                                }
-                            }
-                            if (clientModule.esp) {
-                                slog("importing ESP entities from automation client");
-                                config.esp ||= {};
-                                // merge esp.subscribe
-                                if (Array.isArray(clientModule.esp.subscribe) && clientModule.esp.subscribe.length) {
-                                    config.esp.subscribe ||= [];
-                                    config.esp.subscribe.push(...clientModule.esp.subscribe);
-                                }
-                                // merge esp.heartbeat
-                                if (Array.isArray(clientModule.esp.heartbeat) && clientModule.esp.heartbeat.length) {
-                                    config.esp.heartbeat ||= [];
-                                    config.esp.heartbeat.push(...clientModule.esp.heartbeat);
-                                }
-                                // merge any other non-array keys
-                                for (const [k, v] of Object.entries(clientModule.esp)) {
-                                    if (!Array.isArray(v) && !(k in config.esp)) {
-                                        config.esp[k] = v;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    auto.watcher(automationFile, auto.reload, internal);
                     i++;
                     break;
                 default:
                     if (option.startsWith("-")) {
-                        console.log(`Unknown or unhandled flag: ${option}`);
+                        slog(`Unknown or unhandled flag: ${option}`, 3);
                     }
                     break;
             }
@@ -254,35 +171,6 @@ let
         call: function (data) {
             for (const name in automation) {
                 try { automation[name](name, data); } catch (e) { console.trace(e); }
-            }
-        },
-        // load a module and register its automations (records which names belong to the file)
-        load: function (automationFile) {
-            try {
-                const automationPath = path.resolve(automationFile);
-                const resolvedPath = require.resolve(automationPath);
-
-                // require fresh copy (caller should delete cache if reloading; keeping this
-                // here is harmless for first-time loads)
-                const clientModule = require(automationPath);
-
-                if (!clientModule.automation) throw new Error("Module does not export an 'automation' object.");
-
-                // register each exported automation function under the global 'automation' object
-
-
-                const names = Object.keys(clientModule.automation);
-                for (const name of names) {
-                    automation[name] = clientModule.automation[name];
-                }
-                // remember which names belong to this module file
-                auto.moduleAutomations[resolvedPath] = names;
-
-                slog(`Successfully processed automation: ${automationFile}`);
-                return clientModule;
-            } catch (error) {
-                console.error(`Error processing automation file "${automationFile}":`, error.message);
-                return null;
             }
         },
         // clear only this module's automation names and the module cache (no global wipe)
@@ -302,8 +190,141 @@ let
             // remove Node's module cache so next require() loads fresh code
             if (require.cache[resolvedPath]) delete require.cache[resolvedPath];
         },
+        loadEntities: function (configData, fileName) {
+            // helper: push items from `items` into `dest` (mutates dest)
+            // opts: { by: 'name' }  -> compare objects by that property
+            function pushUnique(dest, items, opts = {}) {
+                if (!Array.isArray(items) || items.length === 0) return;
+                dest ||= [];
+                for (const it of items) {
+                    if (!it && it !== 0 && it !== false) continue; // skip null/undefined/'' but keep 0/false
+                    // primitive
+                    if (typeof it !== 'object') {
+                        if (!dest.includes(it)) dest.push(it);
+                        continue;
+                    }
+                    // object or array
+                    if (opts.by) {
+                        // compare by a specific key (fast)
+                        const key = opts.by;
+                        if (!dest.some(d => d && d[key] === it[key])) dest.push(it);
+                    } else {
+                        // fallback: structural compare (works for arrays or objects)
+                        const sIt = JSON.stringify(it);
+                        if (!dest.some(d => {
+                            try { return JSON.stringify(d) === sIt; } catch (e) { return false; }
+                        })) dest.push(it);
+                    }
+                }
+                return dest;
+            }
+            if (configData.ha) {
+                slog("importing home assistant entities from: " + fileName);
+                config.ha ||= {};
+                // ensure arrays exist
+                config.ha.subscribe ||= [];
+                config.ha.sync ||= [];
+                // merge ha.subscribe (primitive strings)
+                pushUnique(config.ha.subscribe, configData.ha.subscribe);
+                // merge ha.sync (may be arrays-of-arrays or primitive pairs) — use structural compare
+                pushUnique(config.ha.sync, configData.ha.sync);
+                // other non-array keys
+                for (const [k, v] of Object.entries(configData.ha)) {
+                    if (!Array.isArray(v) && !(k in config.ha)) {
+                        config.ha[k] = v;
+                    }
+                }
+                // sanitize: drop any falsy slots accidentally introduced (e.g. trailing commas)
+                config.ha.subscribe = config.ha.subscribe.filter(x => x !== undefined && x !== null && x !== '');
+                config.ha.sync = config.ha.sync.filter(x => x !== undefined && x !== null);
+            }
+
+            if (configData.esp) {
+                slog("importing ESP entities from: " + fileName);
+                config.esp ||= {};
+                config.esp.subscribe ||= [];
+                config.esp.heartbeat ||= [];
+                // merge esp.subscribe (primitive strings)
+                pushUnique(config.esp.subscribe, configData.esp.subscribe);
+                // merge esp.heartbeat (objects with {name, interval}) — compare by `.name`
+                pushUnique(config.esp.heartbeat, configData.esp.heartbeat, { by: 'name' });
+                // other non-array keys
+                for (const [k, v] of Object.entries(configData.esp)) {
+                    if (!Array.isArray(v) && !(k in config.esp)) {
+                        config.esp[k] = v;
+                    }
+                }
+                // sanitize
+                config.esp.subscribe = config.esp.subscribe.filter(x => x !== undefined && x !== null && x !== '');
+                config.esp.heartbeat = config.esp.heartbeat.filter(x => x && x.name);
+            }
+        },
+        loadConfig: function (configPath) {
+            try {
+                const fileExtension = path.extname(configPath).toLowerCase();
+                let externalCfg = null;
+                if (fileExtension === '.json') {
+                    externalCfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                    slog(`loading external JSON config from: ${configPath}`);
+                } else if (fileExtension === '.js') {
+                    externalCfg = require(configPath);
+                    slog(`loading external JS config from: ${configPath}`);
+                } else {
+                    console.error(`Error: Unsupported config file type "${fileExtension}". Only .json or .js are supported.`);
+                }
+                for (const name in externalCfg.config) {
+                    slog(`loading external config for automation: ${name}`);
+                    config[name] = externalCfg.config[name];
+                }
+                slog(`loading entities from external config: ${configPath}`);
+                auto.loadEntities(externalCfg, configPath);
+                auto.watcher(configPath, auto.reloadConfig);
+            } catch (error) {
+                console.error(`Error loading external config file "${configPath}":`, error.message);
+            }
+        },
+        reloadConfig: function (configPath) {
+            delete require.cache[configPath];
+            auto.loadConfig(configPath);
+            slog("updating core/client entity registrations...");
+            sys.register(true);
+            state.cache = {};
+            setTimeout(() => {
+                if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
+                if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
+            }, 500);
+        },
+        // load a module and register its automations (records which names belong to the file)
+        load: function (automationFile, internal) {
+            try {
+                const automationPath = path.resolve(automationFile);
+                const resolvedPath = require.resolve(automationPath);
+
+                // require fresh copy (caller should delete cache if reloading; keeping this
+                // here is harmless for first-time loads)
+                const clientModule = require(automationPath);
+
+                if (!clientModule.automation) throw new Error("Module does not export an 'automation' object.");
+
+                // register each exported automation function under the global 'automation' object
+                if (internal) auto.loadEntities(clientModule, automationFile);
+
+                const names = Object.keys(clientModule.automation);
+                for (const name of names) {
+                    automation[name] = clientModule.automation[name];
+                }
+                // remember which names belong to this module file
+                auto.moduleAutomations[resolvedPath] = names;
+
+                slog(`Successfully processed automation: ${automationFile}`);
+                return clientModule;
+            } catch (error) {
+                console.error(`Error processing automation file "${automationFile}":`, error.message);
+                return null;
+            }
+        },
         // reload workflow: cleanup previous automations for this file, clear cache, load new file, start new automations
-        reload: function (automationFilePath) {
+        reload: function (automationFilePath, internal) {
             try {
                 const automationPath = path.resolve(automationFilePath);
                 const resolvedPath = require.resolve(automationPath);
@@ -321,7 +342,7 @@ let
                         // clear any known timers/listeners
                         if (state[name]?.timer) clearInterval(state[name].timer);
                         delete state[name];
-                        delete config[name];
+                        if (internal) delete config[name];
                         delete automation[name];            // <-- REMOVE FIRST
                     }
                 }
@@ -343,20 +364,29 @@ let
                 }
 
                 // housekeeping…
-                state.cache = {};
-                auto.watcher(automationFilePath, auto.reload);
-                const configPath = auto.paths[automationFilePath];
-                if (configPath) auto.watcher(configPath, auto.reload);
+                auto.watcher(automationFilePath, auto.reload, internal);
+
+                //  const configPath = auto.paths[automationFilePath];
+                //   if (configPath) auto.watcher(configPath, auto.reload);
+
                 slog(`Successfully reloaded and restarted automation: ${path.parse(automationFilePath).name}`);
-                if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
-                if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
+
+                if (internal) {
+                    sys.register(true);
+                    state.cache = {};
+                    setTimeout(() => {
+                        if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
+                        if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
+                    }, 500);
+                }
             } catch (error) {
                 console.error(`Failed to reload automation file "${automationFilePath}":`, error.message);
                 slog(`Failed to reload automation: ${automationFilePath}. Error: ${error.message}`, 3, "HOT-RELOAD-FAIL");
             }
         },
         // no change here — keep your debounced watcher
-        watcher: function (filePath, reloadCallback) {
+        watcher: function (filePath, reloadCallback, internal) {
+            slog("creating watcher for: " + filePath);
             if (fileWatchers[filePath]) {
                 fileWatchers[filePath].close();
                 delete fileWatchers[filePath];
@@ -368,8 +398,8 @@ let
                     if (timer[timerKey]) clearTimeout(timer[timerKey]);
 
                     timer[timerKey] = setTimeout(() => {
-                        slog(`File change event debounced. Reloading ${filePath}...`, 1, 'HOT-RELOAD');
-                        reloadCallback(filePath);
+                        slog(`File change event detected. Reloading ${filePath}...`, 1, 'HOT-RELOAD');
+                        reloadCallback(filePath, internal);
                         delete timer[timerKey];
                     }, 200);
                 }
@@ -519,7 +549,7 @@ let
                     case "haQueryReply":        // HA device queryHA fetch is failing
                         console.log("Available HA Devices: " + buf.obj);
                         break;
-                    case "udpReRegister":       // reregister request from server
+                    case "reRegister":          // reregister request from server
                         if (online == true) {
                             slog("server lost sync, reregistering...");
                             setTimeout(() => {
@@ -574,7 +604,7 @@ let
                 }
             });
         },
-        register: function () {
+        register: function (update) {
             let obj = {};
             if (config.ha != undefined) obj.ha = config.ha;
             if (config.esp) {
@@ -604,7 +634,7 @@ let
 
             }
             if (config.telegram != undefined) obj.telegram = true;
-            core.send(JSON.stringify({ type: "register", obj, name: moduleName }), 65432, '127.0.0.1');
+            core.send(JSON.stringify({ type: (update ? "reregister" : "register"), obj, name: moduleName }), 65432, '127.0.0.1');
             if (config.telegram != undefined) {
                 if (nv.telegram == undefined) nv.telegram = [];
                 else for (let x = 0; x < nv.telegram.length; x++) {
@@ -616,7 +646,7 @@ let
             }
         },
         init: function () {
-            automation = {};
+            global.automation = {};
             nvMem = {};
             config = { ha: {}, esp: {}, udp: {} };
             state = { cache: {}, args: "" };
@@ -627,7 +657,6 @@ let
             online = false;
             timer = { fileWriteLast: null };
             fileWatchers = {};
-            auto.paths = {};
             time = {
                 boot: null,
                 get epochMil() { return Date.now(); },
