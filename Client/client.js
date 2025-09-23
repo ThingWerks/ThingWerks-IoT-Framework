@@ -148,10 +148,8 @@ let
                         auto.loadConfig(configPath);
                         internal = false;
                         i += 2;
-                    } else {
-                        const clientModule = auto.load(automationFile, internal);
-                        slog(`loading entities from internal config: ${automationFile}`);
                     }
+                    auto.load(automationFile, internal);
                     auto.watcher(automationFile, auto.reload, internal);
                     i++;
                     break;
@@ -307,7 +305,10 @@ let
                 if (!clientModule.automation) throw new Error("Module does not export an 'automation' object.");
 
                 // register each exported automation function under the global 'automation' object
-                if (internal) auto.loadEntities(clientModule, automationFile);
+                if (internal) {
+                    slog(`loading entities from internal config: ${automationFile}`);
+                    auto.loadEntities(clientModule, automationFile);
+                }
 
                 const names = Object.keys(clientModule.automation);
                 for (const name of names) {
