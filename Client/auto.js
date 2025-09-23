@@ -9,7 +9,7 @@ module.exports = {
         heartbeat: []
     },
     automation: {
-        anyNameYouWant: function (_name, _push, _reload) {
+        yourAutomationsName: function (_name, _push, _reload) {
             try {
                 let st, cfg, nv, log; _pointers();
                 if (_reload) {   // called after modification/reload of this automation file
@@ -20,6 +20,7 @@ module.exports = {
                 if (_push === "init") { // ran only once - your initialization procedure
                     config[_name] = {};     // initialize automation's configurations
                     state[_name] = {};      // initialize automation's volatile memory
+                    nvMem[_name] = {};      // initialize automation's non-volatile memory
                     _pointers();            // call pointers directly after config and state initialization 
                     /*
         
@@ -42,8 +43,7 @@ module.exports = {
                 */
                 function _pointers() {  // dont modify anything here
                     log = (m, l) => slog(m, l, _name);
-                    nvMem[_name] ||= {};
-                    nv = nvMem[_name];
+                    if (nvMem[_name]) nv = nvMem[_name];
                     if (config[_name]) cfg = config[_name];
                     if (state[_name]) st = state[_name];
                 }
@@ -59,6 +59,7 @@ module.exports = {
                 if (_push === "init") { // ran only once
                     config[_name] = {};     // initialize automation's configurations
                     state[_name] = {};      // initialize automation's volatile memory
+                    nvMem[_name] = {};      // initialize automation's non-volatile memory
                     _pointers();            // call pointers directly after config and state initialization 
                     // init sequence here
                     return;
@@ -66,8 +67,7 @@ module.exports = {
                 /* common functions (for initialization and event shared functions) go here */
                 function _pointers() {  // dont modify anything here
                     log = (m, l) => slog(m, l, _name);
-                    nvMem[_name] ||= {};
-                    nv = nvMem[_name];
+                    if (nvMem[_name]) nv = nvMem[_name];
                     if (config[_name]) cfg = config[_name];
                     if (state[_name]) st = state[_name];
                 }
