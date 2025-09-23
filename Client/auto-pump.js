@@ -1,44 +1,5 @@
 #!/usr/bin/node
 module.exports = { // exports added to clean up layout
-    ha2: {
-        subscribe: [
-            "input_boolean.auto_bubon",
-            "input_number.profile_bubon",
-            "input_number.timer_oneshot_bubon",
-            "input_number.timer_oneshot_irrigation",
-            "Switch Kitchen Pump",
-            "switch.relay_bodega_freezer_fujidenzo",
-            "input_boolean.auto_freezer",
-            "Button Bodega Water Filtered",
-            "input_boolean.auto_irrigatiion",
-            "Button Irrigation Entrance",
-            "Button Water Groogies",
-            "Button Water Irrigation House Back",
-            "Button Water Irrigation Piggary",
-            "Button Water Irrigation Dalom",
-        ],
-        sync: [
-            ["switch.switch_test", "input_boolean.lights_stairs",],
-            ["switch.lights_outside_bedroom", "input_boolean.lights_bedroom_outside"],
-            ["switch.lights_outside_entrance", "input_boolean.lights_house_entrance"],
-        ]
-    },
-    esp2: {
-        subscribe: [
-            "psi-main", ,
-            "psi-irrigation",
-            "flow-raw-bubon",
-            "flow-raw-carbon-shop",
-            "flow-raw-carbon-groogies",
-            "shop-relay1-pump",
-            "solar-relay3-pump-bubon",
-            "flow-raw-irrigation"
-        ],
-        heartbeat: [      // heartbeats for ESPHome devices 
-            { name: "esp_heartbeat_solar", interval: 3 }, // interval is in seconds
-            { name: "esp_heartbeat_pump", interval: 3 }
-        ],
-    },
     automation: {
         Pumper: function (_name, _push, _reload) {
             try {
