@@ -635,7 +635,7 @@ let
 
             }
             if (config.telegram != undefined) obj.telegram = true;
-            core.send(JSON.stringify({ type: (update ? "reregister" : "register"), obj, name: moduleName }), 65432, '127.0.0.1');
+            core.send(JSON.stringify({ type: (update ? "registerUpdate" : "register"), obj, name: moduleName }), 65432, '127.0.0.1');
             if (config.telegram != undefined) {
                 if (nv.telegram == undefined) nv.telegram = [];
                 else for (let x = 0; x < nv.telegram.length; x++) {
