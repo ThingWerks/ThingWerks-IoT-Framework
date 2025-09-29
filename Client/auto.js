@@ -11,22 +11,24 @@ module.exports = {
     automation: {
         yourAutomationsName: function (_name, _push, _reload) {
             try {
-                let st, cfg, nv, log; _pointers();
+                let { st, cfg, nv, log, writeNV } = _pointers(_name);
                 if (_reload) {   // called after modification/reload of this automation file
                     log("hot reload initiated");
                     //clear event timers clearInterval(st.timer.second);
                     return;
                 }
                 if (_push === "init") { // ran only once - your initialization procedure
-                    config[_name] = {};     // initialize automation's configurations
+                    config[_name] = {};     // initialize automation's configurations or from -c config File
                     state[_name] = {};      // initialize automation's volatile memory
-                    nvMem[_name] = {};      // initialize automation's non-volatile memory
-                    _pointers();            // call pointers directly after config and state initialization 
+                    nvMem[_name] ||= {};    // initialize automation's non-volatile memory
+                    ({ st, cfg, nv } = _pointers(_name)); // call pointers directly after config and state initialization 
+
                     /*
         
                         initialization logic goes here
         
                     */
+
                     return;
                 } else {    // called with every incoming push event
 
@@ -35,23 +37,20 @@ module.exports = {
                         event based logic goes here
         
                     */
+
                 }
+
                 /*
         
                         common functions (initialization and push events) go here
         
                 */
-                function _pointers() {  // dont modify anything here
-                    log = (m, l) => slog(m, l, _name);
-                    if (nvMem[_name]) nv = nvMem[_name];
-                    if (config[_name]) cfg = config[_name];
-                    if (state[_name]) st = state[_name];
-                }
+
             } catch (error) { console.trace(error) }
         },
         example2: function (_name, _push, _reload) {     // add another automation 
             try {
-                let st, cfg, nv, log; _pointers();
+                let { st, cfg, nv, log, writeNV } = _pointers(_name);
                 if (_reload) {   // called after modification/reload of this automation file
                     log("hot reload initiated");
                     return;
@@ -59,19 +58,22 @@ module.exports = {
                 if (_push === "init") { // ran only once
                     config[_name] = {};     // initialize automation's configurations
                     state[_name] = {};      // initialize automation's volatile memory
-                    nvMem[_name] = {};      // initialize automation's non-volatile memory
-                    _pointers();            // call pointers directly after config and state initialization 
+                    nvMem[_name] ||= {};    // initialize automation's non-volatile memory
+                    ({ st, cfg, nv } = _pointers(_name)); // you must call pointers directly after config, state and or NV initialization 
                     // init sequence here
                     return;
                 } else { }  // event based logic goes here
                 /* common functions (for initialization and event shared functions) go here */
-                function _pointers() {  // dont modify anything here
-                    log = (m, l) => slog(m, l, _name);
-                    if (nvMem[_name]) nv = nvMem[_name];
-                    if (config[_name]) cfg = config[_name];
-                    if (state[_name]) st = state[_name];
-                }
             } catch (error) { console.trace(error) }
         },
     },
+}
+let _pointers = (_name) => {
+    return {
+        st: state[_name] ?? undefined,
+        cfg: config[_name] ?? undefined,
+        nv: nvMem[_name] ?? undefined,
+        log: (m, l) => slog(m, l, _name),
+        writeNV: () => file.write.nv(_name)
+    }
 }
