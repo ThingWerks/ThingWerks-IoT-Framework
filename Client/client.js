@@ -38,7 +38,8 @@ global.slog = function (message, level, system) {
 };
 global.file = {
     write: {
-        nv: function () {  // write non-volatile memory to the disk
+        nv: function (name) {  // write non-volatile memory to the disk
+            let lname = name.toLocaleLowerCase();
             timer.fileWriteLast ||= time.epoch;
             clearTimeout(timer.fileWrite);
             if (time.epoch - timer.fileWriteLast > 9) writeFile();
@@ -46,8 +47,8 @@ global.file = {
             function writeFile() {
                 // slog("writing NV data...");
                 timer.fileWriteLast = time.epoch;
-                fs.writeFile(workingDir + "/nv-" + moduleName + "-bak.json", JSON.stringify(nvMem, null, 2), function () {
-                    fs.copyFile(workingDir + "/nv-" + moduleName + "-bak.json", workingDir + "/nv-" + moduleName + ".json", (err) => {
+                fs.writeFile(workingDir + "/nv-" + lname + "-bak.json", JSON.stringify(nvMem[name], null, 2), function () {
+                    fs.copyFile(workingDir + "/nv-" + lname + "-bak.json", workingDir + "/nv-" + lname + ".json", (err) => {
                         if (err) throw err;
                     });
                 });
@@ -309,20 +310,30 @@ let
                     slog(`loading entities from internal config: ${automationFile}`);
                     auto.loadEntities(clientModule, automationFile);
                 }
-
+                
                 const names = Object.keys(clientModule.automation);
+
                 for (const name of names) {
+                    let lname = name.toLocaleLowerCase();
+                    let path = workingDir + "/nv-" + lname + ".json";
+                    if (fs.existsSync(path)) {
+                        slog("found NV data for: " + name + " - loading now...");
+                        nvMem[name] = JSON.parse(fs.readFileSync(path, 'utf8'));
+                    } else {
+                        slog("found no NV data for: " + name + " - required path: " + path, 2);
+                    }
+                    slog("loading automation -" + name + "- into memory");
                     automation[name] = clientModule.automation[name];
                 }
                 // remember which names belong to this module file
                 auto.moduleAutomations[resolvedPath] = names;
-
                 slog(`Successfully processed automation: ${automationFile}`);
                 return clientModule;
             } catch (error) {
                 console.error(`Error processing automation file "${automationFile}":`, error.message);
                 return null;
             }
+
         },
         // reload workflow: cleanup previous automations for this file, clear cache, load new file, start new automations
         reload: function (automationFilePath, internal) {
@@ -733,30 +744,10 @@ let
                     checkArgs();
                     console.log("starting arguments: " + state.args)
                     setTimeout(() => { time.sync(); time.boot++ }, 1e3);
-                    console.log("Loading non-volatile data...");
-                    fs.readFile(workingDir + "/nv-" + moduleName + ".json", function (err, data) {
-                        if (err) {
-                            slog("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
-                                + ", nv-" + moduleName + ".json file should be in same folder as client.js file (" + workingDir + ")");
-                            nvMem = { telegram: [] };
-                        }
-                        else { nvMem = JSON.parse(data); }
-                        sys.boot(2);
-                    });
+                    sys.boot(2);
                     break;
                 case 1:
-                    console.log("Loading config data...");
-                    // fs.writeFileSync(workingDir + "/config-" + scriptName + ".json", JSON.stringify(cfg, null, 2), 'utf-8')
-                    //process.exit();
-                    fs.readFile(workingDir + "/config-" + scriptName + ".json", function (err, data) {
-                        if (err) {
-                            slog("\x1b[33;1mconfig file does not exist\x1b[37;m"
-                                + ", config-" + scriptName + ".json file should be in same folder as client-" + scriptName + ".js file (" + workingDir + ")");
-                            process.exit();
-                        }
-                        else { cfg = JSON.parse(data); }
-                        sys.boot(2);
-                    });
+
                     break;
                 case 2:
                     sys.com();
