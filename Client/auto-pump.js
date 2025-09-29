@@ -3,7 +3,7 @@ module.exports = { // exports added to clean up layout
     automation: {
         Pumper: function (_name, _push, _reload) {
             try {
-                let st, cfg, nv, log; pointers();
+                let { st, cfg, nv, log, writeNV } = _pointers(_name);
                 if (_reload) {
                     log("hot reload initiated");
                     clearInterval(st.timer.hour);
@@ -614,7 +614,8 @@ module.exports = { // exports added to clean up layout
                         init: true, dd: [], ha: { pushLast: [] }, fountain: [],
                         timer: {}
                     };
-                    pointers();
+                    nvMem[_name] ||= {};
+                    ({ st, cfg, nv } = _pointers(_name));
                     if (cfg.sensor.flow) {
                         if (!nv.flow) {             // initialize flow meter NV memory if no NV data
                             log("initializing flow meter data...");
@@ -628,7 +629,7 @@ module.exports = { // exports added to clean up layout
                                 for (let y = 0; y < 30; y++) nv.flow[flowName].day.push(0);
                             }
                             log("writing NV data to disk...");
-                            file.write.nv();
+                            writeNV();
                         }
                     }
                     cfg.sensor.press.forEach(element => {
@@ -825,7 +826,7 @@ module.exports = { // exports added to clean up layout
                         for (const name in nv.flow) { nv.flow[name].today = 0; }  // reset daily low meters
                     }
                     sensor.flow.meter();
-                    file.write.nv();
+                    writeNV();
                 }
                 function fountain(x) {
                     let fount = { st: st.fountain[x], cfg: cfg.fountain[x] }
@@ -878,18 +879,20 @@ module.exports = { // exports added to clean up layout
                         fount.state.flowCheck = false;
                     }
                 }
-                function pointers() {
-                    log = (m, l) => slog(m, l, _name);
-                    nvMem[_name] ||= {};
-                    nv = nvMem[_name];
-                    if (config[_name]) cfg = config[_name];
-                    if (state[_name]) st = state[_name];
-                }
                 /*
                 fountain advanced time window - coordinate with solar power profile - fault run time 
                 solar fountain controls auto, when low sun, auto fountain resumes with pump stopped (fail safe)
                 */
             } catch (error) { console.trace(error) }
         },
+    }
+};
+let _pointers = (_name) => {
+    return {
+        st: state[_name] ?? undefined,
+        cfg: config[_name] ?? undefined,
+        nv: nvMem[_name] ?? undefined,
+        log: (m, l) => slog(m, l, _name),
+        writeNV: () => file.write.nv(_name)
     }
 }
