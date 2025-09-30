@@ -56,7 +56,6 @@ global.file = {
         }
     },
 };
-
 let
     checkArgs = function () {
         const args = process.argv.slice(2);
@@ -79,8 +78,7 @@ let
                 }
             }
         }
-        const argsString = execStartArgs.join(" ");
-        state.args = argsString;
+        state.args = execStartArgs.join(" ");;
         for (let i = 0; i < args.length; i++) {
             const option = args[i];
             const value = args[i + 1];
@@ -100,7 +98,7 @@ let
                         console.log("Extra function triggered because -j was provided:", map["-j"]);
                         process.exit();
                     }
-                    const execStartCommand = `nodemon "${workingDir}client.js" -w "${workingDir}client.js" --exitcrash ${argsString}`;
+                    const execStartCommand = `nodemon "${workingDir}client.js" -w "${workingDir}client.js" --exitcrash ${state.args}`;
                     console.log("service command: " + execStartCommand);
                     let service = [
                         "[Unit]",
@@ -164,9 +162,6 @@ let
     },
     // ensure these exist at top-level (they already do in your codebase)
     auto = {
-        // map resolvedModulePath -> [automationName, ...]
-        moduleAutomations: {},
-        // call currently-registered automations (existing behavior kept)
         call: function (data) {
             for (const name in automation) {
                 try { automation[name](name, data); } catch (e) { console.trace(e); }
@@ -174,17 +169,15 @@ let
         },
         // clear only this module's automation names and the module cache (no global wipe)
         clear: function (modulePath) {
-            const automationPath = path.resolve(modulePath);
-            const resolvedPath = require.resolve(automationPath);
+            let automationPath = path.resolve(modulePath);
+            let resolvedPath = require.resolve(automationPath);
 
             // Remove registered automation functions that were recorded for this module
-            const prev = auto.moduleAutomations[resolvedPath] || [];
-            for (const name of prev) {
-                if (automation[name]) delete automation[name];
-            }
+            let prev = auto.module[resolvedPath] || [];
+            for (let name of prev) if (automation[name]) delete automation[name];
 
             // remove bookkeeping for this module
-            delete auto.moduleAutomations[resolvedPath];
+            delete auto.module[resolvedPath];
 
             // remove Node's module cache so next require() loads fresh code
             if (require.cache[resolvedPath]) delete require.cache[resolvedPath];
@@ -192,31 +185,6 @@ let
         loadEntities: function (configData, fileName) {
             // helper: push items from `items` into `dest` (mutates dest)
             // opts: { by: 'name' }  -> compare objects by that property
-            function pushUnique(dest, items, opts = {}) {
-                if (!Array.isArray(items) || items.length === 0) return;
-                dest ||= [];
-                for (const it of items) {
-                    if (!it && it !== 0 && it !== false) continue; // skip null/undefined/'' but keep 0/false
-                    // primitive
-                    if (typeof it !== 'object') {
-                        if (!dest.includes(it)) dest.push(it);
-                        continue;
-                    }
-                    // object or array
-                    if (opts.by) {
-                        // compare by a specific key (fast)
-                        const key = opts.by;
-                        if (!dest.some(d => d && d[key] === it[key])) dest.push(it);
-                    } else {
-                        // fallback: structural compare (works for arrays or objects)
-                        const sIt = JSON.stringify(it);
-                        if (!dest.some(d => {
-                            try { return JSON.stringify(d) === sIt; } catch (e) { return false; }
-                        })) dest.push(it);
-                    }
-                }
-                return dest;
-            }
             if (configData.ha) {
                 slog("importing home assistant entities from: " + fileName);
                 config.ha ||= {};
@@ -224,9 +192,9 @@ let
                 config.ha.subscribe ||= [];
                 config.ha.sync ||= [];
                 // merge ha.subscribe (primitive strings)
-                pushUnique(config.ha.subscribe, configData.ha.subscribe);
+                mergeDiff(config.ha.subscribe, configData.ha.subscribe);
                 // merge ha.sync (may be arrays-of-arrays or primitive pairs) — use structural compare
-                pushUnique(config.ha.sync, configData.ha.sync);
+                mergeDiff(config.ha.sync, configData.ha.sync);
                 // other non-array keys
                 for (const [k, v] of Object.entries(configData.ha)) {
                     if (!Array.isArray(v) && !(k in config.ha)) {
@@ -244,9 +212,9 @@ let
                 config.esp.subscribe ||= [];
                 config.esp.heartbeat ||= [];
                 // merge esp.subscribe (primitive strings)
-                pushUnique(config.esp.subscribe, configData.esp.subscribe);
+                mergeDiff(config.esp.subscribe, configData.esp.subscribe);
                 // merge esp.heartbeat (objects with {name, interval}) — compare by `.name`
-                pushUnique(config.esp.heartbeat, configData.esp.heartbeat, { by: 'name' });
+                mergeDiff(config.esp.heartbeat, configData.esp.heartbeat, { by: 'name' });
                 // other non-array keys
                 for (const [k, v] of Object.entries(configData.esp)) {
                     if (!Array.isArray(v) && !(k in config.esp)) {
@@ -310,12 +278,12 @@ let
                     slog(`loading entities from internal config: ${automationFile}`);
                     auto.loadEntities(clientModule, automationFile);
                 }
-                
+
                 const names = Object.keys(clientModule.automation);
 
                 for (const name of names) {
                     let lname = name.toLocaleLowerCase();
-                    let path = workingDir + "/nv-" + lname + ".json";
+                    let path = workingDir + "nv-" + lname + ".json";
                     if (fs.existsSync(path)) {
                         slog("found NV data for: " + name + " - loading now...");
                         nvMem[name] = JSON.parse(fs.readFileSync(path, 'utf8'));
@@ -326,14 +294,13 @@ let
                     automation[name] = clientModule.automation[name];
                 }
                 // remember which names belong to this module file
-                auto.moduleAutomations[resolvedPath] = names;
+                auto.module[resolvedPath] = names;
                 slog(`Successfully processed automation: ${automationFile}`);
                 return clientModule;
             } catch (error) {
                 console.error(`Error processing automation file "${automationFile}":`, error.message);
                 return null;
             }
-
         },
         // reload workflow: cleanup previous automations for this file, clear cache, load new file, start new automations
         reload: function (automationFilePath, internal) {
@@ -342,7 +309,7 @@ let
                 const resolvedPath = require.resolve(automationPath);
 
                 // 1) clean up all old automations for this module
-                const prevNames = auto.moduleAutomations[resolvedPath] || [];
+                const prevNames = auto.module[resolvedPath] || [];
                 for (const name of prevNames) {
                     if (automation[name]) {
                         try {
@@ -353,21 +320,21 @@ let
                         }
                         // clear any known timers/listeners
                         if (state[name]?.timer) clearInterval(state[name].timer);
+                        delete automation[name];            // <-- REMOVE FIRST
                         delete state[name];
                         if (internal) delete config[name];
-                        delete automation[name];            // <-- REMOVE FIRST
                     }
                 }
 
                 // 2) clear module cache and our bookkeeping
                 if (require.cache[resolvedPath]) delete require.cache[resolvedPath];
-                delete auto.moduleAutomations[resolvedPath];
+                delete auto.module[resolvedPath];
 
                 // 3) now load the new module and register fresh automations
                 const newModuleExports = auto.load(automationFilePath, internal);
 
                 // 4) initialise only the new automations
-                const newNames = auto.moduleAutomations[resolvedPath] || [];
+                const newNames = auto.module[resolvedPath] || [];
                 for (const name of newNames) {
                     if (automation[name]) {
                         try { automation[name](name, "init"); }
@@ -549,7 +516,7 @@ let
                         break;
                     case "haFetchReply":        // Incoming HA Fetch result
                         // console.log(buf.obj)
-                        Object.assign(entity, buf.obj);
+                        mergeDeep(entity, buf.obj);
                         slog("receiving fetch data...");
                         if (onlineHA == false) sys.boot(4);
                         break;
@@ -617,6 +584,7 @@ let
             });
         },
         register: function (update) {
+            slog("trying to register with TWIT Core");
             let obj = {};
             if (config.ha != undefined) obj.ha = config.ha;
             if (config.esp) {
@@ -659,6 +627,7 @@ let
         },
         init: function () {
             global.automation = {};
+            auto.module = {}; // map resolvedModulePath -> [automationName, ...]
             nvMem = {};
             config = { ha: {}, esp: {}, udp: {} };
             state = { cache: {}, args: "" };
@@ -736,6 +705,45 @@ let
             scriptName = path.basename(__filename).slice(0, -3);
             udpClient = require('dgram');
             core = udpClient.createSocket('udp4');
+            mergeDiff = function (dest, source, opts = {}) {
+                if (!Array.isArray(source) || source.length === 0) return;
+                dest ||= [];
+                for (const it of source) {
+                    if (!it && it !== 0 && it !== false) continue; // skip null/undefined/'' but keep 0/false
+                    // primitive
+                    if (typeof it !== 'object') {
+                        if (!dest.includes(it)) dest.push(it);
+                        continue;
+                    }
+                    // object or array
+                    if (opts.by) {
+                        // compare by a specific key (fast)
+                        const key = opts.by;
+                        if (!dest.some(d => d && d[key] === it[key])) dest.push(it);
+                    } else {
+                        // fallback: structural compare (works for arrays or objects)
+                        const sIt = JSON.stringify(it);
+                        if (!dest.some(d => {
+                            try { return JSON.stringify(d) === sIt; } catch (e) { return false; }
+                        })) dest.push(it);
+                    }
+                }
+                return dest;
+            };
+            mergeDeep = function (dest, source) {
+                for (const key in source) {
+                    if (
+                        source[key] &&
+                        typeof source[key] === 'object' &&
+                        !Array.isArray(source[key])
+                    ) {
+                        dest[key] = dest[key] || {};
+                        mergeDeep(dest[key], source[key]);
+                    } else {
+                        dest[key] = source[key];
+                    }
+                }
+            };
             sys.boot(0);
         },
         boot: function (step) {
@@ -751,7 +759,6 @@ let
                     break;
                 case 2:
                     sys.com();
-                    slog("trying to register with TWIT Core");
                     sys.register();
                     bootWait = setInterval(() => { sys.register(); }, 10e3);
                     break;
