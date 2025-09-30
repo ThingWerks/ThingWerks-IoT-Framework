@@ -732,7 +732,7 @@ if (isMainThread) {
                             } else {
                                 nv = JSON.parse(data);
                                 log("deep merging NV coreData into live state memory");
-                                deepMerge(state.coreData, nv.coreData);
+                                mergeDeep(state.coreData, nv.coreData);
                                 sys.boot(2);
                             }
                         });
@@ -849,7 +849,7 @@ if (isMainThread) {
                             let completed = 0;
                             for (let x = 0; x < cfg.homeAssistant.length; x++) {
                                 if (cfg.homeAssistant[x].enable) {
-                                    if (!state.ha[x]) state.ha[x] = {};
+                                    state.ha[x] ||= {};
                                     state.ha[x].retries = 0;
                                     state.ha[x].connected = false;
                                     log("Legacy API - connecting to " + a.color("cyan", cfg.homeAssistant[x].address), 1);
@@ -1119,17 +1119,42 @@ if (isMainThread) {
                         syncAndSchedule();
                     },
                 };
-                deepMerge = function (target, source) {
+                mergeDiff = function (dest, source, opts = {}) {
+                    if (!Array.isArray(source) || source.length === 0) return;
+                    dest ||= [];
+                    for (const it of source) {
+                        if (!it && it !== 0 && it !== false) continue; // skip null/undefined/'' but keep 0/false
+                        // primitive
+                        if (typeof it !== 'object') {
+                            if (!dest.includes(it)) dest.push(it);
+                            continue;
+                        }
+                        // object or array
+                        if (opts.by) {
+                            // compare by a specific key (fast)
+                            const key = opts.by;
+                            if (!dest.some(d => d && d[key] === it[key])) dest.push(it);
+                        } else {
+                            // fallback: structural compare (works for arrays or objects)
+                            const sIt = JSON.stringify(it);
+                            if (!dest.some(d => {
+                                try { return JSON.stringify(d) === sIt; } catch (e) { return false; }
+                            })) dest.push(it);
+                        }
+                    }
+                    return dest;
+                };
+                mergeDeep = function (dest, source) {
                     for (const key in source) {
                         if (
                             source[key] &&
                             typeof source[key] === 'object' &&
                             !Array.isArray(source[key])
                         ) {
-                            target[key] = target[key] || {};
-                            deepMerge(target[key], source[key]);
+                            dest[key] = dest[key] || {};
+                            mergeDeep(dest[key], source[key]);
                         } else {
-                            target[key] = source[key];
+                            dest[key] = source[key];
                         }
                     }
                 };
