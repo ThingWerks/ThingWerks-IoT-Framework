@@ -259,7 +259,7 @@ let
             setTimeout(() => {
                 if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                 if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
-            }, 500);
+            }, 2e3);
         },
         // load a module and register its automations (records which names belong to the file)
         load: function (automationFile, internal) {
@@ -356,7 +356,7 @@ let
                     setTimeout(() => {
                         if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
                         if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
-                    }, 500);
+                    }, 2e3);
                 }
             } catch (error) {
                 console.error(`Failed to reload automation file "${automationFilePath}":`, error.message);
