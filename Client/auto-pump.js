@@ -154,7 +154,7 @@ module.exports = { // exports added to clean up layout
                     }
                 }
                 let pump = {
-                    control: function (x) {
+                    auto: function (x) {
                         let dd = st.dd[x];
                         pump.shared(x);
                         switch (dd.auto.state) {
@@ -347,10 +347,10 @@ module.exports = { // exports added to clean up layout
 
                         if (dd.cfg.ha.reserve != undefined) {
                             if (entity[dd.cfg.ha.reserve].state == true) {
-                                let pump = dd.cfg.pump.findIndex(obj => obj.class === "reserve");
-                                if (pump == -1) {
+                                let pumpSelect = dd.cfg.pump.findIndex(obj => obj.class === "reserve");
+                                if (pumpSelect == -1) {
                                     log(dd.cfg.name + " - no reserve pump found - selecting pump 0 instead", 2);
-                                } else log(dd.cfg.name + " - selecting reserve pump: " + dd.cfg.pump[pump].name);
+                                } else log(dd.cfg.name + " - selecting reserve pump: " + dd.cfg.pump[pumpSelect].name);
                             }
                             else dd.state.pump = 0;
                         } else dd.state.pump = 0;
@@ -438,7 +438,6 @@ module.exports = { // exports added to clean up layout
                             lbuf = dd.cfg.name + " - stopping " + dd.pump[dd.state.pump].cfg.name + " but pump still in use by "
                                 + cfg.dd[dd.sharedPump.num].name + " - Runtime: " + hours + "h:" + minutes + "m:" + extraSeconds + "s";
                         }
-                        setTimeout(() => { dd.state.timeoutOff = true }, 10e3);
 
                         if (fault == true) {
                             if (dd.cfg.ha.solar != undefined) {
@@ -464,6 +463,7 @@ module.exports = { // exports added to clean up layout
                         } else log(lbuf);
 
                         dd.state.timeoutOff = false;    // set true after 10 seconds
+                        setTimeout(() => { dd.state.timeoutOff = true }, 10e3);
                         dd.state.run = false;
                         dd.pump[dd.state.pump].state = false;
 
@@ -734,7 +734,7 @@ module.exports = { // exports added to clean up layout
                     st.timer.second = setInterval(() => {     // called every second  -  rerun this automation every second
                         sensor.flow.calc();
                         sensor.push(state);
-                        for (let x = 0; x < cfg.dd.length; x++) pump.control(x);
+                        for (let x = 0; x < cfg.dd.length; x++) pump.auto(x);
                     }, 1e3);
                     st.timer.minute = setInterval(() => { timer(); }, 60e3);
                 } else {        // event processing
