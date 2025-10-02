@@ -15,12 +15,10 @@ module.exports = {
             "Button Water Irrigation House Back",
             "Button Water Irrigation Piggary",
             "Button Water Irrigation Dalom",
+            "input_button.oneshot_irrigation",
+            "input_button.oneshot_bubon",
         ],
-        sync: [
-            ["switch.switch_test", "input_boolean.lights_stairs",],
-            ["switch.lights_outside_bedroom", "input_boolean.lights_bedroom_outside"],
-            ["switch.lights_outside_entrance", "input_boolean.lights_house_entrance"],
-        ]
+        sync: []
     },
     esp: {
         subscribe: [
@@ -49,7 +47,7 @@ module.exports = {
                         // turbo: 5,                                // secondary high stop pressure point
                         profile: "input_number.profile_bubon",      // pressure profile
                         // reserve: 9,                              // ha entity for reserve tank/pump
-                        oneShot: ["Switch Kitchen Pump", "Button Bodega Water Filtered", "Button Water Groogies"],   // single shot pump automation run button, must be array 
+                        oneShot: ["Switch Kitchen Pump", "Button Bodega Water Filtered", "Button Water Groogies", "input_button.oneshot_bubon"],   // single shot pump automation run button, must be array 
                         oneShotTimer: "input_number.timer_oneshot_bubon", // single shot pump run time length
                         oneShotExtend: true,
                     },
@@ -101,7 +99,8 @@ module.exports = {
                         // turbo: 5,                                            // secondary high stop pressure point
                         //   profile: "input_number.profile_bubon",             // pressure profile
                         // reserve: 9,                                          // ha entity for reserve tank/pump
-                        oneShot: ["Button Irrigation Entrance", "Button Water Irrigation House Back", "Button Water Irrigation Piggary", "Button Water Irrigation Dalom",],  // single shot pump automation run button, must be array 
+                        oneShot: ["Button Irrigation Entrance", "Button Water Irrigation House Back", "Button Water Irrigation Piggary"
+                            , "Button Water Irrigation Dalom", "input_button.oneshot_irrigation"],  // single shot pump automation run button, must be array 
                         oneShotTimer: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
                         oneShotExtend: true,                                    // extend OneShot timer after last usage
                     },
