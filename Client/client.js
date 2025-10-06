@@ -29,7 +29,7 @@ global.slog = function (message, level, system) {
     if (!system) {
         core.send(JSON.stringify({
             type: "log",
-            obj: { message: message, mod: (moduleName + "-System"), level: level }
+            obj: { message: message, mod: (moduleName + "-Client"), level: level }
         }), 65432, '127.0.0.1');
     } else core.send(JSON.stringify({
         type: "log",
@@ -226,7 +226,7 @@ let
                 config.esp.heartbeat = config.esp.heartbeat.filter(x => x && x.name);
             }
         },
-        loadConfig: function (configPath) {
+        loadConfig: function (configPath, reload) {
             try {
                 const fileExtension = path.extname(configPath).toLowerCase();
                 let externalCfg = null;
@@ -242,6 +242,7 @@ let
                 for (const name in externalCfg.config) {
                     slog(`loading external config for automation: ${name}`);
                     config[name] = externalCfg.config[name];
+                    if (reload) automation[name](name, null, "config");
                 }
                 slog(`loading entities from external config: ${configPath}`);
                 auto.loadEntities(externalCfg, configPath);
@@ -252,14 +253,9 @@ let
         },
         reloadConfig: function (configPath) {
             delete require.cache[configPath];
-            auto.loadConfig(configPath);
+            auto.loadConfig(configPath, true);
             slog("updating core/client entity registrations...");
-            sys.register(true);
-            state.cache = {};
-            setTimeout(() => {
-                if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
-                if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
-            }, 2e3);
+            setTimeout(() => { sys.fetch(); }, 2e3);
         },
         // load a module and register its automations (records which names belong to the file)
         load: function (automationFile, internal) {
@@ -350,14 +346,9 @@ let
 
                 slog(`Successfully reloaded and restarted automation: ${path.parse(automationFilePath).name}`);
 
-                if (internal) {
-                    sys.register(true);
-                    state.cache = {};
-                    setTimeout(() => {
-                        if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
-                        if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
-                    }, 2e3);
-                }
+                slog("updating core/client entity registrations...");
+                setTimeout(() => { sys.fetch(); }, 2e3);
+
             } catch (error) {
                 console.error(`Failed to reload automation file "${automationFilePath}":`, error.message);
                 slog(`Failed to reload automation: ${automationFilePath}. Error: ${error.message}`, 3, "HOT-RELOAD-FAIL");
@@ -483,7 +474,8 @@ let
                 //  console.log(buf);
                 switch (buf.type) {
                     case "espState":            // incoming state change (from ESP)
-                        // console.log("receiving esp data, name: " + buf.obj.name + " state: " + buf.obj.state);
+                        //   if (buf.obj.name.includes("solar"))
+                        //     console.log("receiving esp data, name: " + buf.obj.name + " state: " + buf.obj.state);
                         state.cache[buf.obj.name] ||= {};
                         if (state.cache[buf.obj.name].state != buf.obj.state) {
                             state.cache[buf.obj.name].state = buf.obj.state;
@@ -495,7 +487,6 @@ let
                         entity[buf.obj.name] ||= {}; // If state.esp[buf.obj.name] is falsy (undefined, null, 0, '', false), assign it an empty object.
                         entity[buf.obj.name].state = buf.obj.state;
                         entity[buf.obj.name].update = time.epoch;
-
                         break;
                     case "haStateUpdate":       // incoming state change (from HA websocket service)
                         slog("receiving HA state data, entity: " + buf.obj.name + " value: " + buf.obj.state, 0);
@@ -517,7 +508,7 @@ let
                     case "haFetchReply":        // Incoming HA Fetch result
                         // console.log(buf.obj)
                         mergeDeep(entity, buf.obj);
-                        slog("receiving fetch data...");
+                        slog("receiving HA fetch data...");
                         if (onlineHA == false) sys.boot(4);
                         break;
                     case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
@@ -791,6 +782,7 @@ let
                         slog("ESP fetch complete");
                     online = true;
                     auto.call("init");
+                    sys.fetch();
                     for (const name in automation) {
                         slog(name + " automation initializing...");
                     }
@@ -798,5 +790,11 @@ let
                     break;
             }
         },
+        fetch: function () {
+            sys.register(true);
+            state.cache = {};
+            if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
+            if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
+        }
     };
 setTimeout(() => { sys.init(); }, 1e3);
