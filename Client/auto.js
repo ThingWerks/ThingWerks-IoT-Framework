@@ -13,8 +13,10 @@ module.exports = {
             try {
                 let { st, cfg, nv, log, writeNV } = _pointers(_name);
                 if (_reload) {   // called after modification/reload of this automation file
-                    log("hot reload initiated");
-                    //clear event timers clearInterval(st.timer.second);
+                    if (_reload != "config") {
+                        log("hot reload initiated");
+                        //clear event timers clearInterval(st.timer.second);
+                    } else ({ st, cfg, nv } = _pointers(_name));
                     return;
                 }
                 if (_push === "init") { // ran only once - your initialization procedure
@@ -52,7 +54,9 @@ module.exports = {
             try {
                 let { st, cfg, nv, log, writeNV } = _pointers(_name);
                 if (_reload) {   // called after modification/reload of this automation file
-                    log("hot reload initiated");
+                    if (_reload != "config") { 
+                        log("hot reload initiated");
+                    } else ({ st, cfg, nv } = _pointers(_name)); // called after modification/reload of this automations config file
                     return;
                 }
                 if (_push === "init") { // ran only once
