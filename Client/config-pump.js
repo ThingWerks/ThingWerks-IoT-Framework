@@ -77,7 +77,7 @@ module.exports = {
                     press: {
                         output: {
                             sensor: "bubon", // pressure sensor number (in cfg.sensor.press block)
-                            profile: [{ start: 22, stop: 35 }, { start: 45, stop: 62 }, { start: 50, stop: 62 }],
+                            profile: [{ start: 22, stop: 35 }, { start: 45, stop: 59 }, { start: 50, stop: 62 }],
                         },
                     },
                     fault: {
