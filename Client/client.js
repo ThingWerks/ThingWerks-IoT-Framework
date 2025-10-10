@@ -1,40 +1,10 @@
 global.bot = function (id, data, obj) {
-    core.send(JSON.stringify({ type: "telegram", obj: { class: "send", id, data, obj } }), 65432, '127.0.0.1');
-};
-global.send = function (name, newState, unit, id) {
-    for (let x = 0; x < config.esp?.subscribe?.length; x++) {
-        if (name == config.esp.subscribe[x]) {
-            core.send(JSON.stringify({
-                type: "espState",
-                obj: { name: name, state: newState }
-            }), 65432, '127.0.0.1')
-            return;
-        }
-    }
-    if (name == "cdata") {
-        core.send(JSON.stringify({
-            type: "coreData",
-            obj: newState
-        }), 65432, '127.0.0.1')
-    } else {
-        // if (!unit) console.log("sending to HA - name: " + name + " - state: ", newState)
-        core.send(JSON.stringify({
-            type: "haState",
-            obj: { name, state: newState, unit, haID: id }  // ID is used to send sensor to HA on core other than ID 0
-        }), 65432, '127.0.0.1')
-    }
+    core(JSON.stringify({ type: "telegram", obj: { class: "send", id, data, obj } }), 65432, '127.0.0.1');
 };
 global.slog = function (message, level, system) {
     if (level == undefined) level = 1;
-    if (!system) {
-        core.send(JSON.stringify({
-            type: "log",
-            obj: { message: message, mod: (moduleName + "-Client"), level: level }
-        }), 65432, '127.0.0.1');
-    } else core.send(JSON.stringify({
-        type: "log",
-        obj: { message: message, mod: system, level: level }
-    }), 65432, '127.0.0.1');
+    if (!system) core("log", { message: message, mod: (moduleName + "-Client"), level: level });
+    else core("log", { message: message, mod: system, level: level });
 };
 global.file = {
     write: {
@@ -93,7 +63,7 @@ let
                     }
                     break;
                 case "--install":
-                    console.log(a.color("yellow", "installing TWIT-Client-" + moduleName + " service..."));
+                    console.log(color("yellow", "installing TWIT-Client-" + moduleName + " service..."));
                     if (map["-j"]) {
                         console.log("Extra function triggered because -j was provided:", map["-j"]);
                         process.exit();
@@ -126,7 +96,7 @@ let
                     console.log("type: journalctl -fu twit-client-" + moduleName);
                     process.exit();
                 case "--uninstall":
-                    console.log(a.color("yellow", "uninstalling TWIT-Client-" + moduleName + " service..."));
+                    console.log(color("yellow", "uninstalling TWIT-Client-" + moduleName + " service..."));
                     try { execSync("systemctl stop twit-client-" + moduleName); } catch { }
                     try { execSync("systemctl disable twit-client-" + moduleName + ".service"); } catch { }
                     try { fs.unlinkSync("/etc/systemd/system/twit-client-" + moduleName + ".service"); } catch { }
@@ -135,7 +105,7 @@ let
                     process.exit();
                 case "-a":
                     try { moduleName ||= moduleName } catch {
-                        console.log(a.color("red", "you must specify a module name with -n"));
+                        console.log(color("red", "you must specify a module name with -n"));
                         process.exit();
                     }
                     const automationFile = value;
@@ -164,6 +134,7 @@ let
     auto = {
         call: function (data) {
             for (const name in automation) {
+                //   if (name in config.entities[data.name].names)
                 try { automation[name](name, data); } catch (e) { console.trace(e); }
             }
         },
@@ -182,49 +153,79 @@ let
             // remove Node's module cache so next require() loads fresh code
             if (require.cache[resolvedPath]) delete require.cache[resolvedPath];
         },
-        loadEntities: function (configData, fileName) {
-            // helper: push items from `items` into `dest` (mutates dest)
-            // opts: { by: 'name' }  -> compare objects by that property
-            if (configData.ha) {
-                slog("importing home assistant entities from: " + fileName);
-                config.ha ||= {};
-                // ensure arrays exist
-                config.ha.subscribe ||= [];
-                config.ha.sync ||= [];
-                // merge ha.subscribe (primitive strings)
-                mergeDiff(config.ha.subscribe, configData.ha.subscribe);
-                // merge ha.sync (may be arrays-of-arrays or primitive pairs) — use structural compare
-                mergeDiff(config.ha.sync, configData.ha.sync);
-                // other non-array keys
-                for (const [k, v] of Object.entries(configData.ha)) {
-                    if (!Array.isArray(v) && !(k in config.ha)) {
-                        config.ha[k] = v;
-                    }
+        loadEntities: function (configData, fileName, names) { // acting for both internal and external config 
+            if (configData.entities) {
+                configData.entities.forEach(entity => {
+                    config.entities[entity] ||= { names: [] };
+                    names.forEach(name => {
+                        if (!config.entities[entity].names.includes(name)) {
+                            config.entities[entity].names.push(name);
+                        }
+                    });
+                });
+            }
+            for (const name in configData.config) {
+                if (configData.config[name]?.entities) {
+                    configData.config[name].entities.forEach(entity => {
+                        config.entities[entity] ||= { names: [] };
+                        if (!config.entities[entity].names.includes(name)) {
+                            config.entities[entity].names.push(name);
+                        }
+                    });
                 }
-                // sanitize: drop any falsy slots accidentally introduced (e.g. trailing commas)
-                config.ha.subscribe = config.ha.subscribe.filter(x => x !== undefined && x !== null && x !== '');
-                config.ha.sync = config.ha.sync.filter(x => x !== undefined && x !== null);
+                // now that both top-level and per-config entities for `name` are processed,
+                // prune using the union-aware function:
+                pruneForFile(name);
             }
 
-            if (configData.esp) {
-                slog("importing ESP entities from: " + fileName);
-                config.esp ||= {};
-                config.esp.subscribe ||= [];
-                config.esp.heartbeat ||= [];
-                // merge esp.subscribe (primitive strings)
-                mergeDiff(config.esp.subscribe, configData.esp.subscribe);
-                // merge esp.heartbeat (objects with {name, interval}) — compare by `.name`
-                mergeDiff(config.esp.heartbeat, configData.esp.heartbeat, { by: 'name' });
-                // other non-array keys
-                for (const [k, v] of Object.entries(configData.esp)) {
-                    if (!Array.isArray(v) && !(k in config.esp)) {
-                        config.esp[k] = v;
+            // console.log(config.entities)
+            // --- after you've populated config.entities from top-level and per-config lists ---
+            // Helper: prune for a single fileName using the union of top-level + per-config entities
+            function pruneForFile(fileName) {
+                const keysToFullyDelete = [];
+                // top-level entities from the file being processed (may be undefined)
+                const topEntities = Array.isArray(configData.entities) ? configData.entities : [];
+                // per-config (e.g. configData.config[name]) entities for this fileName (may be undefined)
+                const perEntities = Array.isArray(configData.config?.[fileName]?.entities)
+                    ? configData.config[fileName].entities
+                    : [];
+
+                for (const entity of Object.keys(config.entities)) {
+                    const nameList = config.entities[entity].names || [];
+                    if (!nameList.includes(fileName)) continue;
+
+                    // if entity is present in EITHER the top-level entities list OR the file-specific entities list,
+                    // then it still belongs to that file and should NOT be pruned.
+                    const stillPresent = topEntities.includes(entity) || perEntities.includes(entity);
+                    if (stillPresent) continue;
+
+                    // not present anywhere for this file -> remove the fileName from the names array
+                    const idx = nameList.indexOf(fileName);
+                    if (idx !== -1) nameList.splice(idx, 1);
+
+                    if (nameList.length === 0) {
+                        console.log(`found orphaned entity: ${entity} (last automation, scheduling for full delete)`);
+                        keysToFullyDelete.push(entity);
+                    } else {
+                        console.log(`found orphaned entity: ${entity} (removed ${fileName}, still used by others)`);
                     }
                 }
-                // sanitize
-                config.esp.subscribe = config.esp.subscribe.filter(x => x !== undefined && x !== null && x !== '');
-                config.esp.heartbeat = config.esp.heartbeat.filter(x => x && x.name);
+
+                keysToFullyDelete.forEach(e => { delete config.entities[e]; });
             }
+
+            // console.log(config)
+
+            configData.ha?.sync?.forEach(sync => {
+                slog("importing HA sync entities from: " + sync);
+                arrayAdd(config.entities, sync);
+            });
+
+            config.esp ||= { heartbeat: [] };
+            configData.esp?.heartbeat?.forEach(heartbeat => {
+                slog("importing ESP heartbeat entities from: " + heartbeat);
+                arrayAdd(config.esp.heartbeat, heartbeat);
+            });
         },
         loadConfig: function (configPath, reload) {
             try {
@@ -239,13 +240,16 @@ let
                 } else {
                     console.error(`Error: Unsupported config file type "${fileExtension}". Only .json or .js are supported.`);
                 }
-                for (const name in externalCfg.config) {
+
+                const names = Object.keys(externalCfg.config);
+
+                for (const name of names) {
                     slog(`loading external config for automation: ${name}`);
                     config[name] = externalCfg.config[name];
                     if (reload) automation[name](name, null, "config");
                 }
                 slog(`loading entities from external config: ${configPath}`);
-                auto.loadEntities(externalCfg, configPath);
+                auto.loadEntities(externalCfg, configPath, names);
                 auto.watcher(configPath, auto.reloadConfig);
             } catch (error) {
                 console.error(`Error loading external config file "${configPath}":`, error.message);
@@ -255,7 +259,7 @@ let
             delete require.cache[configPath];
             auto.loadConfig(configPath, true);
             slog("updating core/client entity registrations...");
-            setTimeout(() => { sys.fetch(); }, 2e3);
+            setTimeout(() => { sys.register(); sys.fetch(); }, 2e3);
         },
         // load a module and register its automations (records which names belong to the file)
         load: function (automationFile, internal) {
@@ -269,14 +273,14 @@ let
 
                 if (!clientModule.automation) throw new Error("Module does not export an 'automation' object.");
 
-                // register each exported automation function under the global 'automation' object
-                if (internal) {
-                    slog(`loading entities from internal config: ${automationFile}`);
-                    auto.loadEntities(clientModule, automationFile);
-                }
-
                 const names = Object.keys(clientModule.automation);
 
+                if (internal) { // load entities from internal config
+                    slog(`loading entities from internal config: ${automationFile}`);
+                    auto.loadEntities(clientModule, automationFile, names);
+                }
+
+                // register each exported automation function under the global 'automation' object
                 for (const name of names) {
                     let lname = name.toLocaleLowerCase();
                     let path = workingDir + "nv-" + lname + ".json";
@@ -435,7 +439,7 @@ let
                 slog("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
                 nvMem.telegram.push(buf);
                 bot(msg.chat.id, 'registered');
-                core.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
+                core(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
                 file.write.nv();
             } else bot(msg.chat.id, 'already registered');
         },
@@ -469,72 +473,61 @@ let
     },
     sys = {         // ______________________system area, don't need to touch anything below this line__________________________________
         com: function () {
-            core.on('message', function (data, info) {
+            udp.on('message', function (data, info) {
                 let buf = JSON.parse(data);
                 //  console.log(buf);
                 switch (buf.type) {
-                    case "espState":            // incoming state change (from ESP)
-                        //   if (buf.obj.name.includes("solar"))
-                        //     console.log("receiving esp data, name: " + buf.obj.name + " state: " + buf.obj.state);
-                        state.cache[buf.obj.name] ||= {};
-                        if (state.cache[buf.obj.name].state != buf.obj.state) {
-                            state.cache[buf.obj.name].state = buf.obj.state;
-                            state.cache[buf.obj.name].update = time.epoch;
-                            state.cache[buf.obj.name].stamp = time.stamp;
-                            if (online == true) auto.call({ name: buf.obj.name, newState: buf.obj.state });
-                            // console.log(buf.obj)
-                        } else if (online == true) auto.call({ name: buf.obj.name, newState: buf.obj.state });
-                        entity[buf.obj.name] ||= {}; // If state.esp[buf.obj.name] is falsy (undefined, null, 0, '', false), assign it an empty object.
-                        entity[buf.obj.name].state = buf.obj.state;
-                        entity[buf.obj.name].update = time.epoch;
-                        break;
-                    case "haStateUpdate":       // incoming state change (from HA websocket service)
-                        slog("receiving HA state data, entity: " + buf.obj.name + " value: " + buf.obj.state, 0);
+                    case "state":       // incoming state change (from HA websocket service)
+                        slog("receiving state update, entity: " + buf.data.name + " value: " + buf.data.state, 0);
                         // console.log(buf);
-                        entity[buf.obj.name] ||= {};
-                        entity[buf.obj.name].update = time.epoch;
-                        try { entity[buf.obj.name].state = buf.obj.state; } catch { }
+                        entity[buf.data.name] ||= {};
+                        entity[buf.data.name].update = time.epochMil;
+                        entity[buf.data.name].stamp = time.stamp;
+                        try { entity[buf.data.name].state = buf.data.state; } catch { }
                         if (online == true) {
-                            auto.call({ name: buf.obj.name, newState: buf.obj.state });
+                            // auto.call({ name: buf.data.name, state: buf.data.state });  // coredata / HA sync?????????
+                            //  console.log(buf.data)
+
+                            if (!(buf.data.name in config.entities)) {
+                                slog("entity: " + buf.data.name + " - is not referenced locally - pruning");
+                                core("prune", buf.data.name);
+                                return;
+                            }
+                            let names = config.entities[buf.data.name]?.names;
+                            for (let x = 0; x < names.length; x++) {
+                                // console.log("sending entity: " + buf.data.name + " - with state: " + buf.data.state + " - to automation: " + names[x])
+                                try { automation[names[x]](names[x], { name: buf.data.name, state: buf.data.state }); } catch (e) { console.trace(e); }
+                            }
                             if (config.ha.sync && config.ha.sync.length > 0) {
                                 config.ha.sync.forEach(element => {
                                     // console.log("partners: ", element[0], "  -  ", element[1]);
-                                    if (buf.obj.name == element[0]) send(element[1], buf.obj.state);
-                                    if (buf.obj.name == element[1]) send(element[0], buf.obj.state);
+                                    if (buf.data.name == element[0]) send(element[1], buf.data.state);
+                                    if (buf.data.name == element[1]) send(element[0], buf.data.state);
                                 });
                             }
                         }
                         break;
-                    case "haFetchReply":        // Incoming HA Fetch result
-                        // console.log(buf.obj)
-                        mergeDeep(entity, buf.obj);
-                        slog("receiving HA fetch data...");
-                        if (onlineHA == false) sys.boot(4);
-                        break;
-                    case "haFetchAgain":        // Core is has reconnected to HA, so do a refetch
-                        slog("Core has reconnected to HA, fetching again");
-                        core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
-                        core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
-                        break;
-                    case "haQueryReply":        // HA device queryHA fetch is failing
-                        console.log("Available HA Devices: " + buf.obj);
+                    case "fetchReply":        // Incoming HA Fetch result
+                        slog("received fetch reply");
+                        if (online == false) sys.boot(3);
                         break;
                     case "reRegister":          // reregister request from server
                         if (online == true) {
                             slog("server lost sync, reregistering...");
-                            setTimeout(() => {
-                                sys.register();
-                            }, 1e3);
+                            setTimeout(() => { sys.register(); }, 1e3);
                         }
                         break;
-                    case "coreData":
-                        // console.log("received coreData: ", buf.obj);
-                        if (buf.obj.name && buf.obj.state) {
-                            if (!entity[buf.obj.name]) entity[buf.obj.name] = {};
-                            entity[buf.obj.name].state = buf.obj.state;
-                            entity[buf.obj.name].update = time.epoch;
-                            if (online == true) auto.call({ name: buf.obj.name, newState: buf.obj.state });
+                        // console.log("received coreData: ", buf.data);
+                        if (buf.data.name && buf.data.state) {
+                            if (!entity[buf.data.name]) entity[buf.data.name] = {};
+                            entity[buf.data.name].state = buf.data.state;
+                            entity[buf.data.name].update = time.epoch;
+                            if (online == true) auto.call({ name: buf.data.name, newState: buf.data.state });
                         }
+                        break;
+                    case "proceed":
+                        if (online == false) setTimeout(() => { sys.boot(2); }, 1e3);
+                        else slog("reregisterion successful");
                         break;
                     case "diag":                // incoming diag refresh request, then reply object
                         function safeStringify(obj) {
@@ -551,81 +544,62 @@ let
                                 return value;
                             }, 2);
                         }
-                        core.send(safeStringify({
+                        core(safeStringify({
                             type: "diag",
                             obj: { state, nv: nvMem, config }
                         }), 65432, '127.0.0.1');
                         // console.log(state)
-                        //core.send(JSON.stringify({ type: "diag", obj: { state, nv: nvMem, config } }), 65432, '127.0.0.1');
+                        //core(JSON.stringify({ type: "diag", obj: { state, nv: nvMem, config } }), 65432, '127.0.0.1');
                         break;
                     case "telegram":
-                        // console.log("receiving telegram message: " + buf.obj);
-                        switch (buf.obj.class) {
+                        // console.log("receiving telegram message: " + buf.data);
+                        switch (buf.data.class) {
                             case "agent":
-                                user.telegram.agent(buf.obj.data);
+                                user.telegram.agent(buf.data.data);
                                 break;
                             case "callback":
-                                user.telegram.callback(buf.obj.data);
+                                user.telegram.callback(buf.data.data);
                                 break;
                         }
                         break;
-                    case "proceed": if (online == false) setTimeout(() => { sys.boot(3); }, 1e3); break;
-                    case "log": console.log(buf.obj); break;
+                    case "log": console.log(buf.data); break;
                 }
             });
         },
-        register: function (update) {
+        register: function (update) {/////no update?
             slog("trying to register with TWIT Core");
-            let obj = {};
-            if (config.ha != undefined) obj.ha = config.ha;
-            if (config.esp) {
-                if (config.esp.subscribe) obj.esp = config.esp.subscribe;
-                if (config.esp.heartbeat != undefined && config.esp.heartbeat.length > 0) {
-                    config.esp.heartbeat.forEach((e, x) => {
-                        slog("registering heartbeat for ESP: " + e.name);
-                        if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
-                        heartbeat.timer[x] = setInterval(() => {
-                            if (heartbeat.state[x]) {
-                                core.send(JSON.stringify({
-                                    type: "espState",
-                                    obj: { name: e.name, state: false }
-                                }), 65432, '127.0.0.1')
-                                heartbeat.state[x] = false;
-                            }
-                            else {
-                                core.send(JSON.stringify({
-                                    type: "espState",
-                                    obj: { name: e.name, state: true }
-                                }), 65432, '127.0.0.1')
-                                heartbeat.state[x] = true;
-                            }
-                        }, e.interval * 1e3);
-                    });
-                }
+            let obj = { entities: config.entities ?? undefined, telegram: config.telegram ? true : false };
 
+            core((update ? "registerUpdate" : "register"), obj);
+            if (config.telegram) {
+                if (!nv.telegram) nv.telegram ||= [];
+                else for (let x = 0; x < nv.telegram.length; x++)
+                    core("telegram", { class: "sub", id: nv.telegram[x].id });
             }
-            if (config.telegram != undefined) obj.telegram = true;
-            core.send(JSON.stringify({ type: (update ? "registerUpdate" : "register"), obj, name: moduleName }), 65432, '127.0.0.1');
-            if (config.telegram != undefined) {
-                if (nv.telegram == undefined) nv.telegram = [];
-                else for (let x = 0; x < nv.telegram.length; x++) {
-                    core.send(JSON.stringify({ type: "telegram", obj: { class: "sub", id: nv.telegram[x].id } }), 65432, '127.0.0.1');
-                }
-            }
-            if (config.coreData && config.coreData.length > 0) {
-                send("cdata", { register: true, name: config.coreData });
-            }
+
+            config.esp?.heartbeat?.forEach((e, x) => {
+                slog("registering heartbeat for ESP: " + e.name);
+                if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
+                heartbeat.timer[x] = setInterval(() => {
+                    if (heartbeat.state[x]) heartbeat(false);
+                    else heartbeat(true);
+                    function heartbeat(newState) {
+                        core("heartbeat");
+                        heartbeat.state[x] = newState;
+                    }
+                }, e.interval * 1e3);
+            });
+            //   if (config.coreData?.length > 0) send("cdata", { register: true, name: config.coreData });
         },
         init: function () {
-            global.automation = {};
+            automation = {};
             auto.module = {}; // map resolvedModulePath -> [automationName, ...]
             nvMem = {};
-            config = { ha: {}, esp: {}, udp: {} };
+            entity = {};
+            config = { ha: {}, esp: {}, entities: {} };
             state = { cache: {}, args: "" };
             heartbeat = { timer: [], state: [] };
             logName = null;
-            entity = {};
-            onlineHA = false;
             online = false;
             timer = { fileWriteLast: null };
             fileWatchers = {};
@@ -659,31 +633,29 @@ let
                     syncAndSchedule();
                 },
             };
-            a = {
-                color: function (color, input, ...option) {   //  ascii color function for terminal colors
-                    if (input == undefined) input = '';
-                    let c, op = "", bold = ';1m', vbuf = "";
-                    for (let x = 0; x < option.length; x++) {
-                        if (option[x] == 0) bold = 'm';         // Unbold
-                        if (option[x] == 1) op = '\x1b[5m';     // blink
-                        if (option[x] == 2) op = '\u001b[4m';   // underline
-                    }
-                    switch (color) {
-                        case 'black': c = 0; break;
-                        case 'red': c = 1; break;
-                        case 'green': c = 2; break;
-                        case 'yellow': c = 3; break;
-                        case 'blue': c = 4; break;
-                        case 'purple': c = 5; break;
-                        case 'cyan': c = 6; break;
-                        case 'cyan': c = 7; break;
-                    }
-                    if (input === true) return '\x1b[3' + c + bold;     // begin color without end
-                    if (input === false) return '\x1b[37;m';            // end color
-                    vbuf = op + '\x1b[3' + c + bold + input + '\x1b[37;m';
-                    return vbuf;
+            color = function (color, input, ...option) {   //  ascii color function for terminal colors
+                if (input == undefined) input = '';
+                let c, op = "", bold = ';1m', vbuf = "";
+                for (let x = 0; x < option.length; x++) {
+                    if (option[x] == 0) bold = 'm';         // Unbold
+                    if (option[x] == 1) op = '\x1b[5m';     // blink
+                    if (option[x] == 2) op = '\u001b[4m';   // underline
                 }
-            };
+                switch (color) {
+                    case 'black': c = 0; break;
+                    case 'red': c = 1; break;
+                    case 'green': c = 2; break;
+                    case 'yellow': c = 3; break;
+                    case 'blue': c = 4; break;
+                    case 'purple': c = 5; break;
+                    case 'cyan': c = 6; break;
+                    case 'cyan': c = 7; break;
+                }
+                if (input === true) return '\x1b[3' + c + bold;     // begin color without end
+                if (input === false) return '\x1b[37;m';            // end color
+                vbuf = op + '\x1b[3' + c + bold + input + '\x1b[37;m';
+                return vbuf;
+            }
             time.startTime();
             ha = { getEntities: function () { send("haQuery") }, };
             fs = require('fs');
@@ -694,9 +666,23 @@ let
             workingDir = require('path').dirname(require.main.filename) + "/";
             path = require('path');
             scriptName = path.basename(__filename).slice(0, -3);
-            udpClient = require('dgram');
-            core = udpClient.createSocket('udp4');
-            mergeDiff = function (dest, source, opts = {}) {
+            udp = require('dgram').createSocket('udp4');
+            Object.defineProperty(Object.prototype, "forIn", {
+                value: function (callback) {
+                    for (const key in this) {
+                        //  if (Object.prototype.hasOwnProperty.call(this, key)) {
+                        callback(key, this[key], this);
+                        //  }
+                    }
+                },
+                enumerable: false // so it won't show up in loops
+            });
+            send = function (name, state, unit, address) { core("state", { name, state, unit, address }) };
+            core = function (type, data, auto) {
+                // console.log(type, data, auto)
+                udp.send(JSON.stringify({ name: moduleName, type, data, auto }), 65432, '127.0.0.1');
+            };
+            arrayAdd = function (dest, source, id) { // additive array merge
                 if (!Array.isArray(source) || source.length === 0) return;
                 dest ||= [];
                 for (const it of source) {
@@ -707,9 +693,9 @@ let
                         continue;
                     }
                     // object or array
-                    if (opts.by) {
+                    if (id) {
                         // compare by a specific key (fast)
-                        const key = opts.by;
+                        const key = id;
                         if (!dest.some(d => d && d[key] === it[key])) dest.push(it);
                     } else {
                         // fallback: structural compare (works for arrays or objects)
@@ -721,7 +707,7 @@ let
                 }
                 return dest;
             };
-            mergeDeep = function (dest, source) {
+            objMerge = function (dest, source) { // object merge, potentially destructive if overlap 
                 for (const key in source) {
                     if (
                         source[key] &&
@@ -729,7 +715,7 @@ let
                         !Array.isArray(source[key])
                     ) {
                         dest[key] = dest[key] || {};
-                        mergeDeep(dest[key], source[key]);
+                        objMerge(dest[key], source[key]);
                     } else {
                         dest[key] = source[key];
                     }
@@ -742,59 +728,46 @@ let
                 case 0:
                     checkArgs();
                     console.log("starting arguments: " + state.args)
-                    setTimeout(() => { time.sync(); time.boot++ }, 1e3);
-                    sys.boot(2);
+                    setTimeout(() => { time.sync(); time.boot++; sys.boot(1); }, 1e3);
                     break;
                 case 1:
-
-                    break;
-                case 2:
                     sys.com();
                     sys.register();
-                    bootWait = setInterval(() => { sys.register(); }, 10e3);
+                    bootWait = setInterval(() => {
+                        console.log("core registration failed, retrying...");
+                        sys.register();
+                    }, 10e3);
                     break;
-                case 3:
+                case 2:
                     clearInterval(bootWait);
                     slog("registered with TWIT Core");
-                    if (config.ha) {
-                        slog("fetching Home Assistant entities");
-                        core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
+                    if (config.entities) {
+                        slog("fetching entities from core");
+                        core("fetch");
                         bootWait = setInterval(() => {
-                            slog("HA fetch is failing, retrying...", 2);
-                            core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
+                            slog("core entity fetch is failing, retrying...", 2);
+                            core("fetch");
                         }, 10e3);
                     } else sys.boot(4);
                     break;
-                case 4:
+                case 3:
+                    slog("core fetch complete");
                     clearInterval(bootWait);
-                    if (config.ha) {
-                        slog("Home Assistant fetch complete");
-                        onlineHA = true;
-                    }
-                    if (config.esp && config.esp.subscribe && config.esp.subscribe.length > 0) {
-                        slog("fetching esp entities");
-                        core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
-                        setTimeout(() => { sys.boot(5); }, 1e3);
-                    } else sys.boot(5);
-                    break;
-                case 5:
-                    if (config.esp && config.esp.subscribe && config.esp.subscribe.length > 0)
-                        slog("ESP fetch complete");
                     online = true;
-                    auto.call("init");
-                    sys.fetch();
                     for (const name in automation) {
                         slog(name + " automation initializing...");
                     }
-                    setInterval(() => { core.send(JSON.stringify({ type: "heartbeat" }), 65432, '127.0.0.1'); time.boot++; }, 1e3);
+                    auto.call("init");
+                    sys.fetch();
+                    setInterval(() => { core("heartbeat"); time.boot++; }, 1e3);
                     break;
             }
         },
         fetch: function () {
-            sys.register(true);
+            // sys.register(true);
             state.cache = {};
-            if (config.ha?.subscribe) core.send(JSON.stringify({ type: "haFetch" }), 65432, '127.0.0.1');
-            if (config.esp?.subscribe) core.send(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
+            if (config.entities) core("fetch");
+            // if (config.esp?.subscribe) core(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
         }
     };
 setTimeout(() => { sys.init(); }, 1e3);
