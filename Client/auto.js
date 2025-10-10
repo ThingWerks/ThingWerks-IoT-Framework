@@ -8,6 +8,14 @@ module.exports = {
         subscribe: [],
         heartbeat: []
     },
+    config: {
+        yourAutomationsName: {
+            entities: [
+                //   "input_boolean.test_switch"
+            ],
+           // configTest: "testing123"
+        }
+    },
     automation: {
         yourAutomationsName: function (_name, _push, _reload) {
             try {
@@ -78,6 +86,7 @@ let _pointers = (_name) => {
         cfg: config[_name] ?? undefined,
         nv: nvMem[_name] ?? undefined,
         log: (m, l) => slog(m, l, _name),
-        writeNV: () => file.write.nv(_name)
+        write: () => file.write.nv(_name),
+        send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
     }
 }
