@@ -217,8 +217,21 @@ let
             // console.log(config)
 
             configData.ha?.sync?.forEach(sync => {
-                slog("importing HA sync entities from: " + sync);
-                arrayAdd(config.entities, sync);
+                slog("loading HA sync group: " + sync);
+                slog(sync)
+                //  arrayAdd(config.entities, sync);
+                sync.forEach(member => {
+                    slog("loading HA sync group member: " + member);
+                    config.entities[member] ||= { names: [] };
+                    config.entities[member].sync = [];
+                    config.entities[member].names.push("sync");
+                    sync.forEach(memberOther => {
+                        if (memberOther != member)
+                            config.entities[member].sync.push(memberOther);
+                    })
+                    // console.log(config.entities[member]);
+                });
+
             });
 
             config.esp ||= { heartbeat: [] };
@@ -479,15 +492,11 @@ let
                 switch (buf.type) {
                     case "state":       // incoming state change (from HA websocket service)
                         slog("receiving state update, entity: " + buf.data.name + " value: " + buf.data.state, 0);
-                        // console.log(buf);
                         entity[buf.data.name] ||= {};
                         entity[buf.data.name].update = time.epochMil;
                         entity[buf.data.name].stamp = time.stamp;
-                        try { entity[buf.data.name].state = buf.data.state; } catch { }
+                        entity[buf.data.name].state = buf.data.state;
                         if (online == true) {
-                            // auto.call({ name: buf.data.name, state: buf.data.state });  // coredata / HA sync?????????
-                            //  console.log(buf.data)
-
                             if (!(buf.data.name in config.entities)) {
                                 slog("entity: " + buf.data.name + " - is not referenced locally - pruning");
                                 core("prune", buf.data.name);
@@ -496,14 +505,16 @@ let
                             let names = config.entities[buf.data.name]?.names;
                             for (let x = 0; x < names.length; x++) {
                                 // console.log("sending entity: " + buf.data.name + " - with state: " + buf.data.state + " - to automation: " + names[x])
-                                try { automation[names[x]](names[x], { name: buf.data.name, state: buf.data.state }); } catch (e) { console.trace(e); }
-                            }
-                            if (config.ha.sync && config.ha.sync.length > 0) {
-                                config.ha.sync.forEach(element => {
-                                    // console.log("partners: ", element[0], "  -  ", element[1]);
-                                    if (buf.data.name == element[0]) send(element[1], buf.data.state);
-                                    if (buf.data.name == element[1]) send(element[0], buf.data.state);
-                                });
+                                if (names[x] == "sync") {
+                                    for (let y = 0; y < config.entities[buf.data.name].sync.length; y++) {
+                                        let partner = config.entities[buf.data.name].sync[y]
+                                        if (entity[buf.data.name].state != entity[partner].state) {
+                                            slog("syncing entity: " + buf.data.name + " - with partner: " + partner + " - state: " + buf.data.state);
+                                            core("state", { name: partner, state: buf.data.state });
+                                        }
+                                    }
+                                } else try { automation[names[x]](names[x], { name: buf.data.name, state: buf.data.state }); }
+                                catch (e) { console.trace(e); }
                             }
                         }
                         break;
