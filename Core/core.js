@@ -40,13 +40,12 @@ if (isMainThread) {
                 switch (buf.type) {
                     case "heartbeat": try { state.client[buf.name].heartbeat = true; } catch (e) { console.log(e) } break; // start heartbeat 
                     case "state":
-                        // console.log(buf)
+                        //console.log(buf)
+                        // console.log(entity)
                         if (buf.data.name in entity || buf.data.unit) {
                             // console.log(entity[buf.data.name])
                             let ent = entity[buf.data.name] ?? undefined, packet;
-                            if (ent?.owner?.type == "ha") {
-                                packet = { address: ent.owner.name }
-                            } else if (buf.data.unit) {
+                            if (buf.data.unit) {
                                 if (!entity[buf.data.name]) {
                                     log("client - " + color("purple", buf.name)
                                         + " - is registering new HA sensor: " + buf.data.name, 3);
@@ -62,16 +61,30 @@ if (isMainThread) {
                                 if (!buf.data.address)
                                     packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
                                 else packet = { address: buf.data.address, unit: buf.data.unit };
+                                sendPacket("HA");
+                            } else {
+                                packet = { address: ent.owner.name }
+                                if (ent.owner.type.includes("ha")) {
+                                    if (ent.zha) packet.zha = ent.zha.regID;
+                                    sendPacket("HA");
+                                } else {
+                                    packet.esp_entity_id = ent.esp_entity_id;
+                                    sendPacket("ESP");
+                                }
                             }
-                            if (ent?.owner?.type == "ha" || buf.data.unit) {
+                            function sendPacket(type) {
                                 if (packet) {
                                     packet.type = "state";
                                     packet.entity = buf.data.name;
                                     packet.state = buf.data.state;
-                                    thread.ha.postMessage(packet);
-                                }
-                                else log("client - " + color("purple", buf.name)
-                                    + " - is sending invalid HA state update: " + buf.data.name, 3);
+                                    //  console.log(packet)
+                                    if (type == "HA") thread.ha.postMessage(packet);
+
+                                    if (type == "ESP") thread.esp[entity[buf.data.name].owner.thread].postMessage(packet);
+                                } else log("client - " + color("purple", buf.name)
+                                    + " - is sending invalid " + type + " state update: " + buf.data.name, 3);
+
+                                // console.log(packet)
                             }
                         }
                         break;
@@ -171,28 +184,29 @@ if (isMainThread) {
                 }
             },
             ipc: function (data) {      // Incoming inter process communication 
-                //  console.log(data.type)
+                // console.log(data.type)
                 switch (data.type) {
                     case "esp":
                         switch (data.class) {
                             case "newEntity":
                                 if (!(data.obj.name in entity)) {
-                                    //  console.log("new device:", data);
+                                    // console.log("new device:", data);
                                     log("ESP Home - " + color("cyan", data.esp) + " - registering new entity: " + data.obj.name, 2, 0);
                                     entity[data.obj.name] ||= {
                                         client: {},
                                         owner: { type: "esp", name: data.esp },
-                                        update: time.epochMil,
-                                        stamp: time.stamp,
-                                        state: null,
                                     };
                                 } else {
                                     log("ESP Home - " + color("cyan", data.esp) + " - registering existing entity: " + data.obj.name, 2, 0);
-                                    entity[data.obj.name].owner = { type: "esp", name: data.esp };
-                                    entity[data.obj.name].update = time.epochMil;
-                                    entity[data.obj.name].stamp = time.stamp;
-                                    entity[data.obj.name].state = null;
+
                                 }
+                                // entity[data.obj.name].owner = { type: "esp", name: data.esp };
+                                entity[data.obj.name].update = time.epochMil;
+                                entity[data.obj.name].stamp = time.stamp;
+                                entity[data.obj.name].state = null;
+                                entity[data.obj.name].esp_entity_id = data.obj.esp_entity_id;
+                                entity[data.obj.name].owner.name = data.esp;
+                                entity[data.obj.name].owner.thread = data.thread;
                                 // console.log("new entity:", entity[data.obj.name]);
                                 break;
                             case "reset":
@@ -213,6 +227,9 @@ if (isMainThread) {
                                     entity[data.obj.name].update = time.epoch;
                                     entity[data.obj.name].stamp = time.stamp;
                                     entity[data.obj.name].state = data.obj.state;
+                                    entity[data.obj.name].esp_entity_id = data.obj.esp_entity_id;
+                                    entity[data.obj.name].owner.name = data.esp;
+                                    entity[data.obj.name].owner.thread = data.thread;
                                     for (const name in entity[data.obj.name].client) {
                                         // console.log("sending esp state update to client: ", name);
                                         if (entity[data.obj.name].client[name].port)
@@ -229,20 +246,21 @@ if (isMainThread) {
                     case "ha":
                         switch (data.class) {
                             case "state":
-                                // let entity_id = data.name
+                                //   console.log(data);
                                 if (data.name in entity) {
                                     // console.log(entity[data.name])
-                                    for (const name in entity[data.name].client) {
-                                        log("Websocket (" + color("cyan", data.address) + ") - state update for: "
-                                            + data.name + " - to client: " + name, 1, 0);
-                                        //  console.log(entity[data.name])
-                                        entity[data.name].owner ||= { type: "ha", name: data.address };
-                                        entity[data.name].state = data.state;
-                                        entity[data.name].update = time.epochMil;
-                                        entity[data.name].stamp = time.stamp;
-                                        client("state", { name: data.name, state: data.state }, state.client[name].port);
-                                    }
-                                    //   console.log(data);
+                                    try {
+                                        for (const name in entity[data.name].client) {
+                                            log("Websocket (" + color("cyan", data.address) + ") - state update for: "
+                                                + data.name + " - to client: " + name, 1, 0);
+                                            //  console.log(entity[data.name])
+                                            entity[data.name].owner ||= { type: "ha", name: data.address };
+                                            entity[data.name].state = data.state;
+                                            entity[data.name].update = time.epochMil;
+                                            entity[data.name].stamp = time.stamp;
+                                            client("state", { name: data.name, state: data.state }, state.client[name].port);
+                                        }
+                                    } catch (error) { console.log("error sending HA State update to client: ", error) }
                                 }
                                 break;
                             case "result":
@@ -251,7 +269,8 @@ if (isMainThread) {
                                     // console.log("adding new entity: " + data.name);
                                     log("Websocket (" + color("cyan", data.address) + ") - adding new entity: "
                                         + color("cyan", data.name, false), 1, 0);
-                                }
+                                } else log("Websocket (" + color("cyan", data.address) + ") - adding existing entity: "
+                                    + color("cyan", data.name, false), 1, 0);
                                 entity[data.name].owner ||= { type: "ha", name: data.address };
                                 entity[data.name].state = data.state;
                                 entity[data.name].update = time.epochMil;
@@ -266,10 +285,11 @@ if (isMainThread) {
                                             deviceName: data.dev.name
                                         }
                                     };
-                                    log("Websocket (" + color("cyan", data.address) + ") - adding ZHA device: "
+                                    log("Websocket (" + color("cyan", data.address) + ") - adding new ZHA device: "
                                         + color("cyan", data.name, false), 1, 0);
                                     // console.log("adding new entity: " + name);
-                                }
+                                } else log("Websocket (" + color("cyan", data.address) + ") - adding existing ZHA device: "
+                                    + color("cyan", data.name, false), 1, 0);
                                 entity[data.name].owner ||= { type: "ha_zha", name: data.address };
                                 entity[data.name].state = null;
                                 entity[data.name].update = time.epochMil;
@@ -280,7 +300,8 @@ if (isMainThread) {
                                     //  console.log(entity[name])
                                     try {
                                         if (data.name in entity[name].client) {
-                                            log("Websocket (" + color("cyan", data.address) + ") - fetch reply: " + name, 1, 0);
+                                            log("Websocket (" + color("cyan", data.address) + ") - fetch reply to client: "
+                                                + color("purple", data.name) + " - entity: " + name, 1, 0);
                                             client("state", { name, state: entity[name].state }, data.port);
                                         }
                                     } catch (error) { console.trace("fetch crash: ", entity[name]) }
@@ -337,21 +358,24 @@ if (isMainThread) {
                         break;
                     case 2:     // state init and load modules and workers 
                         log("actual working directory: " + workingDir);
-                        thread.esp ||= [];
+
+                        /*
+                        thread.esp ||= {};
                         if (cfg.esp?.enable && cfg.esp.devices?.length > 0) { // load worker threads
-                            cfg.esp.devices.forEach((esp, x) => { newWorker(x, esp, true); });
-                            function newWorker(x, esp, boot) {
+                            cfg.esp.devices.forEach((esp, x) => { newWorker(esp, true); });
+                            function newWorker(esp, boot) {
                                 if (boot) log("initialing ESP thread: " + esp.name);
                                 else log("re-initialing crashed ESP thread: " + esp.name);
-                                thread.esp[x] = (new Worker(__filename, { workerData: { class: "esp", name: esp.name } }));
-                                thread.esp[x].on('message', (data) => sys.ipc(data));
-                                thread.esp[x].on('error', (error) => {
-                                    log("ESP worker: " + esp.name + " crashed", 0, 3); console.log(error); newWorker(x, esp);
+                                thread.esp[esp.name] = (new Worker(__filename, { workerData: { class: "esp" } }));
+                                thread.esp[esp.name].on('message', (data) => sys.ipc(data));
+                                thread.esp[esp.name].on('error', (error) => {
+                                    log("ESP worker: " + esp.name + " crashed", 0, 3); console.log(error); newWorker(esp);
                                 });
                                 //  thread.esp[x].on('exit', (code) => { log("ESP worker: " + x + " exited", 0, 3); newWorker(x, obj); });
-                                thread.esp[x].postMessage({ type: "config", esp });
+                                thread.esp[esp.name].postMessage({ type: "config", esp });
                             }
                         }
+                            */
                         if (cfg.webDiag) {
                             express.get("/el", function (request, response) { response.send(logs.esp); });
                             express.get("/log", function (request, response) { response.send(logs.sys); });
@@ -440,7 +464,103 @@ if (isMainThread) {
                         }
                         sys.boot(3);
                         break;
-                    case 3:     // connect to Home Assistant
+                    case 3:     // connect to ESP and Home Assistant
+                        thread.esp ||= [];
+                        // const thread = { esp: [] };                // will be an array of Worker objects
+                        threadAssignments = {};              // threadAssignments[threadID] = [ cfg, cfg, ... ]
+                        const MAX_PER_THREAD = 10;
+                        const WORKER_SCRIPT = __filename;          // assumes worker code (case "esp") lives in same file
+
+
+                        function distributeESPDevices(devices) {
+                            const count = Math.max(1, Math.ceil(devices.length / MAX_PER_THREAD));
+                            // create empty assignment arrays and create workers
+                            for (let tid = 0; tid < count; tid++) {
+                                threadAssignments[tid] = [];
+                                newWorkerThread(tid, true);
+                            }
+
+                            // assign devices to threads and send initial config
+                            devices.forEach((cfg, idx) => {
+                                const tid = Math.floor(idx / MAX_PER_THREAD);
+                                threadAssignments[tid].push(cfg);
+                                // post the config to that worker (worker expects { type: "config", esp: cfg, threadID })
+                                if (!thread.esp[tid]) {
+                                    // fallback: create worker if somehow missing
+                                    newWorkerThread(tid, true);
+                                }
+                                thread.esp[tid].postMessage({ type: "config", esp: cfg, threadID: tid });
+                            });
+                        }
+
+                        // admin helpers:
+                        function addDeviceToThread(cfg, threadID) {
+                            threadAssignments[threadID] = threadAssignments[threadID] || [];
+                            threadAssignments[threadID].push(cfg);
+                            thread.esp[threadID].postMessage({ type: "config", esp: cfg, threadID });
+                        }
+                        function removeDeviceFromThread(cfgName, threadID) {
+                            // main thread signals worker to close (worker will fully cleanup)
+                            if (thread.esp[threadID]) {
+                                thread.esp[threadID].postMessage({ type: "close", esp: { name: cfgName }, threadID });
+                            }
+                            if (Array.isArray(threadAssignments[threadID])) {
+                                threadAssignments[threadID] = threadAssignments[threadID].filter(c => c.name !== cfgName);
+                            }
+                        }
+
+                        // USAGE (example):
+                        distributeESPDevices(cfg.esp.devices);
+
+                        function newWorkerThread(threadID, boot = true) {
+                            if (boot) log("initializing ESP worker thread: " + threadID, 1);
+                            else log("re-initializing crashed ESP worker thread: " + threadID, 0);
+
+                            // create worker that will run the same file and enter worker branch via workerData.class === 'esp'
+                            const w = new Worker(WORKER_SCRIPT, { workerData: { class: "esp", threadID } });
+
+                            // store
+                            thread.esp[threadID] = w;
+
+                            // forward messages to your ipc routine (keeps your existing sys.ipc handling)
+                            w.on('message', (data) => {
+                                // data will already include .esp (name) and .threadID from worker send
+                                try { sys.ipc(data); } catch (e) { console.error("sys.ipc error:", e); }
+                            });
+
+                            // log and allow exit to trigger restart
+                            w.on('error', (err) => {
+                                log("ESP worker thread " + threadID + " error: " + String(err), 3);
+                                // don't restart here — 'exit' will handle restart to avoid double-restart races
+                            });
+
+                            // if a worker exits (crash or graceful) restart it and re-post configs
+                            w.on('exit', (code) => {
+                                log("ESP worker thread " + threadID + " exited with code " + code, 2);
+                                // small delay to avoid restart storms
+                                setTimeout(() => {
+                                    // re-create thread
+                                    newWorkerThread(threadID, false);
+
+                                    // re-post assigned configs (if any) after new worker is created
+                                    const assigned = threadAssignments[threadID] || [];
+                                    if (assigned.length > 0) {
+                                        assigned.forEach(cfg => {
+                                            try {
+                                                // check worker exists
+                                                if (thread.esp[threadID]) thread.esp[threadID].postMessage({ type: "config", esp: cfg, threadID });
+                                            } catch (e) {
+                                                log("Failed to re-post config " + (cfg && cfg.name) + " to restarted thread " + threadID + ": " + String(e), 3);
+                                            }
+                                        });
+                                    }
+                                }, 2000);
+                            });
+
+                            return w;
+                        }
+
+
                         if (cfg.comCache) log(color("yellow", "push caching is enabled"), 1);
                         process.on('unhandledRejection', (reason, promise) => { // to catch telegram errors
                             // console.error('Unhandled Rejection:', reason);
@@ -775,159 +895,377 @@ if (isMainThread) {
     }
     switch (workerData.class) {
         case "esp": {
-            (function init() {
-                cfg = {};
-                esp = {};
-                client = null;
-                state = {
-                    reconnect: false, reconnectState: false, boot: false, errorResetTimeout: null,
-                    checkTimer: null, checkUpdate: Math.floor(Date.now() / 1000), checkConnect: null, connected: false,
-                };
-                lib();
-            })();
-            function lib() {
-                em = new (require('events').EventEmitter)();
-                require('events').EventEmitter.defaultMaxListeners = 50;
-            }
+            const Events = require('events');
+            Events.EventEmitter.defaultMaxListeners = 50;
+            // per-connection maps
+            const cfgs = {};         // cfgs[name] = cfg object
+            const clients = {};      // clients[name] = client instance (mirror of local client)
+            const state = {};       // state[name] = state object
+            const emitters = {};     // emitters[name] = EventEmitter instance
+            const _connectionsControl = {}; // map name => { restart, destroy }
+
+            // single require of the client class
+            const EspHomeClient = require('@2colors/esphome-native-api').Client;
+
+            // small helper log (preserves your logging shape)
             function log(msg, level) { parentPort.postMessage({ type: "log", msg, module: 2, level }); }
-            function setup() {
-                // client = new (require('@2colors/esphome-native-api').Client)({});
-                espHome = require('@2colors/esphome-native-api').Client
-                client = new espHome({
-                    host: cfg.ip,
-                    port: 6053,
-                    encryptionKey: cfg.key,
+
+            // helper for connection control map
+            function connectionsMapSet(name, obj) { _connectionsControl[name] = obj; }
+            function connectionsMapGet(name) { return _connectionsControl[name]; }
+            function connectionsMapDelete(name) { delete _connectionsControl[name]; }
+
+            // destroyed connection (public helper) — used by close messages & cleanup
+            function destroyConnectionPublic(name) {
+                const ctl = connectionsMapGet(name);
+                if (ctl && ctl.destroy) ctl.destroy();
+                connectionsMapDelete(name);
+                // ensure we also remove stored maps
+                try { delete cfgs[name]; } catch (e) { }
+                try { delete clients[name]; } catch (e) { }
+                try { delete state[name]; } catch (e) { }
+                try { delete emitters[name]; } catch (e) { }
+            }
+
+            // create a single connection: each call installs an independent client + emitter + state
+            function createConnection(cfg, threadID) {
+                const name = cfg.name;
+                if (!name) { log("ESP worker - received cfg without name", 1); return; }
+
+                // if exists, destroy first for a clean reconfig
+                if (cfgs[name]) {
+                    log("ESP Home - " + name + " - reconfig requested, destroying existing connection first", 2);
+                    destroyConnectionPublic(name);
+                }
+
+                cfgs[name] = cfg;
+                emitters[name] = new Events.EventEmitter();
+                emitters[name].setMaxListeners(50);
+                state[name] = {
                     reconnect: false,
                     reconnectState: false,
-                    //  reconnectInterval: 5000,
-                    pingInterval: 3000,
-                    pingAttempts: 3,
-                    tryReconnect: false,
-                });
-                try { connect(); } catch (error) { log(error) };
-                state.checkConnect = setTimeout(() => {
-                    //   console.log(state)
-                    if (!state.connected) {
-                        if (state.reconnect == false) {
-                            log("ESP Home - " + color("cyan", cfg.name) + " - failed to connect, trying to reconnect...", 2);
-                            state.reconnect = true;
-                        }
-                        reset();
-                    } else {
-                        state.checkTimer = setInterval(() => {
-                            if ((Math.floor(Date.now() / 1000) - state.checkUpdate) >= 20) {
-                                if (state.reconnect == false) {
-                                    log("ESP Home - " + color("cyan", cfg.name) + " - isnt communicating, trying to reconnect...", 2);
-                                    state.reconnect = true;
-                                }
-                                reset();
-                            }
-                        }, 1e3);
-                    }
-                }, 10e3);
-            }
-            function reset(reconnect) {
-                log("ESP Home - " + color("cyan", cfg.name) + " - resetting", 2);
-                if (reconnect) state.reconnect = true;
-                state.connected = false;
-                state.reconnectState = true;
-                try { client.disconnect(); } catch (error) { log("ESP Home - " + color("cyan", cfg.name) + " - disconnect failed...", 2); }
-                clearTimeout(state.errorResetTimeout);
-                clearTimeout(state.keepaliveTimer);
-                clearTimeout(state.checkTimer);
-                clearTimeout(state.checkConnect);
-                state.errorResetTimeout = setTimeout(() => {
-                    em.removeAllListeners();
-                    client = {};
-                    setTimeout(() => { setup(); }, 1e3);
-                }, 5e3);
-            }
-            function connect() {
-                if (state.reconnect == true) {     // client connection function, ran for each ESP device
-                    parentPort.postMessage({ type: "esp", class: "reset", esp: cfg.name });
-                } else log("ESP Home - " + color("cyan", cfg.name) + " - trying to connect...", 1);
-                client.on('error', (error) => {
-                    if (state.reconnect == false) {
-                        log("ESP Home - " + color("cyan", cfg.name) + " - had a connection error, resetting connection...", 1);
-                        reset(true);
-                    }
-                });
-                client.on('disconnected', () => {
-                    if (state.reconnect == false) {
-                        log("ESP Home - " + color("cyan", cfg.name) + " - disconnected", 1);
-                        reset(true);
-                    }
-                });
-                client.on('newEntity', data => {
-                    // console.log(data)
-                    state.reconnect = false;
-                    parentPort.postMessage({
-                        type: "esp", class: "newEntity", esp: cfg.name,
-                        obj: { name: data.config.objectId, type: data.type }
-                    });
-                    if (data.type === "Switch") {                                 // if this is a switch, register the emitter
-                        // console.log(data.config.objectId)
-                        em.on(data.config.objectId, function (state) {        // emitter for this connection 
-                            try { data.connection.switchCommandService({ key: data.id, state: state }); }
-                            catch (e) {
-                                if (state.reconnect == false) {
-                                    log("ESP Home - " + color("cyan", cfg.name)
-                                        + " - error sending command - resetting...", 3);
-                                    reset(true);
-                                }
-                            }
-                        });
-                    }
-                    data.on('state', (update) => {
-                        state.connected = true;
-                        state.reconnect = false;
-                        state.checkUpdate = Math.floor(Date.now() / 1000);
-                        if (state.boot == false) {
-                            if (data.config.objectId.includes("wifi"))
-                                setTimeout(() => {
-                                    log("ESP Home - " + color("cyan", cfg.name) + " - connected: " + color("cyan", cfg.ip) + " - "
-                                        + color("green", data.config.objectId) + " - Signal: " + update.state);
-                                }, 10);
-                            setTimeout(() => { state.boot = true; }, 20);   // indicate booted so not to show entity names again
-                        } else {
-                            if (state.reconnectState == true) {
-                                if (data.config.objectId.includes(["wifi_", "wifi-"])) {
-                                    log("ESP Home - " + color("cyan", cfg.name) + " - reconnected: " + color("cyan", cfg.ip) + " - "
-                                        + color("green", data.config.objectId) + " - Signal: " + update.state
-                                        , ((cfg.telegram.logESPDisconnect == true) ? 2 : 1));
-                                    state.reconnectState = false;
-                                }
-                            }
-                        }
-                        parentPort.postMessage({
-                            type: "esp", class: "state", esp: cfg.name,
-                            obj: { name: data.config.objectId, state: update.state }
-                        });
+                    boot: false,
+                    errorResetTimeout: null,
+                    checkTimer: null,
+                    checkUpdate: Math.floor(Date.now() / 1000),
+                    checkConnect: null,
+                    connected: false,
+                    keepaliveTimer: null,
+                    resetInProgress: false
+                };
 
+                // LOCAL mutable client reference — important: handlers reference this variable
+                let client = null;
+
+                // ensure clients[name] mirror local client when assigned
+                function createClient() {
+                    try {
+                        const c = new EspHomeClient({
+                            host: cfg.ip,
+                            port: 6053,
+                            encryptionKey: cfg.key,
+                            reconnect: false,
+                            reconnectState: false,
+                            // reconnectInterval: 5000,
+                            pingInterval: 3000,
+                            pingAttempts: 3,
+                            tryReconnect: false,
+                        });
+                        client = c;
+                        clients[name] = c;
+                        return true;
+                    } catch (e) {
+                        log("ESP Home - " + name + " - client construction error: " + String(e), 3);
+                        return false;
+                    }
+                }
+
+                // setup/connect/reset functions
+
+                function setup() {
+                    // Always create a fresh client instance here (mirrors original single-conn flow)
+                    if (!createClient()) {
+                        // if creation failed retry after a delay
+                        state[name].errorResetTimeout = setTimeout(() => setup(), 5000);
+                        return;
+                    }
+
+                    try { connect(); } catch (error) { log("ESP Home - " + name + " - setup connect error: " + String(error), 3); }
+
+                    state.checkConnect = setTimeout(() => {
+                        if (!state.connected) {
+                            if (state.reconnect == false) {
+                                log("ESP Home - " + color("cyan", name) + " - failed to connect, trying to reconnect...", 2);
+                                state.reconnect = true;
+                            }
+                            reset();
+                        } else {
+                            // checkTimer is an interval
+                            state.checkTimer = setInterval(() => {
+                                if ((Math.floor(Date.now() / 1000) - state.checkUpdate) >= 20) {
+                                    if (state.reconnect == false) {
+                                        log("ESP Home - " + color("cyan", name) + " - isnt communicating, trying to reconnect...", 2);
+                                        state.reconnect = true;
+                                    }
+                                    reset();
+                                }
+                            }, 1e3);
+                        }
+                    }, 10e3);
+                }
+
+                // forceful clear-reset flow (prevents overlapping resets)
+                function reset(reconnect) {
+                    log("ESP Home - " + color("cyan", name) + " - resetting", 2);
+                    if (reconnect) state.reconnect = true;
+                    state.connected = false;
+                    state.reconnectState = true;
+
+                    try { if (client && client.disconnect) client.disconnect(); } catch (error) { log("ESP Home - " + color("cyan", name) + " - disconnect failed...", 2); }
+
+                    clearTimeout(state.errorResetTimeout);
+                    clearTimeout(state.keepaliveTimer);
+                    clearTimeout(state.checkTimer);
+                    clearTimeout(state.checkConnect);
+
+                    // timed forced cleanup: remove listeners, drop client reference, and re-setup
+                    state.errorResetTimeout = setTimeout(() => {
+                        try { if (emitters[name] && emitters[name].removeAllListeners) emitters[name].removeAllListeners(); } catch (e) { }
+                        try { if (client && client.removeAllListeners) client.removeAllListeners(); } catch (e) { }
+                        // best-effort destroy underlying socket if present
+                        try { if (client && client._socket && !client._socket.destroyed) client._socket.destroy(); } catch (e) { }
+                        // drop both local and stored reference
+                        client = null;
+                        clients[name] = null;
+                        // small delay, then re-setup (mirrors original timing)
+                        setTimeout(() => { setup(); }, 1e3);
+                    }, 5e3);
+                }
+
+                function connect() {
+                    if (state.reconnect == true) {     // client connection function, ran for each ESP device
+                        parentPort.postMessage({ type: "esp", class: "reset", esp: name });
+                    } else log("ESP Home - " + color("cyan", name) + " - trying to connect...", 1);
+
+                    // guard each callback to avoid throwing out of event handlers
+                    client.on('error', (error) => {
+                        try {
+                            if (state.reconnect == false) {
+                                log("ESP Home - " + color("cyan", name) + " - had a connection error, resetting connection...", 1);
+                                reset(true);
+                            }
+                        } catch (e) {
+                            log("ESP Home - " + color("cyan", name) + " - error handler threw: " + String(e), 3);
+                            reset(true);
+                        }
                     });
+
+                    client.on('disconnected', () => {
+                        try {
+                            if (state.reconnect == false) {
+                                log("ESP Home - " + color("cyan", name) + " - disconnected", 1);
+                                reset(true);
+                            }
+                        } catch (e) {
+                            log("ESP Home - " + color("cyan", name) + " - disconnected handler threw: " + String(e), 3);
+                            reset(true);
+                        }
+                    });
+
+                    client.on('newEntity', data => {
+                        try {
+                            state.reconnect = false;
+
+                            parentPort.postMessage({
+                                type: "esp", class: "newEntity", esp: name, thread: threadID,
+                                obj: { name: data.config.objectId, type: data.type, esp_entity_id: data.id, }
+                            });
+
+                            if (data.type === "Switch") {
+                                emitters[name].on(data.config.objectId, function (st) {
+                                    try { data.connection.switchCommandService({ key: data.id, state: st }); }
+                                    catch (e) {
+                                        if (state.reconnect == false) {
+                                            log("ESP Home - " + color("cyan", name) + " - error sending command - resetting...", 3);
+                                            reset(true);
+                                        }
+                                    }
+                                });
+                            }
+                            data.on('state', (update) => {
+                                try {
+                                    state.connected = true;
+                                    state.reconnect = false;
+                                    state.checkUpdate = Math.floor(Date.now() / 1000);
+                                    if (state.boot == false) {
+                                        if (data.config.objectId.includes("wifi"))
+                                            setTimeout(() => {
+                                                log("ESP Home - " + color("cyan", name) + " - connected: " + color("cyan", cfg.ip) + " - "
+                                                    + color("green", data.config.objectId) + " - Signal: " + update.state);
+                                            }, 10);
+                                        setTimeout(() => { state.boot = true; }, 20);
+                                    } else {
+                                        if (state.reconnectState == true) {
+                                            if (data.config.objectId.includes(["wifi_", "wifi-"])) {
+                                                log("ESP Home - " + color("cyan", name) + " - reconnected: " + color("cyan", cfg.ip) + " - "
+                                                    + color("green", data.config.objectId) + " - Signal: " + update.state
+                                                    , ((cfg.telegram && cfg.telegram.logESPDisconnect == true) ? 2 : 1));
+                                                state.reconnectState = false;
+                                            }
+                                        }
+                                    }
+                                    parentPort.postMessage({
+                                        type: "esp", class: "state", esp: name, thread: threadID,
+                                        obj: { name: data.config.objectId, state: update.state, esp_entity_id: data.id }
+                                    });
+                                } catch (e) {
+                                    log("ESP Home - " + color("cyan", name) + " - state handler error: " + String(e), 3);
+                                }
+                            });
+                        } catch (e) {
+                            log("ESP Home - " + color("cyan", name) + " - newEntity handler error: " + String(e), 3);
+                            reset(true);
+                        }
+                    });
+
+                    try { client.connect(); } catch (error) { log("ESP Home - " + color("cyan", name) + " - client connect error: " + String(error)); }
+                }
+
+                // expose control methods for this connection
+                connectionsMapSet(name, {
+                    restart: () => reset(true),
+                    destroy: () => {
+                        // destroy: immediately clear timers and listeners and delete maps
+                        try { if (clients[name] && clients[name].disconnect) clients[name].disconnect(); } catch (e) { }
+                        try {
+                            if (state[name]) {
+                                clearTimeout(state[name].errorResetTimeout);
+                                clearTimeout(state[name].keepaliveTimer);
+                                if (state[name].checkTimer) clearInterval(state[name].checkTimer);
+                                clearTimeout(state[name].checkConnect);
+                            }
+                        } catch (e) { }
+                        try { if (emitters[name]) emitters[name].removeAllListeners(); } catch (e) { }
+                        // delete stored objects
+                        delete cfgs[name];
+                        delete clients[name];
+                        delete state[name];
+                        delete emitters[name];
+                        // clear control map entry
+                        connectionsMapDelete(name);
+                    }
                 });
-                try { client.connect(); } catch (error) { log("ESP Home - " + color("cyan", cfg.name) + " - client connect error: " + error) };
-            }
+
+                // start the connection lifecycle
+                setup();
+            } // end createConnection
+
+            // parentPort: handle messages
             parentPort.on('message', (data) => {
-                switch (data.type) {
-                    case "config": cfg = data.esp; setup(); break;
-                    case "send": em.emit(data.name, data.id, data.state); break;
+                try {
+                    switch (data.type) {
+                        case "config":
+                            if (!data.esp || !data.esp.name) {
+                                log("ESP worker - received config without esp.name", 1);
+                                break;
+                            }
+                            createConnection(data.esp, data.threadID);
+                            break;
+
+                        case "state": {
+                            let target = (data.esp && data.esp.name) || data.espName || data.name || data.esp;
+                            if (!target) {
+                                const keys = Object.keys(emitters);
+                                if (keys.length === 1) target = keys[0];
+                            }
+                            if (!target) {
+                                log("ESP worker - state message missing target esp name and multiple connections exist", 1);
+                                break;
+                            }
+                            const e = emitters[target];
+                            if (!e) {
+                                log("ESP worker - state message for unknown esp: " + String(target), 1);
+                                break;
+                            }
+                            e.emit(data.entity, data.state);
+                            break;
+                        }
+
+                        case "close": {
+                            const targetClose = (data.esp && data.esp.name) || data.espName || data.name || data.esp;
+                            if (!targetClose) {
+                                log("ESP worker - close message missing esp.name", 1);
+                                break;
+                            }
+                            destroyConnectionPublic(targetClose);
+                            break;
+                        }
+
+                        case "restart": {
+                            const t = (data.esp && data.esp.name) || data.espName || data.name || data.esp;
+                            if (!t) {
+                                log("ESP worker - restart message missing esp.name", 1);
+                                break;
+                            }
+                            const ctl = connectionsMapGet(t);
+                            if (ctl && ctl.restart) ctl.restart();
+                            else log("ESP worker - restart requested for unknown esp: " + t, 1);
+                            break;
+                        }
+
+                        default:
+                            break;
+                    }
+                } catch (e) {
+                    log("ESP worker - error handling parent message: " + String(e), 3);
                 }
             });
 
+            // Graceful process-level handlers: attempt local cleanup before exiting so main thread can restart worker
+            process.on('uncaughtException', (err) => {
+                try {
+                    log("ESP worker - uncaughtException: " + String(err), 3);
+                    // attempt destroying all active connections
+                    for (const nm of Object.keys(_connectionsControl)) {
+                        try {
+                            const ctl = _connectionsControl[nm];
+                            if (ctl && ctl.destroy) ctl.destroy();
+                        } catch (e) { /* swallow cleanup errors */ }
+                    }
+                } catch (e) {
+                    // fallthrough
+                } finally {
+                    // allow main to restart this worker
+                    setTimeout(() => process.exit(1), 100);
+                }
+            });
+
+            process.on('unhandledRejection', (reason) => {
+                try {
+                    log("ESP worker - unhandledRejection: " + String(reason), 3);
+                    for (const nm of Object.keys(_connectionsControl)) {
+                        try {
+                            const ctl = _connectionsControl[nm];
+                            if (ctl && ctl.destroy) ctl.destroy();
+                        } catch (e) { /* swallow */ }
+                    }
+                } finally {
+                    setTimeout(() => process.exit(1), 100);
+                }
+            });
             break;
         }
         case "ha": {
             (function start() {
                 cfg = {};
-                ws = [];
+                ws = {};
+                em = {};
                 client = null;
-                state = { ha: [], perf: { ha: [] } };
+                state = { ha: {}, perf: { ha: {} }, entityTotal: 0 };
                 logs = { ws: [], zhaDevices: [] };
                 lib();
             })();
             function lib() {
-                em = new (require('events').EventEmitter)();
                 require('events').EventEmitter.defaultMaxListeners = 50;
                 http = require("http");
                 http.Agent({ keepAlive: true });
@@ -936,68 +1274,72 @@ if (isMainThread) {
             function log(msg, level) { parentPort.postMessage({ type: "log", msg, module: 1, level }); }
             function init() {
                 for (let x = 0; x < cfg.length; x++) {
-                    logs.ws.push([]);
-                    state.ha.push({
+                    let config = cfg[x];
+                    em[config.address] = new (require('events').EventEmitter)();
+                    logs ||= { ws: {}, zhaDevices: {} };
+                    logs.ws[config.address] ||= [];
+                    state[config.address] ||= {
+                        entityTotal: 0, id: 0, logStep: 0,
+                        zha: { queryReply: null },
+                        timer: { reconnect: null },
+                        log: { ws: [], zhaDevices: {} }
+                    };
+                    state[config.address].perf ||= {
                         best: 1000,
                         worst: 0,
                         average: 0,
-                        id: 0,
                         start: 0,
                         wait: false,
                         last100Pos: 0,
                         last100: [],
-                        zha: { devices: {} },
-                    });
-                    state.perf.ha.push({
-                        best: 1000,
-                        worst: 0,
-                        average: 0,
-                        id: 0,
-                        start: 0,
-                        wait: false,
-                        last100Pos: 0,
-                        last100: [],
-                    });
-                    ws.push(new WebSocketClient());
+                    };
+                    ws[config.address] ||= new WebSocketClient();
                 };
             }
-            function api(haNum) {
-                ws.push({});
-                let server = state.ha[haNum];
-                let config = cfg[haNum];
-                ws[haNum].connect("ws://" + config.address + ":" + config.port + "/api/websocket");
-                ws[haNum].on('connectFaileZd', function (error) { if (!server.error) { log(error.toString(), 3); server.error = true; } });
-                ws[haNum].on('connect', function (socket) {
-                    log("Websocket (" + color("cyan", config.address) + ") - starting connection", 0);
-                    server.reply = true;
-                    server.online = true;
-                    server.error = false;
+            function api(config, address, state) {
+                ws[address].connect("ws://" + address + ":" + config.port + "/api/websocket");
+                ws[address].on('connectFailed', function (error) {
+                    if (!state.error) {
+                        //  log(error.toString(), 3);
+                        state.error = true;
+                        setTimeout(() => { haReconnect(error.toString()); }, 5e3);
+                    }
+                });
+                ws[address].on('connect', function (socket) {
+                    log("Websocket (" + color("cyan", address) + ") - starting connection", 0);
+                    state.reply = true;
+                    state.online = true;
+                    state.error = false;
                     socket.on('error', function (error) {
-                        if (!server.error) { log("websocket (" + color("cyan", config.address) + ") - " + error.toString(), 3); server.error = true; }
+                        if (!state.error) { log("websocket (" + color("cyan", address) + ") - " + error.toString(), 3); state.error = true; }
+                        socket.close();
                     });
                     socket.on('message', function (message) {
                         let buf = JSON.parse(message.utf8Data);
                         // console.log(buf)
                         switch (buf.type) {
                             case "pong":
-                                server.reply = true;
-                                server.retry = false;  // to prevent repeated retry errors 
-                                server.online = true;
-                                server.pingsLost = 0;
+                                state.reply = true;
+                                state.retry = false;  // to prevent repeated retry errors 
+                                state.online = true;
+                                state.pingsLost = 0;
                                 let timeFinish = new Date().getMilliseconds();
-                                let timeResult = timeFinish - server.timeStart;
-                                if (timeResult > 1000) log("websocket (" + color("cyan", config.address) + ") ping is lagging - delay is: " + timeResult + "ms", 0);
+                                let timeResult = timeFinish - state.timeStart;
+                                if (timeResult > 1000) log("websocket (" + color("cyan", address) + ") ping is lagging - delay is: " + timeResult + "ms", 0);
                                 break;
                             case "result":
+                                let count = 0;
                                 //    console.log(buf)
-                                if (buf.id == server.query) {
+                                if (buf.id == state.query) {
                                     for (let x = 0; x < buf.result?.length; x++) {
                                         let name = buf.result[x].entity_id;
-                                        if (/^(input|somethingElse)/.test(name)) {
+                                        if (/^(input|switch)/.test(name)) {
                                             // if (/test123|piggary/.test(name)) {
+                                            count++;
+                                            state.entityTotal++;
                                             parentPort.postMessage({
                                                 type: "ha", class: "result",
-                                                address: config.address,
+                                                address: address,
                                                 name,
                                                 state: buf.result[x].state
                                             });
@@ -1005,86 +1347,91 @@ if (isMainThread) {
                                             // console.log("adding new entity: " + name);
                                         }
                                     }
-                                    if (haNum == (cfg.length - 1)) {
-                                        log("Websocket (" + color("cyan", config.address) + ") - received fetch data from all HA servers", 1);
-                                        if (server.clientFetch) {
+                                    log("Websocket (" + color("cyan", address)
+                                        + ") - received fetch data, total: " + count + " entities", 1);
+                                    if (address == (cfg[(cfg.length - 1)].address)) {
+                                        log("Websocket (" + color("cyan", address)
+                                            + ") - all fetches done  - total entities: "
+                                            + buf.result?.length + " - using: " + state.entityTotal + " entities", 1);
+                                        state.entityTotal = 0;
+                                        if (state.clientFetch) {
                                             parentPort.postMessage({
                                                 type: "ha", class: "fetch",
-                                                address: config.address,
-                                                name: server.clientFetch.name,
-                                                port: server.clientFetch.port
+                                                address: address,
+                                                name: state.clientFetch.name,
+                                                port: state.clientFetch.port
                                             });
-                                            server.clientFetch = null;
+                                            state.clientFetch = null;
                                         }
                                     }
                                     // console.log(buf)
                                 }
-                                if (buf.id == server.zha.query) {
-                                    server.zha.devices ||= {};
+                                if (buf.id == state.zha.query) {
+                                    state.zha.devices ||= {};
                                     if (Array.isArray(buf.result)) {
                                         buf.result.forEach(dev => {
                                             if (dev.user_given_name) {
-                                                // logs.zhaDevices[haNum] ||= [];
+                                                // logs.zhaDevices[address] ||= [];
                                                 let name = dev.user_given_name;
-                                                logs.zhaDevices[haNum].push(dev.name);
-                                                server.zha.devices[dev.device_reg_id] = { userName: dev.name, name: dev.user_given_name };
+                                                logs.zhaDevices[address].push(dev.name);
+                                                state.zha.devices[dev.device_reg_id] = { userName: dev.name, name: dev.user_given_name };
                                                 parentPort.postMessage({
                                                     type: "ha", class: "result_zha",
-                                                    address: config.address,
+                                                    address: address,
                                                     name,
                                                     dev
                                                 });
-                                                // console.log("adding new entity: ", entity[name]);
+                                                //  if (dev.user_given_name.includes("Bedroom")) console.log("adding new entity: ", dev);
                                             }
                                         });
                                         // console.log("adding new entity: ", entity);
-                                        //console.log(server.zha.devices)
-                                        log("Websocket (" + color("cyan", config.address) + ") - received ZHA device list, items: "
+                                        //console.log(state.zha.devices)
+                                        log("Websocket (" + color("cyan", address) + ") - received ZHA device list, items: "
                                             + buf.result.length);
-                                        //console.log(server.zha.devices);
-                                        clearTimeout(server.zha.queryReply);
+                                        //console.log(state.zha.devices);
+                                        clearTimeout(state.zha.queryReply);
                                     } else if (buf.error?.code == 'unknown_command') {
-                                        log("Websocket (" + color("cyan", config.address) + ") - no ZHA devices - disabling");
-                                        clearTimeout(server.zha.queryReply);
+                                        log("Websocket (" + color("cyan", address) + ") - no ZHA devices - disabling");
+                                        clearTimeout(state.zha.queryReply);
                                     } else if (buf.error?.code == 'unknown_error') {
-                                        log("Websocket (" + color("cyan", config.address) + ") - ZHA not online (yet?) - wait for retry", 2);
+                                        log("Websocket (" + color("cyan", address) + ") - ZHA not online (yet?) - wait for retry", 2);
                                     }
                                 }
                                 break;
                             case "auth_required":
-                                log("Websocket (" + color("cyan", config.address) + ") - authenticating", 0);
+                                log("Websocket (" + color("cyan", address) + ") - authenticating", 0);
                                 send({ type: "auth", access_token: config.token });
                                 break;
                             case "auth_ok":
-                                log("Websocket (" + color("cyan", config.address) + ") - connection " + color("green", "OK"));
+                                log("Websocket (" + color("cyan", address) + ") - connection " + color("green", "OK"));
 
-                                log("Websocket (" + color("cyan", config.address) + ") - subscribing HA to event listeners", 1);
-                                server.id++;
-                                send({ id: server.id++, type: "subscribe_events", event_type: "state_changed" });
-                                send({ id: server.id++, type: "subscribe_events", event_type: "zha_event" });
+                                log("Websocket (" + color("cyan", address) + ") - subscribing HA to event listeners", 1);
+                                state.id++;
+                                send({ id: state.id++, type: "subscribe_events", event_type: "state_changed" });
+                                send({ id: state.id++, type: "subscribe_events", event_type: "zha_event" });
 
                                 zhaQuery();
 
-                                log("Websocket (" + color("cyan", config.address) + ") - fetching entity states", 1);
-                                server.query = server.id;
-                                send({ id: server.id++, type: "get_states" });
+                                log("Websocket (" + color("cyan", address) + ") - fetching entity states", 1);
+                                state.query = state.id;
+                                send({ id: state.id++, type: "get_states" });
 
-                                server.timeStart = new Date().getMilliseconds();
-                                send({ id: server.id++, type: "ping" });
-                                setTimeout(() => { server.pingsLost = 0; send({ id: server.id++, type: "ping" }); server.reply = true; ping(); }, 10e3);
+                                state.timeStart = new Date().getMilliseconds();
+                                send({ id: state.id++, type: "ping" });
+                                setTimeout(() => { state.pingsLost = 0; send({ id: state.id++, type: "ping" }); state.reply = true; ping(); }, 10e3);
                                 break;
                             case "event":
                                 // console.log(buf.event)
                                 switch (buf.event.event_type) {
                                     case "zha_event":
                                         // console.log(buf.event)
-                                        if (server.zha.devices[buf.event.data.device_id] != undefined
+                                        if (state.zha.devices[buf.event.data.device_id] != undefined
                                             && buf.event.data.command != 'press_type') {
-                                            let entity_name = server.zha.devices[buf.event.data.device_id].name;
+                                            let entity_name = state.zha.devices[buf.event.data.device_id].name;
                                             let newState = buf.event.data.command;
                                             parentPort.postMessage({
                                                 type: "ha", class: "state",
-                                                address: config.address,
+                                                address: address,
                                                 name: entity_name,
                                                 state: newState
                                             });
@@ -1092,29 +1439,27 @@ if (isMainThread) {
                                         }
                                         break;
                                     case "state_changed":
-                                        if (state.perf.ha[haNum].wait == true) {
-                                            let delay = ha.perf(haNum); // Correct call: use 'ha.perf' and pass haNum
+                                        if (state.perf.wait == true) {
+                                            let delay = perf(address); // Correct call: use 'ha.perf' and pass address
                                             log("ws delay was: " + delay, 0, 0)
                                         }
                                         let ibuf, obuf;
-
-                                        if (logs.ws[haNum][server.logStep] == undefined) logs.ws[haNum].push(buf.event);
-                                        else logs.ws[haNum][server.logStep] = buf.event
-                                        if (server.logStep < 200) server.logStep++; else server.logStep = 0;
+                                        if (state.log.ws[state.logStep] == undefined) state.log.ws.push(buf.event);
+                                        else state.log.ws[state.logStep] = buf.event
+                                        if (state.logStep < 200) state.logStep++; else state.logStep = 0;
 
                                         if (buf.event.data.new_state != null) ibuf = buf.event.data.new_state.state;
                                         if (ibuf === "on") { obuf = true; }
                                         else if (ibuf === "off") { obuf = false; }
                                         else if (ibuf == null) {
-                                            log(`Websocket (${color("cyan", config.address)}) - sent null/undefined data: ${ibuf}`, 2);
+                                            log(`Websocket (${color("cyan", address)}) - sent null/undefined data: ${ibuf}`, 2);
                                         } else if (ibuf === "unavailable") {
-                                            if (cfg.telegram.logESPDisconnect)
-                                                log(`Websocket (${color("cyan", config.address)}) - Entity unavailable/offline:
+                                            log(`Websocket (${color("cyan", address)}) - Entity unavailable/offline:
                                                          ${buf.event.data.new_state.entity_id}`, 2);
                                         } else if (!isNaN(ibuf) && isFinite(ibuf)) { obuf = Number(ibuf); }
                                         else if (ibuf.length === 32) { obuf = ibuf; }  // for button entity?
                                         else {
-                                            //   log(`Websocket (${color("cyan", config.address)}) - bogus data: Entity=
+                                            //   log(`Websocket (${color("cyan", address)}) - bogus data: Entity=
                                             //              ${buf.event.data.new_state.entity_id}, Bytes=${ibuf.length}, Data=${ibuf}`, 2);
                                         }
                                         // console.log(obuf)
@@ -1122,7 +1467,7 @@ if (isMainThread) {
                                             let entity_id = buf.event.data.entity_id;
                                             parentPort.postMessage({
                                                 type: "ha", class: "state",
-                                                address: config.address,
+                                                address: address,
                                                 name: entity_id,
                                                 state: obuf
                                             });
@@ -1132,31 +1477,33 @@ if (isMainThread) {
                                 break;
                         }
                     });
-                    em.on('zhaQuery' + haNum, function (num) { zhaQuery(); });
-                    em.on('state' + config.address, function (data) { send(data); });
-                    em.on('fetch', function (data) {
+                    em[address].on('zhaQuery' + address, function () { zhaQuery(); });
+                    em[address].on('state' + address, function (data) { send(data); });
+                    em[address].on('fetch', function (data) {
                         //  console.log(data)
-                        log("Websocket (" + color("cyan", config.address) + ") - fetching entities for client: "
+                        log("Websocket (" + color("cyan", address) + ") - fetching entities for client: "
                             + color("purple", data.name) + " - port: " + color("purple", data.port), 0);
-                        server.clientFetch ||= {}
-                        server.clientFetch.name = data.name;
-                        server.clientFetch.port = data.port;
-                        server.query = server.id;
-                        send({ id: server.id++, type: "get_states" });
-                        // server.queryReply = server.id;
+                        state.clientFetch ||= {}
+                        state.clientFetch.name = data.name;
+                        state.clientFetch.port = data.port;
+                        state.query = state.id;
+                        send({ id: state.id++, type: "get_states" });
+                        // state.queryReply = state.id;
                     });
                     function send(data) {
                         let packet;
+                        //  console.log("incoming state: ", data);
                         if (data.type == "state") {
                             //  console.log("incoming state: ", data);
                             if (!data.unit) {
                                 packet = {
-                                    id: server.id++,
+                                    id: state.id++,
                                     type: "call_service",
-                                    domain: data.entity.split(".")[0],
+                                    domain: (!data.zha) ? data.entity.split(".")[0] : "switch",
                                     service: data.state == false ? 'turn_off' : 'turn_on',
-                                    target: { entity_id: data.entity }
+                                    target: (!data.zha) ? { entity_id: data.entity } : { device_id: (data.zha) }
                                 }
+                                // console.log(packet)
                                 try { socket.sendUTF(JSON.stringify(packet)); }
                                 catch (error) { log(error, 3) }
                             } else {
@@ -1168,7 +1515,7 @@ if (isMainThread) {
                                     }
                                 };
                                 const options = {
-                                    hostname: config.address,   // or your HA IP
+                                    hostname: address,   // or your HA IP
                                     port: 8123,
                                     path: `/api/states/sensor.${data.entity}`,
                                     method: "POST",
@@ -1179,7 +1526,7 @@ if (isMainThread) {
                                     }
                                 };
                                 const req = http.request(options, (res) => {
-                                    let body = "";
+                                    //  let body = "";
                                     //    res.on("data", chunk => body += chunk);
                                     //  res.on("end", () => console.log("HA response:", body));
                                 });
@@ -1194,37 +1541,39 @@ if (isMainThread) {
                         }
                     }
                     function ping() {
-                        if (server.reply == false) {
-                            if (server.pingsLost < 2) {
-                                if (!server.retry) {
-                                    log("websocket (" + color("cyan", config.address) + ") - ping was never replied in 10 sec", 3);
-                                    server.retry = true;
+                        if (state.reply == false) {
+                            if (state.pingsLost < 2) {
+                                if (!state.retry) {
+                                    log("websocket (" + color("cyan", address) + ") - ping was never replied in 10 sec", 3);
+                                    state.retry = true;
                                 }
-                                server.pingsLost++;
+                                state.pingsLost++;
                             }
                             else { socket.close(); haReconnect("ping timeout"); return; }
                         }
-                        server.reply = false;
-                        server.timeStart = new Date().getMilliseconds();
-                        send({ id: server.id++, type: "ping" });
+                        state.reply = false;
+                        state.timeStart = new Date().getMilliseconds();
+                        send({ id: state.id++, type: "ping" });
                         setTimeout(() => { ping(); }, 10e3);
                     }
-                    function haReconnect(error) {
-                        log("websocket (" + color("cyan", config.address) + ") - " + error.toString(), 3);
-                        ws[haNum].connect("ws://" + config.address + ":" + config.port + "/api/websocket");
-                        setTimeout(() => { if (server.reply == false) { haReconnect("retrying..."); } }, 10e3);
-                    }
                     function zhaQuery() {
-                        log("Websocket (" + color("cyan", config.address) + ") - querying ZHA device list... (id: " + server.id + ")");
-                        logs.zhaDevices[haNum] = [];
-                        server.zha.query = server.id;
-                        send({ id: server.id++, type: "zha/devices" });
-                        server.zha.queryReply = setTimeout(() => {
-                            log("Websocket (" + color("cyan", config.address) + ") - never replied to ZHA Device query, retrying...");
+                        log("Websocket (" + color("cyan", address) + ") - querying ZHA device list... (id: " + state.id + ")");
+                        logs.zhaDevices[address] = [];
+                        state.zha.query = state.id;
+                        send({ id: state.id++, type: "zha/devices" });
+                        state.zha.queryReply = setTimeout(() => {
+                            log("Websocket (" + color("cyan", address) + ") - never replied to ZHA Device query, retrying...");
                             zhaQuery();
                         }, 10e3);
                     }
                 });
+                function haReconnect(error) {
+                    clearTimeout(state.timer.reconnect);
+                    log("websocket (" + color("cyan", address) + ") - " + error.toString(), 3);
+                    em[address].removeAllListeners();
+                    ws[address].connect("ws://" + address + ":" + config.port + "/api/websocket");
+                    state.timer.reconnect = setTimeout(() => { if (!state.reply) { haReconnect("retrying..."); } }, 3e3);
+                }
             }
             parentPort.on('message', (data) => {
                 switch (data.type) {
@@ -1232,16 +1581,23 @@ if (isMainThread) {
                         cfg = data.cfg;
                         log("thread received configuration ");
                         init();
-                        cfg.forEach((_, x) => { api(x); });
+                        cfg.forEach((config) => { api(config, config.address, state[config.address]); });
                         break;
-                    case "fetch": em.emit('fetch', data); break;
-                    case "state": em.emit(("state" + data.address), data); break;
+                    case "fetch":
+                        cfg.forEach(element => { em[element.address].emit('fetch', data); });
+                        break;
+                    case "state":
+                        cfg.forEach(element => { em[element.address].emit(('state' + data.address), data); });
+                        break;
                 }
             });
             break;
         }
-        case "telegram":
+        case "telegram": {
 
             break;
+        }
+
+
     }
 }
