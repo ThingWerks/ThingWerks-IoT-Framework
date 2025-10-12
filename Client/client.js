@@ -224,7 +224,8 @@ let
                     slog("loading HA sync group member: " + member);
                     config.entities[member] ||= { names: [] };
                     config.entities[member].sync = [];
-                    config.entities[member].names.push("sync");
+                    if (!config.entities[member].names.includes("sync"))
+                        config.entities[member].names.push("sync");
                     sync.forEach(memberOther => {
                         if (memberOther != member)
                             config.entities[member].sync.push(memberOther);
@@ -525,15 +526,7 @@ let
                     case "reRegister":          // reregister request from server
                         if (online == true) {
                             slog("server lost sync, reregistering...");
-                            setTimeout(() => { sys.register(); }, 1e3);
-                        }
-                        break;
-                        // console.log("received coreData: ", buf.data);
-                        if (buf.data.name && buf.data.state) {
-                            if (!entity[buf.data.name]) entity[buf.data.name] = {};
-                            entity[buf.data.name].state = buf.data.state;
-                            entity[buf.data.name].update = time.epoch;
-                            if (online == true) auto.call({ name: buf.data.name, newState: buf.data.state });
+                            setTimeout(() => { sys.register(); }, 500);
                         }
                         break;
                     case "proceed":
