@@ -33,7 +33,7 @@ time = {
 if (isMainThread) {
     function com(data, info) {
         let buf = null, port = info.port; prep();
-        //  console.log(buf)
+         // console.log(buf)
         switch (buf.type) {
             case "heartbeat": try { state.client[buf.name].heartbeat = true; } catch (e) { console.log(e) } break; // start heartbeat 
             case "state":
@@ -41,31 +41,49 @@ if (isMainThread) {
                 // console.log(entity)
                 if (buf.data.name in entity || buf.data.unit) {
                     // console.log(entity[buf.data.name])
-                    let ent = entity[buf.data.name] ?? undefined, packet;
+                    let ent, packet;
                     if (buf.data.unit) {
-                        if (!entity[buf.data.name]) {
-                            log("client - " + color("purple", buf.name)
-                                + " - is registering new HA sensor: " + buf.data.name, 3);
-                            entity[buf.data.name] = {
-                                client: {}, //to prevent crash
-                                state: null,
-                                owner: { type: "automation", client: buf.name, auto: buf.auto },
+                        if (buf.data.unit === null || buf.data.unit == "core") {
+                            if (!entity[buf.data.name]) {
+                                log("client - " + color("purple", buf.name)
+                                    + " - is registering new Local/Core entity: " + buf.data.name, 3);
+                                entity[buf.data.name] = { client: {}, }
                             }
+                            ent = entity[buf.data.name] ?? undefined;
+                        } else {
+                            if (!entity[buf.data.name]) {
+                                log("client - " + color("purple", buf.name)
+                                    + " - is registering new HA sensor: " + buf.data.name, 3);
+                                entity[buf.data.name] = { client: {}, }
+                            }
+                            ent = entity[buf.data.name] ?? undefined;
+                            if (!buf.data.address)
+                                packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
+                            else packet = { address: buf.data.address, unit: buf.data.unit };
+                            sendPacket("HA");
                         }
-                        entity[buf.data.name].state = buf.data.state;
-                        entity[buf.data.name].unit = buf.data.unit;
-                        entity[buf.data.name].update = time.epochMil;
-                        entity[buf.data.name].stamp = time.stamp;
-                        if (!buf.data.address)
-                            packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
-                        else packet = { address: buf.data.address, unit: buf.data.unit };
-                        sendPacket("HA");
+                        ent.owner = { type: "automation", client: buf.name, auto: buf.auto }
+                        ent.state = buf.data.state;
+                        ent.unit = buf.data.unit;
+                        ent.update = time.epochMil;
+                        ent.stamp = time.stamp;
+
+                        ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
+                            if (value.port != port)
+                                client("state", { name: buf.data.name, state: buf.data.state }, value.port);
+                        })
+
                     } else {
-                        packet = { address: ent.owner.name }
-                        if (ent.owner.type.includes("ha")) {
+                        ent = entity[buf.data.name];
+                        try { packet = { address: ent.owner.name } } catch {
+                            log("client - " + color("purple", buf.name)
+                                + " - is setting the state for an entity: " + color("cyan", buf.data.name)
+                                + " that " + color("red", "DOES NOT EXIST"), 3, 3);
+                        }
+                        if (ent.owner?.type?.includes("ha")) {
                             if (ent.zha) packet.zha = ent.zha.regID;
                             sendPacket("HA");
-                        } else {
+                        } else if (packet) {
                             packet.esp_entity_id = ent.esp_entity_id;
                             sendPacket("ESP");
                         }
@@ -111,25 +129,32 @@ if (isMainThread) {
                 break;
             case "fetch":
                 log("client - " + color("purple", buf.name) + " - requesting fetch - port: " + port, 3);
-                if (cfg.homeAssistant?.length > 0) thread.ha.postMessage({ type: "fetch", name: buf.name, port });
-                else {
+                // console.log("time now: " + time.epoch + " -  last fetch: " + (time.epoch - state.fetchLast))
+                if ((time.epoch - state.fetchLast) < 60) fetchReply()
+                else if (cfg.homeAssistant?.length > 0) {
+                    thread.ha.postMessage({ type: "fetch", name: buf.name, port });
+                    //  state.fetchLast = time.epoch;
+                }
+                else fetchReply();
+                function fetchReply() {
                     for (const name in entity) {
                         if (buf.name in entity[name].client) {
                             log("local entities fetch reply: " + name, 1, 0);
                             client("state", { name, state: entity[name].state }, port);
                         }
                     }
-                    client("fetchReply", null, port);
+                    log("client - " + color("purple", buf.name) + " - replying with cached fetch - port: " + port, 3);
+                    setTimeout(() => { client("fetchReply", null, port); }, 500);
                 }
                 break;
             case "prune":
                 if (buf.data in entity) {
                     log("client - " + color("cyan", buf.name) + " - requesting prune of: " + buf.data + " - unregistering", 3, 1);
                     delete entity[buf.data].client[buf.name];
-                    if (Object.keys(entity[buf.data].client).length === 0) {
-                        log("client - " + color("cyan", buf.name) + " - entity: " + buf.data + " has no more associations - deleting", 3, 1);
-                        delete entity[buf.data];
-                    }
+                    //  if (Object.keys(entity[buf.data].client).length === 0) {
+                    //     log("client - " + color("cyan", buf.name) + " - entity: " + buf.data + " has no more associations - deleting", 3, 1);
+                    //     delete entity[buf.data];
+                    //  }
                 }
                 break;
             case "log":         // incoming log messages from UDP clients
@@ -139,7 +164,10 @@ if (isMainThread) {
                 log("receiving telegram data: " + buf.obj, 4, 0);
                 switch (buf.obj.class) {
                     case "send":
-                        bot.sendMessage(buf.obj.id, buf.obj.data, buf.obj.obj).catch(error => { log("telegram sending error") })
+                        bot.sendMessage(buf.obj.id, buf.obj.data, buf.obj.obj).catch(error => {
+                            log("telegram sending error");
+                            console.log(error)
+                        })
                         break;
                 }
                 break;
@@ -176,10 +204,21 @@ if (isMainThread) {
         for (const name in state.client) {
             if (state.client[name].heartbeat && time.epoch - state.client[name].update >= 5) {
                 log("client - " + color("purple", name) + " - has crashed!!", 3, cfg.logging.clientCrash ? 3 : 0);
+                deleteReg();
                 delete state.client[name];
             } else if (time.epoch - state.client[name].update >= 10) {
                 log("client - " + color("purple", name) + " - is a zombie, killing client", 3, cfg.logging.clientCrash ? 3 : 0);
+                deleteReg()
                 delete state.client[name];
+            }
+            function deleteReg() {
+                entity.forIn((entityName, value) => {
+                    if (name in value.client) {
+                        log("client - " + color("purple", name) + " - clearing client registration for entity: "
+                            + entityName, 3, 0);
+                        delete value.client[name];
+                    }
+                })
             }
         }
     }
@@ -216,7 +255,9 @@ if (isMainThread) {
                         //  if (state.esp[data.esp] != undefined) state.esp[data.esp].entity = [];
                         break;
                     case "state":
-                        //  console.log("incoming state change: ", state.esp[data.esp].entity[data.obj.io]);
+                        if (data.obj.name.includes("test-led"))
+                            log("ESP Home - " + color("cyan", data.esp) + " - incoming state change: "
+                                + data.obj.state + " - for entity: " + data.obj.name, 2, 0);
                         //  console.log(data);
                         entity[data.obj.name] ||= {
                             client: {},
@@ -255,8 +296,8 @@ if (isMainThread) {
                                 for (const name in entity[data.name].client) {
                                     log("Websocket (" + color("cyan", data.address) + ") - state update for: "
                                         + data.name + " - to client: " + name, 1, 0);
-                                    //  console.log(entity[data.name])
-                                    entity[data.name].state = data.state;
+                                    // console.log(entity[data.name])
+                                    entity[data.name].state = (data.state == "on") ? true : (data.state == "off") ? false : "null";
                                     entity[data.name].owner ||= { type: "ha", name: data.address };
                                     entity[data.name].update = time.epochMil;
                                     entity[data.name].stamp = time.stamp;
@@ -265,18 +306,22 @@ if (isMainThread) {
                             } catch (error) { console.log("error sending HA State update to client: ", error) }
                         } else {
                             log("Websocket (" + color("cyan", data.address) + ") - state update for: "
-                                + data.name + " - to client: " + name + " - but this sensor in UNKNOWN", 1, 2);
+                                + data.name + " - but this sensor in UNKNOWN", 1, 2);
                         }
                         break;
                     case "result":
+                        state.fetchLast = time.epoch;
                         if (!(data.name in entity)) {
                             entity[data.name] = { client: {}, state: null, };
                             // console.log("adding new entity: " + data.name);
                             log("Websocket (" + color("cyan", data.address) + ") - adding new entity: "
                                 + color("cyan", data.name, false), 1, 0);
-                        } else log("Websocket (" + color("cyan", data.address) + ") - adding existing entity: "
-                            + color("cyan", data.name, false), 1, 0);
-                        entity[data.name].state = data.state;
+                        } else {
+                            // console.log("adding existing entity: " + data.name);
+                            log("Websocket (" + color("cyan", data.address) + ") - adding existing entity: "
+                                + color("cyan", data.name, false), 1, 0);
+                        }
+                        entity[data.name].state = (data.state == "on") ? true : (data.state == "off") ? false : undefined;
                         entity[data.name].owner ||= { type: "ha", name: data.address };
                         entity[data.name].update = time.epochMil;
                         entity[data.name].stamp = time.stamp;
@@ -348,7 +393,6 @@ if (isMainThread) {
                 log("actual working directory: " + workingDir);
                 log("initializing system states done");
                 log("Loading non-volatile data...");
-                if (cfg.comCache) log(color("yellow", "push caching is enabled"), 1);
                 fs.readFile(workingDir + "/nv-core.json", function (err, data) {
                     if (err) {
                         log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
@@ -394,7 +438,8 @@ if (isMainThread) {
                     });
                     express.get("/client/:name", async function (request, response) {
                         const clientName = request.params.name;  // Extract client name from the URL
-                        const client = state.client.find(c => c.name.toLowerCase() === clientName);  // Find the client by name
+                        const client = state.client[clientName] ?? undefined  // Find the client by name
+                        // console.log(state.client[clientName])
                         if (client == undefined) return response.status(404).send({ error: `Client with name "${clientName}" not found` });
                         try {
                             const result = await sendDiagCommand(client, 1000);  // Timeout of 1000ms
@@ -411,12 +456,13 @@ if (isMainThread) {
                                 resolve({ name: client.name, ip: client.ip, error: `Timeout for client: ${client.name}` });
                             }, timeout);
                             const onDiagResponse = (msg) => {
+                                console.log(msg)
                                 let buf = JSON.parse(msg);
-                                if (buf.clientId === client.id) {
-                                    clearTimeout(timer); // Clear the timeout if response received
-                                    resolve({ client: client.name, config: buf.obj?.config, state: buf.obj?.state, nv: buf.obj?.nv });
-                                    console.log(buf.obj?.state)
-                                }
+                                console.log(buf)
+                                clearTimeout(timer); // Clear the timeout if response received
+                                resolve({ client: buf.name, buf });
+
+
                             };
                             udp.once("message", onDiagResponse); // Use `once` to only listen for one response per client
                         });
@@ -568,12 +614,19 @@ if (isMainThread) {
                 udp.on('message', (msg, info) => { com(msg, info); });
                 udp.bind(65432, "127.0.0.1");
                 setInterval(() => { watchDog(); }, 1e3);
-                setTimeout(() => { log("TW Core just went online", 0, 2); }, 20e3);
+                setTimeout(() => {
+                    //  console.log(cfg.telegram?.users)
+                    cfg.telegram?.users?.forEach(user => {
+                        bot.sendMessage(user, "ThingWerks Core just went ONLINE")
+                            .catch(error => { console.log(error); })
+                    });
+                    log("TW Core just went online", 0, 2);
+                }, 4e3);
                 break;
         }
     }
     function init() { // initialize system volatile memory
-        state = { client: {}, perf: { ha: [] }, };
+        state = { client: {}, perf: { ha: [] }, fetchLast: null };
         entity = {};
         thread = { ha: {}, esp: [], telegram: null };
         ws = [];
@@ -684,17 +737,20 @@ if (isMainThread) {
             if (logs.sys[logs.step] == undefined) logs.sys.push(buf); else logs.sys[logs.step] = buf;
             if (logs.step < 500) logs.step++; else logs.step = 0;
             if (cfg.rocket.enable && level > 0) sendRocket(buf);
-            if (cfg.telegram != undefined && cfg.telegram.enable == true && state.telegram.started == true) {
+            if (cfg.telegram?.enable && state.telegram.started && cfg.telegram.users) {
                 if (level >= cfg.telegram.logLevel || level == 0 && cfg.telegram.logDebug == true) {
                     try {
+                        console.log(cfg.telegram)
                         for (let x = 0; x < cfg.telegram.users.length; x++) {
                             if (cfg.telegram.logESPDisconnect == false) {
                                 if (!message.includes("ESP Home went offline, resetting ESP system:")
                                     && !message.includes("ESP Home is reconnected: ")
                                     && !message.includes("ESP Home has gone offline: ")) {
-                                    bot.sendMessage(cfg.telegram.users[x], buf).catch(error => { log("telegram sending error") })
+                                    bot.sendMessage(cfg.telegram.users[x], buf).catch(error => {
+                                        log("telegram sending error"); console.log(error);
+                                    })
                                 }
-                            } else bot.sendMessage(cfg.telegram.users[x], buf).catch(error => { log("telegram sending error") })
+                            } else bot.sendMessage(cfg.telegram.users[x], buf).catch(error => { log("telegram sending error"); console.log(error) })
                         }
                     } catch (error) { console.log(error, "\nmessage: " + message + "  - Mod: " + mod) }
                 }
@@ -703,7 +759,10 @@ if (isMainThread) {
                 if (level != 0) {
                     if (cfg.logging.client) console.log(ubuf);
                     client("log", ubuf, port);
-                } else if (cfg.logging.debug == true) client("log", ubuf, port);
+                } else if (cfg.logging.debug == true) {
+                    if (cfg.logging.clientDebug == true) console.log(ubuf);
+                    client("log", ubuf, port);
+                }
             } else if (level == 0 && cfg.logging.debug == true) console.log(cbuf);
             else if (level != 0) console.log(cbuf);
             return buf;
@@ -990,7 +1049,7 @@ if (isMainThread) {
 
                 // forceful clear-reset flow (prevents overlapping resets)
                 function reset(reconnect) {
-                    log("ESP Home - " + color("cyan", name) + " - address: " + color("cyan", cfg.ip) + " - resetting", 1);
+                    log("ESP Home - " + color("cyan", name) + " - disconnected: " + color("cyan", cfg.ip) + " - resetting", 1);
                     if (reconnect) state[name].reconnect = true;
                     state[name].connected = false;
                     state[name].reconnectState = true;
@@ -1019,13 +1078,13 @@ if (isMainThread) {
                 function connect() {
                     if (state[name].reconnect == true) {     // client connection function, ran for each ESP device
                         parentPort.postMessage({ type: "esp", class: "reset", esp: name });
-                    } else log("ESP Home - " + color("cyan", name) + " - address: " + color("cyan", cfg.ip) + " - trying to connect...", 1);
+                    } else log("ESP Home - " + color("cyan", name) + " - connecting: " + color("cyan", cfg.ip) + " - trying to connect...", 1);
 
                     // guard each callback to avoid throwing out of event handlers
                     client.on('error', (error) => {
                         try {
                             if (state[name].reconnect == false) {
-                                log("ESP Home - " + color("cyan", name) + " - address: " + color("cyan", cfg.ip)
+                                log("ESP Home - " + color("cyan", name) + " - disconnected: " + color("cyan", cfg.ip)
                                     + " - had a connection error, resetting connection...", 2);
                                 reset(true);
                             }
@@ -1052,7 +1111,7 @@ if (isMainThread) {
                             state[name].reconnect = false;
                             // console.log(state )
                             if (state[name].boot == 0) {
-                                log("ESP Home - " + color("cyan", name) + " - address: " + color("cyan", cfg.ip)
+                                log("ESP Home - " + color("cyan", name) + " - connected: " + color("cyan", cfg.ip)
                                     + " - " + color("green", "ONLINE"), 1);
                                 state[name].boot = 1;
                             }
@@ -1063,7 +1122,11 @@ if (isMainThread) {
 
                             if (data.type === "Switch") {
                                 emitters[name].on(data.config.objectId, function (st) {
-                                    try { data.connection.switchCommandService({ key: data.id, state: st }); }
+                                    try {
+                                        log("ESP Home - " + color("cyan", name) + " - sending state command: " + st + " - to switch: " +
+                                            data.config.objectId, 0);
+                                        data.connection.switchCommandService({ key: data.id, state: st });
+                                    }
                                     catch (e) {
                                         if (state[name].reconnect == false) {
                                             log("ESP Home - " + color("cyan", name) + " - error sending command - resetting...", 3);
@@ -1252,7 +1315,7 @@ if (isMainThread) {
             function lib() {
                 require('events').EventEmitter.defaultMaxListeners = 50;
                 http = require("http");
-                http.Agent({ keepAlive: true });
+                http.Agent({ keepAlive: true }); // to speed up rest repeat calls (sensor push)
                 WebSocketClient = require('websocket').client;
             }
             function log(msg, level) { parentPort.postMessage({ type: "log", msg, module: 1, level }); }
