@@ -17,7 +17,7 @@ global.file = {
             function writeFile() {
                 // slog("writing NV data...");
                 timer.fileWriteLast = time.epoch;
-                fs.writeFile(workingDir + "/nv-" + lname + "-bak.json", JSON.stringify(nvMem[name], null, 2), function () {
+                fs.writeFile(workingDir + "/nv-" + lname + "-bak.json", JSON.stringify(nv[name], null, 2), function () {
                     fs.copyFile(workingDir + "/nv-" + lname + "-bak.json", workingDir + "/nv-" + lname + ".json", (err) => {
                         if (err) throw err;
                     });
@@ -48,7 +48,8 @@ let
                 }
             }
         }
-        state.args = execStartArgs.join(" ");;
+        state.args = execStartArgs.join(" ");
+        console.log("starting arguments: " + state.args)
         for (let i = 0; i < args.length; i++) {
             const option = args[i];
             const value = args[i + 1];
@@ -124,7 +125,7 @@ let
                     break;
                 default:
                     if (option.startsWith("-")) {
-                        slog(`Unknown or unhandled flag: ${option}`, 3);
+                        console.log(`Unknown or unhandled flag: ${option}`, 3);
                     }
                     break;
             }
@@ -215,31 +216,95 @@ let
             }
 
             // console.log(config)
-
-            configData.ha?.sync?.forEach(sync => {
-                slog("loading HA sync group: " + sync);
-                slog(sync)
-                //  arrayAdd(config.entities, sync);
+            configData.sync?.forEach(sync => {
+                console.log("sync group - loading - ", sync);
+                // 1. Process all new/existing sync relationships (Creation and Partner Pruning)
                 sync.forEach(member => {
-                    slog("loading HA sync group member: " + member);
+                    console.log("sync group - setting up member: ", member);
                     config.entities[member] ||= { names: [] };
+                    // PARTNER PRUNING: Reset the sync list to only include current partners.
                     config.entities[member].sync = [];
+                    // Ensure "sync" is in names
                     if (!config.entities[member].names.includes("sync"))
                         config.entities[member].names.push("sync");
+                    // Populate sync partners
                     sync.forEach(memberOther => {
                         if (memberOther != member)
                             config.entities[member].sync.push(memberOther);
                     })
-                    // console.log(config.entities[member]);
                 });
-
+            });
+            // --------------------------------------------------------------------------------
+            // 1.5. NEW FEATURE: Prune "sync" flag if the entity has no remaining partners.
+            Object.keys(config.entities).forEach(entityName => {
+                const entity = config.entities[entityName];
+                // Check if the entity has the sync flag AND its partner list is empty
+                if (entity.names?.includes("sync") && entity.sync && entity.sync.length === 0) {
+                    console.log(`sync group - pruning - entity '${entityName}' has no partners remaining. Removing "sync" flag and key.`);
+                    // Remove "sync" from the names array
+                    entity.names = entity.names.filter(name => name !== "sync");
+                    // Delete the sync key (the empty partner list)
+                    delete entity.sync;
+                }
+            });
+            // --------------------------------------------------------------------------------
+            // 2. FEATURE: Cleanup Orphaned Sync Flags/Keys (Removal of Unreferenced Members)
+            const activeSyncMembers = new Set();
+            // Build a set of ALL entity names referenced in the source configData.sync
+            configData.sync?.forEach(syncGroup => {
+                syncGroup.forEach(member => {
+                    activeSyncMembers.add(member);
+                });
             });
 
-            config.esp ||= { heartbeat: [] };
-            configData.esp?.heartbeat?.forEach(heartbeat => {
-                slog("importing ESP heartbeat entities from: " + heartbeat);
-                arrayAdd(config.esp.heartbeat, heartbeat);
+            // Iterate over ALL entities in config.entities
+            Object.keys(config.entities).forEach(entityName => {
+                const entity = config.entities[entityName];
+                // Check if the entity has a 'sync' flag and is NO LONGER in the source list
+                if (entity.names?.includes("sync") && !activeSyncMembers.has(entityName)) {
+                    console.log(`sync group - cleanup - entity '${entityName}' is orphaned (no references). Removing member.`);
+                    // Remove "sync" from the names array
+                    entity.names = entity.names.filter(name => name !== "sync");
+                    // Delete the sync key (which contains the list of sync partners)
+                    delete entity.sync;
+                }
             });
+
+            //     console.log(configData)
+            config.heartbeat ||= {};
+            configData.heartbeat ||= {};
+            configData?.heartbeat?.forIn((name, value) => {
+                if (name in config?.heartbeat) {
+                    if (config.heartbeat[name]?.internal != value) {
+                        console.log("heartbeat - changed - updating timer for: " + name);
+                        createTimer(name, value);
+                    }
+                } else {
+                    console.log("heartbeat - creating " + name);
+                    createTimer(name, value);
+                }
+            })
+            config.heartbeat?.forIn((name, value) => {
+
+                if (!(name in configData.heartbeat)) {
+                    console.log("heartbeat - orphaned - removing: " + name);
+                    clearInterval(config.heartbeat[name]?.timer);
+                    delete config.heartbeat[name];
+                }
+            })
+
+            function createTimer(name, value) {
+                config.heartbeat[name] = { interval: value, timer: null, state: false };
+                member = config.heartbeat[name];
+                member.interval = value;
+                if (member.timer) clearInterval(member.timer);
+                member.timer = setInterval(() => {
+                    if (!member.state) { core("state", { name, state: true }); member.state = true; }
+                    else { core("state", { name, state: false }); member.state = false; }
+                }, (value));
+            }
+            console.log("heartbeat - importation finished - members: ", Object.keys(config.heartbeat));
+
         },
         loadConfig: function (configPath, reload) {
             try {
@@ -247,10 +312,10 @@ let
                 let externalCfg = null;
                 if (fileExtension === '.json') {
                     externalCfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-                    slog(`loading external JSON config from: ${configPath}`);
+                    console.log(`loading external JSON config from: ${configPath}`);
                 } else if (fileExtension === '.js') {
                     externalCfg = require(configPath);
-                    slog(`loading external JS config from: ${configPath}`);
+                    console.log(`loading external JS config from: ${configPath}`);
                 } else {
                     console.error(`Error: Unsupported config file type "${fileExtension}". Only .json or .js are supported.`);
                 }
@@ -258,11 +323,11 @@ let
                 const names = Object.keys(externalCfg.config);
 
                 for (const name of names) {
-                    slog(`loading external config for automation: ${name}`);
+                    console.log(`loading external config for automation: ${name}`);
                     config[name] = externalCfg.config[name];
                     if (reload) automation[name](name, null, "config");
                 }
-                slog(`loading entities from external config: ${configPath}`);
+                console.log(`loading entities from external config: ${configPath}`);
                 auto.loadEntities(externalCfg, configPath, names);
                 auto.watcher(configPath, auto.reloadConfig);
             } catch (error) {
@@ -290,7 +355,7 @@ let
                 const names = Object.keys(clientModule.automation);
 
                 if (internal) { // load entities from internal config
-                    slog(`loading entities from internal config: ${automationFile}`);
+                    console.log(`loading entities from internal config: ${automationFile}`);
                     auto.loadEntities(clientModule, automationFile, names);
                 }
 
@@ -299,17 +364,17 @@ let
                     let lname = name.toLocaleLowerCase();
                     let path = workingDir + "nv-" + lname + ".json";
                     if (fs.existsSync(path)) {
-                        slog("found NV data for: " + name + " - loading now...");
-                        nvMem[name] = JSON.parse(fs.readFileSync(path, 'utf8'));
+                        console.log("found NV data for: " + name + " - loading now...");
+                        nv[name] = JSON.parse(fs.readFileSync(path, 'utf8'));
                     } else {
-                        slog("found no NV data for: " + name + " - required path: " + path, 2);
+                        console.log("found no NV data for: " + name + " - required path: " + path);
                     }
-                    slog("loading automation -" + name + "- into memory");
+                    console.log("loading automation -" + name + "- into memory");
                     automation[name] = clientModule.automation[name];
                 }
                 // remember which names belong to this module file
                 auto.module[resolvedPath] = names;
-                slog(`Successfully processed automation: ${automationFile}`);
+                console.log(`Successfully processed automation: ${automationFile}`);
                 return clientModule;
             } catch (error) {
                 console.error(`Error processing automation file "${automationFile}":`, error.message);
@@ -346,7 +411,7 @@ let
 
                 // 3) now load the new module and register fresh automations
                 const newModuleExports = auto.load(automationFilePath, internal);
-
+                setTimeout(() => { sys.register(); sys.fetch(); }, 2e3);
                 // 4) initialise only the new automations
                 const newNames = auto.module[resolvedPath] || [];
                 for (const name of newNames) {
@@ -362,9 +427,9 @@ let
                 //  const configPath = auto.paths[automationFilePath];
                 //   if (configPath) auto.watcher(configPath, auto.reload);
 
-                slog(`Successfully reloaded and restarted automation: ${path.parse(automationFilePath).name}`);
+                console.log(`Successfully reloaded and restarted automation: ${path.parse(automationFilePath).name}`);
 
-                slog("updating core/client entity registrations...");
+                console.log("updating core/client entity registrations...");
                 setTimeout(() => { sys.fetch(); }, 2e3);
 
             } catch (error) {
@@ -374,7 +439,7 @@ let
         },
         // no change here — keep your debounced watcher
         watcher: function (filePath, reloadCallback, internal) {
-            slog("creating watcher for: " + filePath);
+            console.log("creating watcher for: " + filePath);
             if (fileWatchers[filePath]) {
                 fileWatchers[filePath].close();
                 delete fileWatchers[filePath];
@@ -451,7 +516,7 @@ let
             let buf = { user: msg.from.first_name + " " + msg.from.last_name, id: msg.from.id }
             if (!telegram.auth(msg)) {
                 slog("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
-                nvMem.telegram.push(buf);
+                nv.telegram.push(buf);
                 bot(msg.chat.id, 'registered');
                 core(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
                 file.write.nv();
@@ -459,8 +524,8 @@ let
         },
         auth: function (msg) {
             let exist = false;
-            for (let x = 0; x < nvMem.telegram.length; x++)
-                if (nvMem.telegram[x].id == msg.from.id) { exist = true; break; };
+            for (let x = 0; x < nv.telegram.length; x++)
+                if (nv.telegram[x].id == msg.from.id) { exist = true; break; };
             if (exist) return true; else return false;
         },
         buttonToggle: function (msg, auto, name) {
@@ -507,10 +572,13 @@ let
                             for (let x = 0; x < names.length; x++) {
                                 // console.log("sending entity: " + buf.data.name + " - with state: " + buf.data.state + " - to automation: " + names[x])
                                 if (names[x] == "sync") {
+                                    //  console.log("sate update for: " + buf.data.name, config.entities[buf.data.name])
                                     for (let y = 0; y < config.entities[buf.data.name].sync.length; y++) {
                                         let partner = config.entities[buf.data.name].sync[y]
-                                        if (entity[buf.data.name].state != entity[partner].state) {
-                                            slog("syncing entity: " + buf.data.name + " - with partner: " + partner + " - state: " + buf.data.state);
+                                        if (!(partner in entity)) {
+                                            slog("syncing entity: " + buf.data.name + " - but partner: " + partner + " DOES NOT EXIST", 3);
+                                        } else if (entity[buf.data.name]?.state != entity[partner]?.state) {
+                                            slog("syncing entity: " + buf.data.name + " - with partner: " + partner + " - state: " + buf.data.state, 0);
                                             core("state", { name: partner, state: buf.data.state });
                                         }
                                     }
@@ -537,23 +605,20 @@ let
                         function safeStringify(obj) {
                             const seen = new WeakSet();
                             return JSON.stringify(obj, (key, value) => {
+                                // ... (Your circular/timeout logic remains the same)
                                 if (typeof value === "object" && value !== null) {
                                     if (seen.has(value)) return "[Circular]";
                                     seen.add(value);
-                                    // Node.js Timeout objects usually have _idleNext/_idlePrev
                                     if (value._idleNext !== undefined && value._idlePrev !== undefined) {
                                         return "[Timeout]";
                                     }
                                 }
                                 return value;
-                            }, 2);
+                            }, null); // <-- Use null or omit the argument to remove formatting
                         }
-                        core(safeStringify({
-                            type: "diag",
-                            obj: { state, nv: nvMem, config }
-                        }), 65432, '127.0.0.1');
+                        udp.send(safeStringify({ type: "diag", name: moduleName, data: state, nv: nv, config }), 65432, '127.0.0.1');
                         // console.log(state)
-                        //core(JSON.stringify({ type: "diag", obj: { state, nv: nvMem, config } }), 65432, '127.0.0.1');
+                        //core(JSON.stringify({ type: "diag", obj: { state, nv: nv, config } }), 65432, '127.0.0.1');
                         break;
                     case "telegram":
                         // console.log("receiving telegram message: " + buf.data);
@@ -580,32 +645,19 @@ let
                 else for (let x = 0; x < nv.telegram.length; x++)
                     core("telegram", { class: "sub", id: nv.telegram[x].id });
             }
-
-            config.esp?.heartbeat?.forEach((e, x) => {
-                slog("registering heartbeat for ESP: " + e.name);
-                if (heartbeat.timer[x]) clearInterval(heartbeat.timer[x]);
-                heartbeat.timer[x] = setInterval(() => {
-                    if (heartbeat.state[x]) heartbeat(false);
-                    else heartbeat(true);
-                    function heartbeat(newState) {
-                        core("heartbeat");
-                        heartbeat.state[x] = newState;
-                    }
-                }, e.interval * 1e3);
-            });
-            //   if (config.coreData?.length > 0) send("cdata", { register: true, name: config.coreData });
         },
         init: function () {
             automation = {};
             auto.module = {}; // map resolvedModulePath -> [automationName, ...]
-            nvMem = {};
+            nv = {};
             entity = {};
-            config = { ha: {}, esp: {}, entities: {} };
+            config = { entities: {}, heartbeat: {} };
             state = { cache: {}, args: "" };
+            push = {};
             heartbeat = { timer: [], state: [] };
             logName = null;
             online = false;
-            timer = { fileWriteLast: null };
+            timer = { fileWriteLast: null, };
             fileWatchers = {};
             time = {
                 boot: null,
@@ -661,7 +713,6 @@ let
                 return vbuf;
             }
             time.startTime();
-            ha = { getEntities: function () { send("haQuery") }, };
             fs = require('fs');
             // events = require('events');
             // em = new events.EventEmitter();
@@ -681,9 +732,11 @@ let
                 },
                 enumerable: false // so it won't show up in loops
             });
-            send = function (name, state, unit, address) { core("state", { name, state, unit, address }) };
             core = function (type, data, auto) {
-                // console.log(type, data, auto)
+                //console.log(type, data, auto)
+                config.entities[data?.name]?.names?.forEach(element => {
+                      try { automation[names[x]](names[x], { name: data.name, state: data.state }); } catch { }
+                });
                 udp.send(JSON.stringify({ name: moduleName, type, data, auto }), 65432, '127.0.0.1');
             };
             arrayAdd = function (dest, source, id) { // additive array merge
@@ -731,7 +784,7 @@ let
             switch (step) {
                 case 0:
                     checkArgs();
-                    console.log("starting arguments: " + state.args)
+
                     setTimeout(() => { time.sync(); time.boot++; sys.boot(1); }, 1e3);
                     break;
                 case 1:
