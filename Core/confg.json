@@ -1,18 +1,29 @@
+{
     "webDiag": true,
     "webDiagPort": 20000,
-    "debugging": false,
+    "comCache": true,
     "logging": {
         "debug": false,
-        "client": true,
+        "client": false,
+        "clientDebug": true,
         "clientCrash": true
     },
     "homeAssistant": [
         {
             "enable": true,
-            "legacyAPI": false,
-            "address": "10.20.0.10",
+            "address": "127.0.0.1",
             "port": 8123,
-            "token": "myKey"
+            "token": "--.---.-------------",
+            "log": {
+                "lag": true,
+                "lagTime": 100
+            }
+        },
+        {
+            "enable": true,
+            "address": "10.21.0.3",
+            "port": 8123,
+            "token": "--.--.--------",
             "log": {
                 "lag": true,
                 "lagTime": 100
@@ -21,33 +32,30 @@
     ],
     "telegram": {
         "enable": true,
-        "logLevel": 2,
+        "logLevel": 3,
         "logDebug": false,
-        "logESPDisconnect": true,
-        "token": "myTelegramIDToken"
+        "logESPDisconnect": false,
+        "token": "------------:----",
+        "users": [
+            6176063468
+        ]
+    },
+    "rocket": {
+        "enable": false,
+        "server": "10.21.0.1",
+        "port": 3000,
+        "user": "--------",
+        "token": "---------",
+        "channel": "TWIT-Mambaroto"
     },
     "esp": {
         "enable": true,
         "devices": [
             {
-                "ip": "10.20.0.98",
-                "key": "myKey"
-            },
-            {
-                "ip": "10.20.0.97",
-                "key": "myKey"
-            },
-            {
-                "ip": "10.20.0.96",
-                "key": "myKey"
-            },
-            {
-                "ip": "10.20.0.95",
-                "key": "myKey"
-            },            
-            {
-                "ip": "10.20.0.94",
-                "key": "myKey"
+                "name": "test esp",
+                "ip": "10.21.0.19",
+                "key": "-------------=",
+                "isolate": true
             }
         ]
     }
