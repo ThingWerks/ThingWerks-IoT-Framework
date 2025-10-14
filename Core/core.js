@@ -82,7 +82,6 @@ if (isMainThread) {
                             sendPacket("HA");
                         }
 
-
                         ent.owner = { type: "automation", client: buf.name, auto: buf.auto };
                         ent.state = buf.data.state;
                         ent.unit = buf.data.unit;
@@ -104,15 +103,16 @@ if (isMainThread) {
                         }
                         if (ent.owner.type == "automation") {
                             ent = entity[buf.data.name] ?? undefined;
-
-                            //  ent.owner = { type: "automation", client: buf.name, auto: buf.auto };
+                            // ent.owner = { type: "automation", client: buf.name, auto: buf.auto };
                             ent.state = buf.data.state;
                             //ent.unit = buf.data.unit;
                             ent.update = time.epochMil;
                             ent.stamp = time.stamp;
+                            // console.log(ent)
+                            // console.log(buf )
                             ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
-                                if (value.port != port)
-                                    client("state", { name: buf.data.name, state: buf.data.state }, value.port);
+                                if (value.port != port) // only reply to self if not the owner
+                                    client("state", { name: buf.data.name, state: buf.data.state, owner: ent.owner }, value.port);
                             })
 
                         } else if (ent.owner.type == "esp") {
@@ -173,7 +173,7 @@ if (isMainThread) {
                     for (const name in entity) {
                         if (buf.name in entity[name].client) {
                             log("local entities fetch reply: " + name, 1, 0);
-                            client("state", { name, state: entity[name].state }, port);
+                            client("state", { name, state: entity[name].state, owner: entity[name].owner }, port);
                         }
                     }
                     log("client - " + color("purple", buf.name) + " - replying with cached fetch - port: " + port, 3);
