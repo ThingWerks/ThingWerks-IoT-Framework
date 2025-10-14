@@ -50,6 +50,15 @@ core = function (type, data, auto) {
                         }
                     }
                 }
+        } else {
+           // console.log(entity[data.name])
+            if (entity[data.name]?.owner?.type == "automation") {
+               // console.log(data)
+                entityLocal[data?.name]?.names?.forEach((element) => {
+                    if (auto != element)
+                        try { automation[element](element, { name: data.name, state: data.state }); } catch { }
+                });
+            }
         }
     }
     udp.send(JSON.stringify({ name: moduleName, type, data, auto }), 65432, '127.0.0.1');
@@ -61,10 +70,12 @@ com = function () {
         switch (buf.type) {
             case "state":       // incoming state change (from HA websocket service)
                 slog("receiving state update, entity: " + buf.data.name + " value: " + buf.data.state, 0);
+              //  console.log(buf.data)
                 entity[buf.data.name] ||= {};
                 entity[buf.data.name].update = time.epochMil;
                 entity[buf.data.name].stamp = time.stamp;
                 entity[buf.data.name].state = buf.data.state;
+                entity[buf.data.name].owner = structuredClone(buf.data.owner);
                 if (online == true) {
                     if (!(buf.data.name in entityLocal)) {
                         slog("entity: " + buf.data.name + " - is not referenced locally - pruning");
@@ -330,7 +341,7 @@ auto = {
 
                 // if entity is present in EITHER the top-level entities list OR the file-specific entities list,
                 // then it still belongs to that file and should NOT be pruned.
-               // console.log("entity local: ", entity, " - entity config: ", topEntities[entity])
+                // console.log("entity local: ", entity, " - entity config: ", topEntities[entity])
                 const stillPresent = topEntities.includes(entity) || perEntities.includes(entity);
                 if (stillPresent) continue;
 
