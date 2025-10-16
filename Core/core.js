@@ -50,39 +50,18 @@ if (isMainThread) {
                     // console.log(entity[buf.data.name])
                     let ent, packet;
                     if (buf.data.unit) {
-                        if (buf.data.unit == "owner") {
-                            if (!entity[buf.data.name]) {
-                                log("client - " + color("purple", buf.name)
-                                    + " - is registering new Local/Core entity: " + buf.data.name, 3);
-                                entity[buf.data.name] = { client: {}, owner: {} }
-                            }
+                        if (!entity[buf.data.name]) {
                             log("client - " + color("purple", buf.name)
-                                + " - is updating new Local/Core entity: " + buf.data.name, 3, 0);
-
-                            ent = entity[buf.data.name] ?? undefined;
-                            if (buf.name in ent.client) delete ent.client[buf.name];
-                            entity[buf.data.name].owner = { type: "automation", client: buf.name, auto: buf.auto };
-                            // console.log(entity[buf.data.name])
-                            ent.state = buf.data.state;
-                            ent.persist = buf.data.address;
-                            ent.unit = buf.data.unit;
-                            ent.update = time.epochMil;
-                            ent.stamp = time.stamp;
-                            if (ent.persist) { nv.entity[buf.data.name] = entity[buf.data.name]; file.write.nv(); }
-                        } else {
-                            if (!entity[buf.data.name]) {
-                                log("client - " + color("purple", buf.name)
-                                    + " - is registering new HA sensor: " + buf.data.name, 3);
-                                entity[buf.data.name] = { client: {}, }
-                            }
-                            ent = entity[buf.data.name] ?? undefined;
-                            if (!buf.data.address)
-                                packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
-                            else packet = { address: buf.data.address, unit: buf.data.unit };
-                            sendPacket("HA");
+                                + " - is registering new HA sensor: " + buf.data.name, 3, 0);
+                            entity[buf.data.name] = { client: {}, }
                         }
+                        ent = entity[buf.data.name] ?? undefined;
+                        if (!buf.data.address)
+                            packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
+                        else packet = { address: buf.data.address, unit: buf.data.unit };
+                        sendPacket("HA");
 
-                        ent.owner = { type: "automation", client: buf.name, auto: buf.auto };
+                        ent.owner = { type: "telemetry", client: buf.name, auto: buf.auto };
                         ent.state = buf.data.state;
                         ent.unit = buf.data.unit;
                         ent.update = time.epochMil;
@@ -94,34 +73,43 @@ if (isMainThread) {
                         })
 
                     } else {
-                        ent = entity[buf.data.name];
-                        try { packet = { address: ent.owner.name } } catch {
-                            log("client - " + color("purple", buf.name)
-                                + " - is setting the state for an entity: " + color("cyan", buf.data.name)
-                                + " that " + color("red", "DOES NOT EXIST"), 3, 3);
-                            return;
-                        }
-                        if (ent.owner.type == "automation") {
-                            ent = entity[buf.data.name] ?? undefined;
-                            // ent.owner = { type: "automation", client: buf.name, auto: buf.auto };
-                            ent.state = buf.data.state;
-                            //ent.unit = buf.data.unit;
-                            ent.update = time.epochMil;
-                            ent.stamp = time.stamp;
-                            // console.log(ent)
-                            // console.log(buf )
-                            ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
-                                if (value.port != port) // only reply to self if not the owner
-                                    client("state", { name: buf.data.name, state: buf.data.state, owner: ent.owner }, value.port);
-                            })
+                        try {
+                            ent = entity[buf.data.name];
+                            try { packet = { address: ent.owner.name } } catch {
+                                log("client - " + color("purple", buf.name)
+                                    + " - is setting the state for an entity: " + color("cyan", buf.data.name)
+                                    + " that " + color("red", "DOES NOT EXIST"), 3, 3);
+                                return;
+                            }
+                            if (ent.owner.type == "TWIT") {
+                                ent = entity[buf.data.name] ?? undefined;
+                                // ent.owner = { type: "telemetry", client: buf.name, auto: buf.auto };
+                                ent.state = buf.data.state;
+                                //ent.unit = buf.data.unit;
+                                ent.update = time.epochMil;
+                                ent.stamp = time.stamp;
+                                // console.log(ent)
+                                // console.log(buf )
+                                ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
+                                    if (value.port != port) // only reply to self if not the owner
+                                        client("state", { name: buf.data.name, state: buf.data.state, owner: ent.owner }, value.port);
+                                })
 
-                        } else if (ent.owner.type == "esp") {
-                            packet.esp_entity_id = ent.esp_entity_id;
-                            sendPacket("ESP");
-                        } else if (ent.owner.type.includes("ha")) {
-                            if (ent.zha) packet.zha = ent.zha.regID;
-                            sendPacket("HA");
-                        }
+
+                                if (ent.syncGroup) {
+                                    log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
+                                        + " - is a " + color("blue", "Sync Group member "), 3, 0);
+                                    syncGroup(buf.data.name, buf.data.state);
+                                }
+
+                            } else if (ent.owner.type == "esp") {
+                                packet.esp_entity_id = ent.esp_entity_id;
+                                sendPacket("ESP");
+                            } else if (ent.owner.type.includes("ha")) {
+                                if (ent.zha) packet.zha = ent.zha.regID;
+                                sendPacket("HA");
+                            }
+                        } catch { console.log("state setting error - buf: ", buf.data, "selected entity: ", ent) }
                     }
                     function sendPacket(type) {
                         if (packet) {
@@ -141,19 +129,113 @@ if (isMainThread) {
             case "register":    // incoming registrations
                 //  log("client - " + color("purple", buf.name) + " - is initiating new registration", 3);
                 //  console.log(buf)
-                state.client[buf.name].entities = [];
-                buf.data?.entities?.forIn((name, value) => {
-                    if (name in entity) {
-                        log("client - " + color("purple", buf.name) + " - is registering entity: " + name, 3, 0);
-                    } else {
-                        log("client - " + color("purple", buf.name) + " - is registering an UNKNOWN entity: " + name, 3, 1);
-                        entity[name] ||= { client: {} };
-                        // console.log(entity[name].client)
-                    }
-                    entity[name].client[buf.name] = { port };
-                    //  console.log( entity[name])
-                    state.client[buf.name].entities.push({ name, type: entity[name].owner?.type, address: entity[name].owner?.name });
-                })
+                if (state.client[buf.name]) {
+
+                    (function entity_subscribe() {
+                        log("client - " + color("purple", buf.name) + " - updating registration", 3, 1);
+                        state.client[buf.name].entities?.subscribe?.forIn((name, value) => {
+                            if (!(name in buf.data?.entities?.subscribe)) {
+                                log("client - " + color("purple", buf.name) + " - found orphaned entity in core: " +
+                                    color("cyan", name) + " -  deleting", 3, 1);
+                                //deleteReg()
+                            }
+                        })
+                        // console.log(state.client[buf.name])
+                        state.client[buf.name].entities.subscribe = structuredClone(buf.data?.entities?.subscribe) ?? undefined;
+                        buf.data.entities?.subscribe?.forIn((name, value) => {
+                            if (name in entity) {
+                                log("client - " + color("purple", buf.name) + " - is registering entity: " + color("cyan", name), 3, 0);
+                            } else {
+                                log("client - " + color("purple", buf.name) + " - is registering an " + color("yellow", "UNKNOWN")
+                                    + " entity: " + color("cyan", name), 3, 2);
+                                // console.log(entity[name].client)
+                            }
+                            entity[name] ||= {};
+                            entity[name].client ||= {};
+                            entity[name].client[buf.name] = { port };
+                            // console.log(entity[name].client)
+                        })
+                    })();
+
+
+                    (function entity_TWIT() {
+                        entity.forIn((name, value) => {
+                            if (value.owner?.type == "TWIT" && value.owner?.name == buf.name && !(name in buf.data?.entities?.create)) {
+                                log("client - " + color("purple", buf.name) + " - found orphaned TWIT entity: " +
+                                    color("cyan", name) + " - " + color("yellow", "totally deleting"), 3, 2);
+                                delete entity[name];
+                                delete nv.entity[name];
+                                file.write.nv();
+                            }
+                        })
+                        buf.data.entities?.create?.forIn((name, value) => {
+                            if (name in entity) log("client - " + color("purple", buf.name) + " - updating " + color("green", "TWIT entity")
+                                + " in core: " + color("cyan", name), 3, 1);
+                            else log("client - " + color("purple", buf.name) + " - creating " + color("green", "TWIT entity")
+                                + " in core: " + color("cyan", name), 3, 1);
+                            entity[name] ||= {};
+                            entity[name].client ||= {};
+                            entity[name].client[buf.name] = { port };
+                            entity[name].owner = { type: "TWIT", name: buf.name, port };
+                            nv.entity ||= {};
+                            nv.entity[name] = structuredClone(entity[name]);
+                            nv.entity[name].client = {};
+                            delete nv.entity[name].syncGroup;
+                            file.write.nv();
+                        })
+                    })();
+
+
+                    (function entity_sync() {
+                        // console.log(state.sync)
+                        state.sync?.forIn((name, value) => {
+                            if (buf.name == value.owner) {
+                                if (!buf.data.entities.sync || !(name in buf.data.entities.sync)) deleteSync();
+                            }
+                            function deleteSync() {
+                                // console.log(value)
+                                log("client - " + color("purple", buf.name) + " - found orphaned Sync group: " +
+                                    color("cyan", name) + " - " + color("yellow", "tearing down group"), 3, 2);
+                                value.members.forEach(element => {
+                                    if (element in entity) {
+                                        log("client - " + color("purple", buf.name) + " - removing orphaned Sync group: " +
+                                            color("cyan", name) + "from member: " + color("cyan", element), 3, 0);
+                                        delete entity[element].syncGroup;
+                                    }
+                                });
+                                log("client - " + color("purple", buf.name) + " - removing orphaned Sync group: " +
+                                    color("cyan", name), 3, 1);
+                                delete state.sync[name];
+                            }
+                        })
+                        buf.data.entities?.sync?.forIn((name, value) => {
+                            if (name in state.sync)
+                                log("client - " + color("purple", buf.name) + " - updating " + color("blue", "Sync Group: ")
+                                    + color("cyan", name), 3, 1);
+                            else {
+                                log("client - " + color("purple", buf.name) + " - creating " + color("blue", "Sync Group: ")
+                                    + color("cyan", name), 3, 1);
+                                state.sync[name] = { owner: buf.name, members: [] };
+                            }
+                            value.forEach(element => {
+                                state.sync[name].members.push(element);
+                                if (element in entity) {
+                                    log("client - " + color("purple", buf.name) + color("blue", " - Sync Group: ") + color("cyan", name)
+                                        + " - adding entity: " + color("cyan", element), 3, 1);
+                                    entity[element].syncGroup = name;
+                                    //  console.log("creating sensor here: ", element, "\n\n", entity[element])
+                                } else {
+                                    log("client - " + color("purple", buf.name) + color("blue", " - Sync Group: ") + color("cyan", name)
+                                        + " - UNKNOWN entity: " + color("cyan", element), 3, 3);
+                                }
+                            });
+                        })
+                    })();
+
+
+                }
+
+
                 if (buf.data.telegram) {
                     log("client - " + color("purple", buf.name) + " - is registering as telegram agent", 3);
                     state.client[id].telegram = true;
@@ -171,23 +253,14 @@ if (isMainThread) {
                 } else fetchReply();
                 function fetchReply() {
                     for (const name in entity) {
+                        // console.log(entity[name])
                         if (buf.name in entity[name].client) {
-                            log("local entities fetch reply: " + name, 1, 0);
+                            log("cached entities fetch reply: " + name, 1, 0);
                             client("state", { name, state: entity[name].state, owner: entity[name].owner }, port);
                         }
                     }
                     log("client - " + color("purple", buf.name) + " - replying with cached fetch - port: " + port, 3);
                     setTimeout(() => { client("fetchReply", null, port); }, 500);
-                }
-                break;
-            case "prune":
-                if (buf.data in entity) {
-                    log("client - " + color("cyan", buf.name) + " - requesting prune of: " + buf.data + " - unregistering", 3, 1);
-                    delete entity[buf.data].client[buf.name];
-                    //  if (Object.keys(entity[buf.data].client).length === 0) {
-                    //     log("client - " + color("cyan", buf.name) + " - entity: " + buf.data + " has no more associations - deleting", 3, 1);
-                    //     delete entity[buf.data];
-                    //  }
                 }
                 break;
             case "log":         // incoming log messages from UDP clients
@@ -216,18 +289,18 @@ if (isMainThread) {
                     if (!(buf.name in state.client)) {
                         if (buf.type == "register") {
                             log("client - " + color("purple", buf.name) + " - creating new registration", 3);
-                            state.client[buf.name] = { address: info.address, port: info.port, entities: [] };
+                            state.client[buf.name] = { address: info.address, port: info.port, entities: { subscribe: {}, create: {} } };
                         } else if (buf.type != "log") {
                             log("client - " + color("purple", buf.name) + " - is unrecognized - requesting ReRegistrion", 3);
                             // console.log("buf type: " + buf.type)
-                            state.client[buf.name] = { address: info.address, port: info.port, entities: [] };
+                            state.client[buf.name] = { address: info.address, port: info.port, entities: { subscribe: {}, create: {} } };
                             client("reRegister", null, port);
                         }
                     } else if (buf.type == "register") {
                         log("client - " + color("purple", buf.name) + " - is ReRegistring", 3);
                     } else if (state.client[buf.name].port != info.port) {
                         log("client - " + color("purple", buf.name) + " - is unrecognized - updating", 3);
-                        state.client[buf.name] = { address: info.address, port: info.port };
+                        state.client[buf.name] = { address: info.address, port: info.port, entities: [] };
                     }
                     if (state.client[buf.name]) state.client[buf.name].update = time.epoch;
                     if (state.client[buf.name]) state.client[buf.name].stamp = time.stamp;
@@ -235,27 +308,77 @@ if (isMainThread) {
             } catch (error) { log("A UDP client (" + info.address + ") is sending invalid data: " + error, 3, 3); return; }
         }
     }
-    function watchDog() {
-        for (const name in state.client) {
-            if (state.client[name].heartbeat && time.epoch - state.client[name].update >= 5) {
-                log("client - " + color("purple", name) + " - has crashed!!", 3, cfg.logging.clientCrash ? 3 : 0);
-                deleteReg();
-                delete state.client[name];
-            } else if (time.epoch - state.client[name].update >= 10) {
-                log("client - " + color("purple", name) + " - is a zombie, killing client", 3, cfg.logging.clientCrash ? 3 : 0);
-                deleteReg()
-                delete state.client[name];
-            }
-            function deleteReg() {
-                entity.forIn((entityName, value) => {
-                    if (name in value.client) {
-                        log("client - " + color("purple", name) + " - clearing client registration for entity: "
-                            + entityName, 3, 0);
-                        delete value.client[name];
+    function syncGroup(entityName, entityState) {
+        ent = entity[entityName];
+        // console.log(ent)
+        // console.log(state.sync)
+
+        if ((time.epochMil - state.sync[ent.syncGroup].update) > 200 || !state.sync[ent.syncGroup].update)
+            state.sync[ent.syncGroup].members.forEach(element => {
+                if (element in entity && element != entityName) {
+                    //  console.log("incoming sync entity: ", entityName, "  -  sensing to: ", element)
+                    if (entity[element].owner.type == "TWIT") {
+                        log("entity: " + color("cyan", entityName)
+                            + " - sending to TWIT - " + color("blue", "Sync Group member: ") + element, 3, 0);
+                        // console.log("sync updating state of TWIT partner")
+                        //   console.log(entity[element])
+                        client("state", { name: element, state: entityState, }, entity[element].owner.port);
                     }
-                })
+                    if (entity[element].owner.type == "ha") {
+                        log("entity: " + color("cyan", entityName)
+                            + " - sending to HA - " + color("blue", "Sync Group member: ") + element, 3, 0);
+                        // console.log("sync updating state of HA partner")
+                        //   console.log(entity[element])
+                        thread.ha.postMessage({
+                            type: "state",
+                            entity: element,
+                            address: entity[element].owner.name,
+                            state: entityState
+                        });
+                    }
+                    if (entity[element].owner.type == "esp") {
+                        log("entity: " + color("cyan", entityName)
+                            + " - sending to ESP - " + color("blue", "Sync Group member: ") + element, 3, 0);
+                        //console.log("sync updating state of ESP partner")
+                        //  console.log(entity[element])
+                        thread.esp[entity[element].owner.thread].postMessage({
+                            type: "state",
+                            entity: element,
+                            address: entity[element].owner.name,
+                            state: entityState
+                        });
+                    }
+                }
+                state.sync[ent.syncGroup].update = time.epochMil
+            });
+    }
+    function watchDog() {
+        for (const clientName in state.client) {
+            if (state.client[clientName].heartbeat && time.epoch - state.client[clientName].update >= 5) {
+                log("client - " + color("purple", clientName) + " - has crashed!!", 3, cfg.logging.clientCrash ? 3 : 0);
+                deleteReg();
+                delete state.client[clientName];
+            } else if (time.epoch - state.client[clientName].update >= 10) {
+                log("client - " + color("purple", clientName) + " - is a zombie, killing client", 3, cfg.logging.clientCrash ? 3 : 0);
+                deleteReg()
+                delete state.client[clientName];
             }
         }
+    }
+    function deleteReg(clientName) {
+        entity.forIn((entityName, value) => {
+            if (clientName in value.client) {
+                if (value.owner?.type == "TWIT" && value.owner.name == clientName) {
+                    log("client - " + color("purple", clientName) + " - TWIT entity: " + entityName
+                        + " - deleting client/port but leaving active on core", 3, 0);
+                    delete value.client[clientName];
+                } else {
+                    log("client - " + color("purple", clientName) + " - clearing client registration for entity: "
+                        + entityName, 3, 0);
+                    delete value.client[clientName];
+                }
+            }
+        })
     }
     function ipc(data) {      // Incoming inter process communication 
         // console.log(data.type)
@@ -318,34 +441,38 @@ if (isMainThread) {
                             log("ESP Home - " + color("cyan", data.esp) + " - IPC state update error\n" + e, 2, 3);
                             console.trace("incoming object:", data, "\n\nlocal entity: ", entity[data.obj.name])
                         }
+                        if (entity[data.obj.name].syncGroup) syncGroup(data.obj.name, data.obj.state);
                         break;
                 }
                 break;
             case "ha":
                 switch (data.class) {
                     case "state":
-                        //   console.log(data);
+                        // console.log(data);
                         if (data.name in entity) {
                             // console.log(entity[data.name])
                             try {
                                 for (const name in entity[data.name].client) {
-                                    log("Websocket (" + color("cyan", data.address) + ") - state update for: "
+                                    log("Websocket (" + color("cyan", data.address) + ") - state: " + data.state + " update for: "
                                         + data.name + " - to client: " + name, 1, 0);
-                                    // console.log(entity[data.name])
-                                    entity[data.name].state = (data.state == "on") ? true : (data.state == "off") ? false : "null";
+
+                                    entity[data.name].state = (data.state == "on") ? true : (data.state == "off") ? false : data.state;
                                     entity[data.name].owner ||= { type: "ha", name: data.address };
                                     entity[data.name].update = time.epochMil;
                                     entity[data.name].stamp = time.stamp;
-                                    client("state", { name: data.name, state: data.state }, state.client[name].port);
+                                    // console.log("entity: ", data.name, entity[data.name])
+                                    client("state", { name: data.name, state: entity[data.name].state }, state.client[name].port);
                                 }
                             } catch (error) { console.log("error sending HA State update to client: ", error) }
-                        } else {
+                        } else if (!data.name.includes("sensor")) {
                             log("Websocket (" + color("cyan", data.address) + ") - state update for: "
                                 + data.name + " - but this sensor in UNKNOWN", 1, 0);
                         }
+                        if (entity[data.name]?.syncGroup) syncGroup(data.name, data.state);
                         break;
                     case "result":
                         state.fetchLast = time.epoch;
+                        // console.log(data)
                         if (!(data.name in entity)) {
                             entity[data.name] = { client: {}, state: null, };
                             // console.log("adding new entity: " + data.name);
@@ -356,7 +483,7 @@ if (isMainThread) {
                             log("Websocket (" + color("cyan", data.address) + ") - adding existing entity: "
                                 + color("cyan", data.name, false), 1, 0);
                         }
-                        entity[data.name].state = (data.state == "on") ? true : (data.state == "off") ? false : undefined;
+                        entity[data.name].state = (data.state == "on") ? true : (data.state == "off") ? false : data.state;
                         entity[data.name].owner ||= { type: "ha", name: data.address };
                         entity[data.name].update = time.epochMil;
                         entity[data.name].stamp = time.stamp;
@@ -373,7 +500,7 @@ if (isMainThread) {
                             + color("cyan", data.name, false), 1, 0);
                         entity[data.name].owner ||= { type: "ha_zha", name: data.address };
                         entity[data.name].zha = { regID: data.dev.device_reg_id, deviceName: data.dev.name }
-                        entity[data.name].state = null;
+                        entity[data.name].state = data.state;
                         entity[data.name].update = time.epochMil;
                         entity[data.name].stamp = time.stamp;
                         break;
@@ -469,17 +596,19 @@ if (isMainThread) {
                                 .catch(error => { console.log(error); })
                         });
                 }, 4e3);
+                watcher((workingDir + "/config.json"), reloadConfig);
                 setTimeout(() => { log("TWIT Core is fully " + color("green", "ONLINE"), 0); }, 1e3);
                 break;
         }
     }
     function init() { // initialize system volatile memory
-        state = { client: {}, perf: { ha: [] }, fetchLast: null };
+        state = { client: {}, sync: {}, perf: { ha: [] }, fetchLast: null };
         entity = {};
         thread = { ha: {}, esp: [], telegram: null };
         ws = [];
         timer = { fileWrite: null, fileWriteLast: time.epoch };
         logs = { step: 0, sys: [], tg: [], tgStep: 0 };
+        fileWatchers = {};
         state.telegram = { started: false };
     }
     function lib() {
@@ -553,67 +682,6 @@ if (isMainThread) {
                     }
                 }
             },
-        };
-        log = function (message, mod, level, port) {      // add a new case with the name of your automation function
-            let buf = time.stamp, cbuf = buf + "\x1b[3", lbuf = "", mbuf = "", ubuf = buf + "\x1b[3";
-            if (level == undefined) level = 1;
-            switch (level) {
-                case 0: ubuf += "6"; cbuf += "6"; lbuf += "|--debug--|"; break;
-                case 1: ubuf += "4"; cbuf += "7"; lbuf += "|  Event  |"; break;
-                case 2: ubuf += "3"; cbuf += "3"; lbuf += "|*Warning*|"; break;
-                case 3: ubuf += "1"; cbuf += "1"; lbuf += "|!!ERROR!!|"; break;
-                case 4: ubuf += "5"; cbuf += "5"; lbuf += "| Telegram|"; break;
-                default: ubuf += "4"; cbuf += "4"; lbuf += "|  Event  |"; break;
-            }
-            buf += lbuf;
-            cbuf += "m" + lbuf + "\x1b[37;m";
-            ubuf += ";1m" + lbuf + "\x1b[37;m";
-            switch (mod) {      // add a new case with the name of your automation function, starting at case 3
-                case 0: mbuf += " system | "; break;
-                case 1: mbuf += "     HA | "; break;
-                case 2: mbuf += "    ESP | "; break;
-                case 3: mbuf += "    UDP | "; break;
-                case 4: mbuf += "Telegram| "; break;
-                default:
-                    if (mod != undefined) ubuf += color("green", mod) + " | ";
-                    else mbuf += " system | ";
-                    break;
-            }
-            buf += mbuf + message;
-            cbuf += mbuf + message;
-            ubuf += mbuf + message;
-            if (logs.sys[logs.step] == undefined) logs.sys.push(buf); else logs.sys[logs.step] = buf;
-            if (logs.step < 500) logs.step++; else logs.step = 0;
-            if (cfg.rocket.enable && level > 0) sendRocket(buf);
-            if (cfg.telegram?.enable && state.telegram.started && cfg.telegram.users) {
-                if (level >= cfg.telegram.logLevel || level == 0 && cfg.telegram.logDebug == true) {
-                    try {
-                        for (let x = 0; x < cfg.telegram.users.length; x++) {
-                            if (cfg.telegram.logESPDisconnect == false) {
-                                if (!message.includes("had a connection error, resetting connection...")
-                                    && !message.includes("failed to connect, trying to reconnect...")) {
-
-
-                                    bot.sendMessage(cfg.telegram.users[x], buf).catch(error => {
-                                        log("telegram sending error"); console.log(error);
-                                    })
-                                }
-                            } else bot.sendMessage(cfg.telegram.users[x], buf).catch(error => { log("telegram sending error"); console.log(error) })
-                        }
-                    } catch (error) { console.log(error, "\nmessage: " + message + "  - Mod: " + mod) }
-                }
-            }
-            if (port != undefined) {
-                if (level != 0) {
-                    if (cfg.logging.client) console.log(ubuf);
-                    client("log", ubuf, port);
-                } else if (cfg.logging.debug == true) {
-                    if (cfg.logging.clientDebug == true) console.log(ubuf);
-                    client("log", ubuf, port);
-                }
-            } else if (level == 0 && cfg.logging.debug == true) console.log(cbuf);
-            else if (level != 0) console.log(cbuf);
-            return buf;
         };
         arrayAdd = function (dest, source, id) { // additive array merge
             if (!Array.isArray(source) || source.length === 0) return;
@@ -711,7 +779,148 @@ if (isMainThread) {
         };
         time.startTime();
     }
-    function checkArgs() {
+    checkArgs = function () {
+        const args = process.argv.slice(2);
+        const map = {};
+        const execStartArgs = [];
+        for (let i = 0; i < args.length; i++) {
+            const arg = args[i];
+            if (arg.startsWith("-")) {
+                let value = true;
+                if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
+                    value = args[i + 1];
+                    i++;
+                }
+                map[arg] = value;
+                if (arg === "-c" || arg === "-n") {
+                    execStartArgs.push(arg);
+                    if (value !== true) {
+                        execStartArgs.push(`"${value}"`);
+                    }
+                }
+            }
+        }
+        //state.args = execStartArgs.join(" ");
+        //console.log("starting arguments: " + state.args)
+        for (let i = 0; i < args.length; i++) {
+            const option = args[i];
+            const value = args[i + 1];
+            switch (option) {
+                case "--prep":
+                    console.log("installing APT packages...");
+                    execSync("sudo apt install build-essential");
+                    console.log("installing NPM packages...");
+                    execSync("cd " + workingDir + " ; npm i express");
+                    execSync("cd " + workingDir + " ; npm i websocket");
+                    execSync("cd " + workingDir + " ; npm i nodemon -g");
+                    if (cfg.telegram.enable) execSync("cd " + workingDir + " ; npm i node-telegram-bot-api");
+                    if (cfg.esp.enable) execSync("cd " + workingDir + " ; npm i @2colors/esphome-native-api");
+                    console.log("TWIT Core system prep complete");
+                    process.exit();
+                    break;
+                case "--install":
+                    log("installing ThingWerks-Core service...");
+                    let exec = "ExecStart=nodemon " + workingDir + "/core.js -w " + workingDir + "/core.js -w " + workingDir + "/config.json --exitcrash --delay 5";
+                    let service = [
+                        "[Unit]",
+                        "Description=",
+                        "After=network-online.target",
+                        "Wants=network-online.target\n",
+                        "[Install]",
+                        "WantedBy=multi-user.target\n",
+                        "[Service]",
+                        "ExecStartPre=/bin/bash -c 'uptime=$(awk \\'{print int($1)}\\' /proc/uptime); if [ $uptime -lt 300 ]; then sleep 45; fi'",
+                        ((journal == false) ? "ExecStartPre=mv " + workingDir + "/log-twit-core.txt " + workingDir + "/log-twit-core-last.txt\n " + exec : exec),
+                        ((journal == false) ? "StandardOutput=file:" + workingDir + "/log-twit-core.txt\n Type=simple" : "Type=simple"),
+                        "User=root",
+                        "Group=root",
+                        "WorkingDirectory=" + workingDir,
+                        "Restart=on-failure",
+                        "RestartSec=5\n",
+                    ];
+                    fs.writeFileSync("/etc/systemd/system/twit-core.service", service.join("\n"));
+                    // execSync("mkdir /apps/ -p");
+                    // execSync("cp " + process.argv[1] + " /apps/ha/");
+                    execSync("systemctl daemon-reload");
+                    execSync("systemctl enable twit-core.service");
+                    execSync("systemctl start twit-core");
+                    execSync("service twit-core status");
+                    log("service installed and started");
+                    console.log("type:  journalctl -f -u twit-core  or  tail -f /apps/log-twit-core.txt -n 500");
+                    process.exit();
+                case "--uninstall":
+                    log("uninstalling TWIT-Core service...");
+                    execSync("systemctl stop twit-core");
+                    execSync("systemctl disable twit-core.service");
+                    fs.unlinkSync("/etc/systemd/system/twit-core.service");
+                    console.log("TWIT-Core service uninstalled");
+                    process.exit();
+                case "--d": debug = true; break;
+            }
+        }
+    }
+    function log(message, mod, level, port) {      // add a new case with the name of your automation function
+        let buf = time.stamp, cbuf = buf + "\x1b[3", lbuf = "", mbuf = "", ubuf = buf + "\x1b[3";
+        if (level == undefined) level = 1;
+        switch (level) {
+            case 0: ubuf += "6"; cbuf += "6"; lbuf += "|--debug--|"; break;
+            case 1: ubuf += "4"; cbuf += "7"; lbuf += "|  Event  |"; break;
+            case 2: ubuf += "3"; cbuf += "3"; lbuf += "|*Warning*|"; break;
+            case 3: ubuf += "1"; cbuf += "1"; lbuf += "|!!ERROR!!|"; break;
+            case 4: ubuf += "5"; cbuf += "5"; lbuf += "| Telegram|"; break;
+            default: ubuf += "4"; cbuf += "4"; lbuf += "|  Event  |"; break;
+        }
+        buf += lbuf;
+        cbuf += "m" + lbuf + "\x1b[37;m";
+        ubuf += ";1m" + lbuf + "\x1b[37;m";
+        switch (mod) {      // add a new case with the name of your automation function, starting at case 3
+            case 0: mbuf += " system | "; break;
+            case 1: mbuf += "     HA | "; break;
+            case 2: mbuf += "    ESP | "; break;
+            case 3: mbuf += "    UDP | "; break;
+            case 4: mbuf += "Telegram| "; break;
+            default:
+                if (mod != undefined) ubuf += color("green", mod) + " | ";
+                else mbuf += " system | ";
+                break;
+        }
+        buf += mbuf + message;
+        cbuf += mbuf + message;
+        ubuf += mbuf + message;
+        if (logs.sys[logs.step] && level > 0) logs.sys.push(buf); else logs.sys[logs.step] = buf;
+        if (logs.step < 500) logs.step++; else logs.step = 0;
+        if (cfg.rocket.enable && level > 0) sendRocket(buf);
+        if (cfg.telegram?.enable && state.telegram.started && cfg.telegram.users) {
+            if (level >= cfg.telegram.logLevel || level == 0 && cfg.telegram.logDebug == true) {
+                try {
+                    for (let x = 0; x < cfg.telegram.users.length; x++) {
+                        if (cfg.telegram.logESPDisconnect == false) {
+                            if (!message.includes("had a connection error, resetting connection...")
+                                && !message.includes("failed to connect, trying to reconnect...")) {
+
+
+                                bot.sendMessage(cfg.telegram.users[x], buf).catch(error => {
+                                    log("telegram sending error"); console.log(error);
+                                })
+                            }
+                        } else bot.sendMessage(cfg.telegram.users[x], buf).catch(error => { log("telegram sending error"); console.log(error) })
+                    }
+                } catch (error) { console.log(error, "\nmessage: " + message + "  - Mod: " + mod) }
+            }
+        }
+        if (port != undefined) {
+            if (level != 0) {
+                if (cfg.logging.client || debug) console.log(ubuf);
+                client("log", ubuf, port);
+            } else if (cfg.logging.debug || debug) {
+                if (cfg.logging.clientDebug || debug) console.log(ubuf);
+                client("log", ubuf, port);
+            }
+        } else if (level == 0 && cfg.logging.debug || debug) console.log(cbuf);
+        else if (level != 0) console.log(cbuf);
+        return buf;
+    }
+    function checkArgs_old() {
         let workingDir = require('path').dirname(require.main.filename);
         let journal = false;
         if (process.argv[3] == "-j") journal = true;
@@ -880,10 +1089,14 @@ if (isMainThread) {
                             state: value.state,
                             name: value.owner?.name,
                             client_owner: value.owner?.client,
-                            automation: value.owner?.auto,
+                            telemetry: value.owner?.auto,
                             deviceName: value.zha?.deviceName,
                             Updated: value.stamp,
-                            clients: value.client
+                            clients: value.client,
+                            syncGroup: value.syncGroup,
+                            syncMembers: state.sync[value.syncGroup]?.members,
+                            owner: value.owner
+
                         };
                         let targetCollection;
                         let uniqueProperties = {};
@@ -891,7 +1104,7 @@ if (isMainThread) {
                             case "ha_zha": targetCollection = zha; break;
                             case "ha": targetCollection = ha; break;
                             case "esp": targetCollection = esp; break;
-                            case "automation": targetCollection = core; break;
+                            case "telemetry": targetCollection = core; break;
                             default: targetCollection = unknown; break;
                         }
                         targetCollection[name] = Object.assign(baseObj, uniqueProperties);
@@ -925,10 +1138,12 @@ if (isMainThread) {
                         clearTimeout(timer); // Clear the timeout if response received
                         resolve({
                             client: buf.clientName,
+                            syncGroup: buf.syncGroup,
                             state: buf.state,
                             config: buf.config,
                             entityTemp: buf.entityTemp,
                             entity: buf.entity,
+                            owner: buf.owner,
                             nv: buf.nv
                         });
 
@@ -940,6 +1155,40 @@ if (isMainThread) {
             serverWeb = express.listen(cfg.webDiagPort, function () { log("diag web server starting on port " + cfg.webDiagPort, 0); });
         }
 
+    }
+    function reloadConfig() {
+        fs.readFile(`${workingDir}/config.json`, (err, data) => {
+            if (err) { console.error("Error reading config.json:", err); return; }
+            try {
+                const cfgTemp = JSON.parse(data);
+                if (JSON.stringify(cfg.esp) !== JSON.stringify(cfgTemp.esp)) {
+                    cfg.esp = cfgTemp.esp;
+                    log("ESP config was changed");
+                }
+            } catch (e) {
+                console.error("Error parsing config.json:", e);
+            }
+        });
+    }
+    function watcher(filePath, reloadCallback) {
+        log("creating watcher for: " + filePath);
+        if (fileWatchers[filePath]) {
+            fileWatchers[filePath].close();
+            delete fileWatchers[filePath];
+        }
+        const watcher = fs.watch(filePath, (eventType, filename) => {
+            if (eventType === 'change') {
+                const timerKey = `timer_${filePath}`;
+                timer[timerKey] ||= null;
+                if (timer[timerKey]) clearTimeout(timer[timerKey]);
+                timer[timerKey] = setTimeout(() => {
+                    log("File change event detected. Reloading: " + filePath);
+                    reloadCallback(filePath);
+                    delete timer[timerKey];
+                }, 200);
+            }
+        });
+        fileWatchers[filePath] = watcher;
     }
     workerThreads = {
         esp: function () {
@@ -1049,6 +1298,7 @@ if (isMainThread) {
         }
     }
     boot(0);
+    debug = false;
 } else {
     color = function (color, input, ...option) {   //  ascii color function for terminal colors
         if (input == undefined) input = '';
@@ -1268,8 +1518,8 @@ if (isMainThread) {
                             state[name].reconnect = false;
 
                             if (state[name].boot === 0) {
-                                log("ESP Home - " + color("cyan", name) + " - connected: " +
-                                    color("cyan", cfg.ip) + " - " + color("green", "ONLINE"), 1);
+                                //   log("ESP Home - " + color("cyan", name) + " - connected: " +
+                                //      color("cyan", cfg.ip) + " - " + color("green", "ONLINE"), 1);
                                 state[name].boot = 1;
                             }
 
@@ -1281,9 +1531,10 @@ if (isMainThread) {
                             if (data.type === "Switch") {
                                 emitters[name].on(data.config.objectId, function (st) {
                                     try {
-                                        log("ESP Home - " + color("cyan", name) +
-                                            " - sending state command: " + st +
-                                            " - to switch: " + data.config.objectId, 0);
+                                        if (!data.config.objectId.includes("heartbeat"))
+                                            log("ESP Home - " + color("cyan", name) +
+                                                " - sending state command: " + st +
+                                                " - to switch: " + data.config.objectId, 0);
                                         data.connection.switchCommandService({ key: data.id, state: st });
                                     } catch (e) {
                                         if (state[name].reconnect === false) {
@@ -1423,13 +1674,18 @@ if (isMainThread) {
                             break;
 
                         case "state": {
-                            let target = (data.esp && data.esp.name) || data.espName || data.name || data.esp;
+                            //  let target = (data.esp && data.esp.name) || data.espName || data.name || data.address;
+                            let target = data.address;
                             if (!target) {
                                 const keys = Object.keys(emitters);
                                 if (keys.length === 1) target = keys[0];
                             }
                             if (!target) {
                                 log("ESP worker - state message missing target esp name and multiple connections exist", 1);
+                                console.log(data)
+
+                                console.log("target: \n", target)
+                                console.log(Object.keys(emitters))
                                 break;
                             }
                             const e = emitters[target];
@@ -1442,7 +1698,7 @@ if (isMainThread) {
                         }
 
                         case "close": {
-                            const targetClose = (data.esp && data.esp.name) || data.espName || data.name || data.esp;
+                            const targetClose = (data.esp && data.esp.name) || data.espName || data.name || data.address;
                             if (!targetClose) {
                                 log("ESP worker - close message missing esp.name", 1);
                                 break;
@@ -1452,7 +1708,7 @@ if (isMainThread) {
                         }
 
                         case "restart": {
-                            const t = (data.esp && data.esp.name) || data.espName || data.name || data.esp;
+                            const t = (data.esp && data.esp.name) || data.espName || data.name || data.address;
                             if (!t) {
                                 log("ESP worker - restart message missing esp.name", 1);
                                 break;
@@ -1567,10 +1823,21 @@ if (isMainThread) {
             function lib() {
                 require('events').EventEmitter.defaultMaxListeners = 50;
                 http = require("http");
-                http.Agent({ keepAlive: true }); // to speed up rest repeat calls (sensor push)
+
+                // ✅ Create one persistent keep-alive agent for all REST calls
+                keepAliveAgent = new http.Agent({
+                    keepAlive: true,
+                    maxSockets: 50,
+                    maxFreeSockets: 20,
+                    //   maxTotalSockets: 50,     // total across all hosts
+                    timeout: 60000, // milliseconds
+                });
+
                 WebSocketClient = require('websocket').client;
             }
-            function log(msg, level) { parentPort.postMessage({ type: "log", msg, module: 1, level }); }
+            function log(msg, level) {
+                parentPort.postMessage({ type: "log", msg, module: 1, level });
+            }
             function init() {
                 for (let x = 0; x < cfg.length; x++) {
                     let config = cfg[x];
@@ -1581,7 +1848,8 @@ if (isMainThread) {
                         zha: { queryReply: null },
                         timer: { reconnect: null },
                         log: { ws: [], zhaDevices: {} },
-                        perf: {}
+                        perf: {},
+                        sensorRestSetup: {}, // call rest setup for sensor 
                     };
                     state[config.address].perf ||= {
                         best: 1000,
@@ -1593,47 +1861,50 @@ if (isMainThread) {
                         last100: [],
                     };
                     ws[config.address] ||= new WebSocketClient();
-                };
+                }
             }
             function api(config, address, state) {
                 ws[address].connect("ws://" + address + ":" + config.port + "/api/websocket");
+
                 ws[address].on('connectFailed', function (error) {
                     if (!state.error) {
-                        //  log(error.toString(), 3);
                         setTimeout(() => { haReconnect(error.toString()); }, 5e3);
                     }
                 });
+
                 ws[address].on('connect', function (socket) {
                     log("Websocket (" + color("cyan", address) + ") - starting connection", 0);
                     state.reply = true;
                     state.online = true;
-                    //   state.error = false;
+
                     socket.on('error', function (error) {
-                        if (!state.error) { log("websocket (" + color("cyan", address) + ") - " + error.toString(), 3); state.error = true; }
+                        if (!state.error) {
+                            log("websocket (" + color("cyan", address) + ") - " + error.toString(), 3);
+                            state.error = true;
+                        }
                         socket.close();
                     });
+
                     socket.on('message', function (message) {
                         let buf = JSON.parse(message.utf8Data);
-                        // console.log(buf)
                         switch (buf.type) {
                             case "pong":
                                 state.reply = true;
-                                state.retry = false;  // to prevent repeated retry errors 
+                                state.retry = false;
                                 state.online = true;
                                 state.pingsLost = 0;
                                 let timeFinish = time.epochMil;
                                 let timeResult = timeFinish - state.timeStart;
-                                if (timeResult > 500) log("websocket (" + color("cyan", address) + ") ping is lagging - delay is: " + timeResult + "ms", 2);
-                                log("websocket (" + color("cyan", address) + ") ping is lagging - delay is: " + timeResult + "ms", 0);
+                                if (timeResult > 500)
+                                    log("websocket (" + color("cyan", address) + ") ping lag: " + timeResult + "ms", 2);
                                 break;
+
                             case "result":
                                 let count = 0;
-                                //    console.log(buf)
                                 if (buf.id == state.query) {
                                     for (let x = 0; x < buf.result?.length; x++) {
                                         let name = buf.result[x].entity_id;
                                         if (/^(input|switch)/.test(name)) {
-                                            // if (/test123|piggary/.test(name)) {
                                             count++;
                                             state.entityTotal++;
                                             parentPort.postMessage({
@@ -1642,8 +1913,6 @@ if (isMainThread) {
                                                 name,
                                                 state: buf.result[x].state
                                             });
-                                            //console.log(buf.result[x]);
-                                            // console.log("adding new entity: " + name);
                                         }
                                     }
                                     log("Websocket (" + color("cyan", address)
@@ -1651,16 +1920,17 @@ if (isMainThread) {
 
                                     if (state.error) {
                                         log("Websocket (" + color("cyan", address)
-                                            + ") - HA is " + color("green", "back online") + " - requesting reregistrations", 1);
+                                            + ") - HA back online - requesting reregistrations", 1);
                                         parentPort.postMessage({
                                             type: "ha", class: "reset",
                                             address: address,
                                         });
                                         state.error = false;
                                     }
+
                                     if (address == (cfg[(cfg.length - 1)].address)) {
                                         log("Websocket (" + color("cyan", address)
-                                            + ") - all fetches done  - total entities: "
+                                            + ") - all fetches done - total entities: "
                                             + buf.result?.length + " - using: " + state.entityTotal + " entities", 1);
                                         state.entityTotal = 0;
                                         if (state.clientFetch) {
@@ -1673,52 +1943,52 @@ if (isMainThread) {
                                             state.clientFetch = null;
                                         }
                                     }
-                                    // console.log(buf)
                                 }
+
                                 if (buf.id == state.zha.query) {
                                     state.zha.devices ||= {};
                                     if (Array.isArray(buf.result)) {
                                         buf.result.forEach(dev => {
                                             if (dev.user_given_name) {
-                                                // logs.zhaDevices[address] ||= [];
                                                 let name = dev.user_given_name;
                                                 logs.zhaDevices[address].push(dev.name);
-                                                state.zha.devices[dev.device_reg_id] = { userName: dev.name, name: dev.user_given_name };
+                                                state.zha.devices[dev.device_reg_id] = {
+                                                    userName: dev.name,
+                                                    name: dev.user_given_name
+                                                };
                                                 parentPort.postMessage({
                                                     type: "ha", class: "result_zha",
                                                     address: address,
                                                     name,
                                                     dev
                                                 });
-                                                //  if (dev.user_given_name.includes("Bedroom")) console.log("adding new entity: ", dev);
                                             }
                                         });
-                                        // console.log("adding new entity: ", entity);
-                                        //console.log(state.zha.devices)
-                                        log("Websocket (" + color("cyan", address) + ") - received ZHA device list, items: "
-                                            + buf.result.length);
-                                        //console.log(state.zha.devices);
+                                        log("Websocket (" + color("cyan", address)
+                                            + ") - received ZHA device list, items: " + buf.result.length);
                                         clearTimeout(state.zha.queryReply);
                                     } else if (buf.error?.code == 'unknown_command') {
                                         log("Websocket (" + color("cyan", address) + ") - no ZHA devices - disabling");
                                         clearTimeout(state.zha.queryReply);
                                     } else if (buf.error?.code == 'unknown_error') {
-                                        log("Websocket (" + color("cyan", address) + ") - ZHA not online (yet?) - wait for retry", 2);
+                                        log("Websocket (" + color("cyan", address)
+                                            + ") - ZHA not online yet - will retry", 2);
                                     }
                                 }
                                 break;
+
                             case "auth_required":
                                 log("Websocket (" + color("cyan", address) + ") - authenticating", 0);
                                 send({ type: "auth", access_token: config.token });
                                 break;
+
                             case "auth_ok":
                                 log("Websocket (" + color("cyan", address) + ") - connection " + color("green", "ONLINE"));
+                                log("Websocket (" + color("cyan", address) + ") - subscribing to HA events", 1);
 
-                                log("Websocket (" + color("cyan", address) + ") - subscribing HA to event listeners", 1);
                                 state.id++;
                                 send({ id: state.id++, type: "subscribe_events", event_type: "state_changed" });
                                 send({ id: state.id++, type: "subscribe_events", event_type: "zha_event" });
-
                                 zhaQuery();
 
                                 log("Websocket (" + color("cyan", address) + ") - fetching entity states", 1);
@@ -1726,13 +1996,17 @@ if (isMainThread) {
                                 send({ id: state.id++, type: "get_states" });
 
                                 send({ id: state.id++, type: "ping" });
-                                setTimeout(() => { state.pingsLost = 0; send({ id: state.id++, type: "ping" }); state.reply = true; ping(); }, 10e3);
+                                setTimeout(() => {
+                                    state.pingsLost = 0;
+                                    send({ id: state.id++, type: "ping" });
+                                    state.reply = true;
+                                    ping();
+                                }, 10e3);
                                 break;
+
                             case "event":
-                                // console.log(buf.event)
                                 switch (buf.event.event_type) {
                                     case "zha_event":
-                                        // console.log(buf.event)
                                         if (state.zha.devices[buf.event.data.device_id] != undefined
                                             && buf.event.data.command != 'press_type') {
                                             let entity_name = state.zha.devices[buf.event.data.device_id].name;
@@ -1743,30 +2017,25 @@ if (isMainThread) {
                                                 name: entity_name,
                                                 state: newState
                                             });
-                                            //console.log("ZHA device event: " + entity_name, " - action: " + buf.event.data.command);
                                         }
                                         break;
+
                                     case "state_changed":
                                         let ibuf, obuf;
                                         if (state.log.ws[state.logStep] == undefined) state.log.ws.push(buf.event);
-                                        else state.log.ws[state.logStep] = buf.event
+                                        else state.log.ws[state.logStep] = buf.event;
                                         if (state.logStep < 200) state.logStep++; else state.logStep = 0;
 
                                         if (buf.event.data.new_state != null) ibuf = buf.event.data.new_state.state;
-                                        if (ibuf === "on") { obuf = true; }
-                                        else if (ibuf === "off") { obuf = false; }
-                                        else if (ibuf == null) {
+                                        if (ibuf === "on") obuf = true;
+                                        else if (ibuf === "off") obuf = false;
+                                        else if (ibuf == null)
                                             log(`Websocket (${color("cyan", address)}) - sent null/undefined data: ${ibuf}`, 2);
-                                        } else if (ibuf === "unavailable") {
-                                            log(`Websocket (${color("cyan", address)}) - Entity unavailable/offline:
-                                                         ${buf.event.data.new_state.entity_id}`, 2, 8);
-                                        } else if (!isNaN(ibuf) && isFinite(ibuf)) { obuf = Number(ibuf); }
-                                        else if (ibuf.length === 32) { obuf = ibuf; }  // for button entity?
-                                        else {
-                                            //   log(`Websocket (${color("cyan", address)}) - bogus data: Entity=
-                                            //              ${buf.event.data.new_state.entity_id}, Bytes=${ibuf.length}, Data=${ibuf}`, 2);
-                                        }
-                                        // console.log(obuf)
+                                        else if (ibuf === "unavailable")
+                                            log(`Websocket (${color("cyan", address)}) - Entity unavailable: ${buf.event.data.new_state.entity_id}`, 2);
+                                        else if (!isNaN(ibuf) && isFinite(ibuf)) obuf = Number(ibuf);
+                                        else if (ibuf.length === 32) obuf = ibuf;
+
                                         if (obuf !== undefined) {
                                             let entity_id = buf.event.data.entity_id;
                                             parentPort.postMessage({
@@ -1775,111 +2044,126 @@ if (isMainThread) {
                                                 name: entity_id,
                                                 state: obuf
                                             });
-                                            break;
                                         }
+                                        break;
                                 }
                                 break;
                         }
                     });
+
                     em[address].on('zhaQuery' + address, function () { zhaQuery(); });
                     em[address].on('state' + address, function (data) { send(data); });
                     em[address].on('fetch', function (data) {
-                        //  console.log(data)
                         log("Websocket (" + color("cyan", address) + ") - fetching entities for client: "
                             + color("purple", data.name) + " - port: " + color("purple", data.port), 0);
                         if (data.port) {
-                            state.clientFetch = {}
-                            state.clientFetch.name = data.name ?? undefined;
-                            state.clientFetch.port = data.port ?? undefined;
+                            state.clientFetch = { name: data.name ?? undefined, port: data.port ?? undefined };
                         }
                         state.query = state.id;
                         send({ id: state.id++, type: "get_states" });
-                        // state.queryReply = state.id;
                     });
+
+                    // === Internal send() patched ===
                     function send(data) {
-                        let packet;
-                        //  console.log("incoming state: ", data);
-                        if (data.type == "state") {
-                            //  console.log("incoming state: ", data);
-                            if (!data.unit) {
-                                packet = {
+                        if (data.type === "state") {
+                            if (!data.unit || state.sensorRestSetup[data.entity]?.boot) {
+                                // send via WebSocket
+                                const packet = {
                                     id: state.id++,
-                                    type: "call_service",
-                                    domain: (!data.zha) ? data.entity.split(".")[0] : "switch",
-                                    service: data.state == false ? 'turn_off' : 'turn_on',
-                                    target: (!data.zha) ? { entity_id: data.entity } : { device_id: (data.zha) }
-                                }
-                                // console.log(packet)
+                                    type: (data.unit) ? "set_state" : "call_service",
+                                    ...(data.unit && { entity_id: data.entity, state: data.state }),
+                                    ...(data.unit && {
+                                        attributes: { unit_of_measurement: data.unit },
+                                    }),
+                                    ...(!data.unit && {
+                                        domain: (!data.zha) ? data.entity.split(".")[0] : "switch",
+                                        service: data.state == false ? 'turn_off' : 'turn_on',
+                                        target: (!data.zha)
+                                            ? { entity_id: data.entity }
+                                            : { device_id: data.zha },
+                                    }),
+                                };
                                 try { socket.sendUTF(JSON.stringify(packet)); }
-                                catch (error) { log(error, 3) }
+                                catch (error) { log(error, 3); }
                             } else {
+                                // ✅ send via REST with keep-alive agent
                                 const packet = {
                                     state: data.state,
                                     attributes: {
                                         friendly_name: data.entity,
-                                        unit_of_measurement: data.unit
-                                    }
+                                        unit_of_measurement: data.unit,
+                                    },
                                 };
+                                const postData = JSON.stringify(packet);
+
                                 const options = {
-                                    hostname: address,   // or your HA IP
+                                    hostname: address,
                                     port: 8123,
                                     path: `/api/states/sensor.${data.entity}`,
                                     method: "POST",
+                                    agent: keepAliveAgent, // ✅ Reuse same sockets
                                     headers: {
                                         "Authorization": "Bearer " + config.token,
                                         "Content-Type": "application/json",
-                                        "Content-Length": Buffer.byteLength(JSON.stringify(packet))
-                                    }
+                                        "Content-Length": Buffer.byteLength(postData),
+                                        "Connection": "keep-alive", // ✅ ensure reuse
+                                    },
                                 };
+
                                 const req = http.request(options, (res) => {
-                                    //  let body = "";
-                                    //    res.on("data", chunk => body += chunk);
-                                    //  res.on("end", () => console.log("HA response:", body));
+                                    // consume response to fully close HTTP stream
+                                    res.resume();
                                 });
                                 req.on("error", (err) => console.error("HA error:", err));
-                                req.write(JSON.stringify(packet));
+                                req.write(postData);
                                 req.end();
                             }
                         } else {
-                            packet = data;
-                            try { socket.sendUTF(JSON.stringify(packet)); }
-                            catch (error) { log(error, 3) }
+                            try { socket.sendUTF(JSON.stringify(data)); }
+                            catch (error) { log(error, 3); }
                         }
                     }
+
                     function ping() {
                         if (state.reply == false) {
                             if (state.pingsLost < 2) {
                                 if (!state.retry) {
-                                    log("websocket (" + color("cyan", address) + ") - ping was never replied in 10 sec", 3);
+                                    log("websocket (" + color("cyan", address)
+                                        + ") - ping was never replied in 10 sec", 3);
                                     state.retry = true;
                                 }
                                 state.pingsLost++;
-                            }
-                            else { socket.close(); haReconnect("ping timeout"); return; }
+                            } else { socket.close(); haReconnect("ping timeout"); return; }
                         }
                         state.reply = false;
                         state.timeStart = time.epochMil;
                         send({ id: state.id++, type: "ping" });
                         setTimeout(() => { ping(); }, 10e3);
                     }
+
                     function zhaQuery() {
-                        log("Websocket (" + color("cyan", address) + ") - querying ZHA device list... (id: " + state.id + ")");
+                        log("Websocket (" + color("cyan", address)
+                            + ") - querying ZHA device list... (id: " + state.id + ")");
                         logs.zhaDevices[address] = [];
                         state.zha.query = state.id;
                         send({ id: state.id++, type: "zha/devices" });
                         state.zha.queryReply = setTimeout(() => {
-                            log("Websocket (" + color("cyan", address) + ") - never replied to ZHA Device query, retrying...");
+                            log("Websocket (" + color("cyan", address)
+                                + ") - never replied to ZHA Device query, retrying...");
                             zhaQuery();
                         }, 10e3);
                     }
                 });
+
                 function haReconnect(error) {
                     state.error = true;
                     clearTimeout(state.timer.reconnect);
                     if (error) log("websocket (" + color("cyan", address) + ") - " + error.toString(), 3);
                     em[address].removeAllListeners();
                     ws[address].connect("ws://" + address + ":" + config.port + "/api/websocket");
-                    state.timer.reconnect = setTimeout(() => { if (!state.reply) { haReconnect(); } }, 10e3);
+                    state.timer.reconnect = setTimeout(() => {
+                        if (!state.reply) haReconnect();
+                    }, 10e3);
                 }
             }
             parentPort.on('message', (data) => {
@@ -1888,12 +2172,17 @@ if (isMainThread) {
                         cfg = data.cfg;
                         log("thread received configuration ");
                         init();
-                        cfg.forEach((config) => { api(config, config.address, state[config.address]); });
+                        cfg.forEach((config) => {
+                            api(config, config.address, state[config.address]);
+                        });
                         break;
+
                     case "fetch":
                         cfg.forEach(element => { em[element.address].emit('fetch', data); });
                         break;
+
                     case "state":
+                        data.entity = data.entity.replace(/ /g, "_");
                         cfg.forEach(element => { em[element.address].emit(('state' + data.address), data); });
                         break;
                 }
