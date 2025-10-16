@@ -5,7 +5,7 @@ module.exports = {
     automation: {
         yourAutomationsName: function (_name, _push, _reload) {
             try {
-                let { state, config, nv, log, write, push } = _pointers(_name);
+                let { state, config, nv, log, write, send, push } = _pointers(_name);
                 if (_reload) {   // called after modification/reload of this automation file
                     if (_reload != "config") {
                         log("hot reload initiated");
@@ -25,8 +25,8 @@ module.exports = {
                         initialization logic goes here
         
                     */
-                 //  example push
-                 //  push["input_boolean.test"] = () => { test2() }
+                    //  example push
+                    //  push["input_boolean.test"] = () => { test2() }
 
                     return;
                 } else push[_push.name]?.();    // called with every incoming push event
@@ -41,11 +41,11 @@ module.exports = {
         },
         example2: function (_name, _push, _reload) {     // add another automation 
             try {
-                let { state, config, nv, log, write, push } = _pointers(_name);
+                let { state, config, nv, log, write, send, push } = _pointers(_name);
                 if (_reload) {   // called after modification/reload of this automation file
                     if (_reload != "config") {
                         log("hot reload initiated");
-                    } else ({ state, cfg, nv } = _pointers(_name)); // called after modification/reload of this automations config file
+                    } else ({ state, config, nv } = _pointers(_name));// called after modification/reload of this automations config file
                     return;
                 }
                 if (_push === "init") { // ran only once
@@ -70,7 +70,7 @@ let _pointers = (_name) => {
         nv: nv[_name] ?? undefined,
         push: push[_name] ?? undefined,
         log: (m, l) => slog(m, l, _name),
-        write: () => file.write.nv(_name),
+        write: () => writeNV(_name),
         send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
     }
 }
