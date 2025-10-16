@@ -3,18 +3,18 @@ module.exports = {
     automation: {
         Solar: function (_name, _push, _reload) {
             try {
-                let { st, cfg, nv, log, write } = _pointers(_name);
+                let { state, cfg, nv, log, write, push, send } = _pointers(_name);
                 if (_reload) {
-                    if (_reload == "config") ({ st, cfg, nv } = _pointers(_name));
+                    if (_reload == "config") ({ state, cfg, nv } = _pointers(_name));
                     else {
                         log("hot reload initiated");
-                        st.inverter.forEach(inverter => {
+                        state.inverter.forEach(inverter => {
                             clearTimeout(inverter.switchWattsTimer);
                         });
-                        clearInterval(st.timer.write);
-                        clearInterval(st.timer.minute);
-                        clearInterval(st.timer.second);
-                        clearInterval(st.timer.priority);
+                        clearInterval(state.timer.write);
+                        clearInterval(state.timer.minute);
+                        clearInterval(state.timer.second);
+                        clearInterval(state.timer.priority);
                     }
                     return;
                 }
@@ -105,7 +105,7 @@ module.exports = {
                                     solar.power(x, false);
                                     return;
                                 }
-                            } else if (st.grid.state !== false) {
+                            } else if (state.grid.state !== false) {
                                 if (inverter.nightMode != true) {
                                     if (config.sunStop != undefined) {
                                         if (sun <= config.sunStop) {
@@ -165,7 +165,7 @@ module.exports = {
                         function checkPriority() {
                             if (config.priorityWait && entity[cfg.solar.priority.entityAuto]?.state == true) {
                                 for (let y = 0; y < cfg.solar.priority.queue.length; y++)
-                                    if (st.priority.queue[y].state) return true;
+                                    if (state.priority.queue[y].state) return true;
                             } else return false;
                         }
                         function trigger(newState, message, level = 1) {
@@ -203,17 +203,20 @@ module.exports = {
                     },
                     off: function (x) {
                         if (cfg.inverter[x].enable == true) {
+
                             let { voltsBat, inverterVolts, battery, config, inverter } = solar.pointers(x);
+                            //   console.log(inverter.state)
                             if (battery.sensorVolt != undefined) {
                                 if (inverter.state != "faulted" && inverter.state === false) {
                                     solar.changing(x, true);
+                                    // console.log("checking...")
                                     if (solar.nightMode(x) == true) {
                                         if (voltsBat >= config.nightMode.startVoltageMin) {
                                             log("Battery is enough to make it through the night: " + voltsBat + ", " + config.name + " switching on");
                                             solar.power(x, true);
                                         } else log("Battery is too low to make it through the night: " + voltsBat + ", " + config.name + " staying off");
                                     }
-                                    if (config.blackout == true && st.grid.state == false && voltsBat >= config.blackoutVoltMin) {
+                                    if (config.blackout == true && state.grid.state == false && voltsBat >= config.blackoutVoltMin) {
                                         log("Blackout detected, volts is enough to run: " + voltsBat + ", " + config.name + " switching on", 2);
                                         solar.power(x, true);
                                     }
@@ -245,7 +248,7 @@ module.exports = {
                                 if (wattsSolar > (gridWatts * config.gridWattMultiplier)) {
                                     trigger(power, "charge current is higher than grid power: " + wattsSolar + "w  " + voltsBat + "v, switching on");
                                 }
-                                if (wattsSolar <= (gridWatts + (gridWatts * config.gridWattMultiplier))) { inverter.delayStep = false; }
+                                if (wattsSolar <= (gridWatts * config.gridWattMultiplier)) { inverter.delayStep = false; }
                             } else if (config.inverterWattsSwitch && inverter.switchWatts) {
                                 if (wattsSolar > inverter.switchWatts) {
                                     trigger(power, "charge watts (" + wattsSolar + "w) is higher than last switch watts: "
@@ -257,8 +260,6 @@ module.exports = {
                                     trigger(power, "battery is charging, current is high: " + ampsBat + "a  " + voltsBat + "v, switching on");
                                 } else if (ampsBat < config.ampsRun) inverter.delayStep = false;
                             }
-                            if (config.sunRun == undefined && config.ampsRun == undefined && config.gridWatt == undefined)
-                                trigger(power, "battery is charging (volts trigger): " + voltsBat + ", switching on");
                         }
                         function trigger(power, message, sunRun) {
                             if (sunRun) {
@@ -269,6 +270,7 @@ module.exports = {
                                 } else if (time.epoch - inverter.delayTimerSun >= config.delaySwitchOn) action();
                             } else {
                                 if (inverter.delayStep == false) {
+                                    // console.log("charge checking is being reset")
                                     inverter.delayTimer = time.epoch;
                                     inverter.delayStep = true;
                                     return;
@@ -284,29 +286,16 @@ module.exports = {
                                 clearTimeout(inverter.switchWattsTimer);
                                 inverter.switchWatts = null;
                                 cfg.solar.priority.queue.forEach((_, y) => {
-                                    st.priority.queue[y].delayStep = false;
-                                    st.priority.queue[y].delayStepSun = false;
+                                    state.priority.queue[y].delayStep = false;
+                                    state.priority.queue[y].delayStepSun = false;
                                 });
                             }
                         }
                     },
                     power: function (x, run, faulted) {
                         let config = cfg.inverter[x];
-                        function toggle() {
-                            let list, delay = 0;
-                            if (run) list = config.transfer.switchOn; else list = config.transfer.switchOff;
-                            for (let y = 0; y < list.length; y++) {
-                                setTimeout(() => {
-                                    // log("inverter: " + config.name + " - intention: " + run + ", transferring ATS switch "
-                                    //      + y + " - state: " + list[y].state);
-                                    send(list[y].entity, list[y].state);
-                                }, delay);
-                                delay += ((list[y].delay == undefined) ? 500 : (list[y].delay * 1e3));
-                            }
-                            if (cfg.inverter[x].entity != undefined) send(cfg.inverter[x].entity, run);
-                        }
                         if (run == true) {
-                            if (time.epoch - st.inverter[x].step >= cfg.solar.cycleError) {
+                            if (time.epoch - state.inverter[x].step >= cfg.solar.cycleError) {
                                 if (config.power.entity == undefined) {
                                     //  log("inverter: " + config.name + " - transferring switches to inverter - wait");
                                     toggle(run);
@@ -317,19 +306,19 @@ module.exports = {
                                         toggle(run);
                                     } else {
                                         log("inverter: " + config.name + " - already on - clearing shutdown delay");
-                                        clearTimeout(st.inverter[x].delayOffTimer);
-                                        st.inverter[x].delayOffTimer = null;
+                                        clearTimeout(state.inverter[x].delayOffTimer);
+                                        state.inverter[x].delayOffTimer = null;
                                         //  log("inverter: " + config.name + " - transferring switches to inverter - wait");
                                         toggle(run);
                                     }
                                 }
-                                st.inverter[x].state = true;
-                                st.inverter[x].delayFaultStep = false;
-                                setTimeout(() => { st.inverter[x].delayFaultStep = false }, 5e3);
+                                state.inverter[x].state = true;
+                                state.inverter[x].delayFaultStep = false;
+                                setTimeout(() => { state.inverter[x].delayFaultStep = false }, 5e3);
                             } else {
                                 log("inverter: " + config.name + " - cycling too frequently, epoch: "
-                                    + time.epoch + " step:" + st.inverter[x].step + " - inverter auto shutting down", 3);
-                                // st.inverter[x].state = false;
+                                    + time.epoch + " step:" + state.inverter[x].step + " - inverter auto shutting down", 3);
+                                // state.inverter[x].state = false;
                                 entity[cfg.inverter[x].entity].state = false;
                                 send(cfg.solar.inverterAuto, false);
                                 solar.power(x, false);
@@ -343,30 +332,43 @@ module.exports = {
                                 toggle(run);
                                 if (config.power.delayOff == undefined || faulted) {
                                     log("inverter: " + config.name + ", power off");
-                                    st.inverter[x].delayOffTimer = setTimeout(() => {
-                                        send(config.power.entity, run);
-                                        st.inverter[x].delayOffTimer = null;
+                                    state.inverter[x].delayOffTimer = setTimeout(() => {
+                                        send(config.power.entity, false);
+                                        state.inverter[x].delayOffTimer = null;
                                     }, 10e3);
                                 } else {
                                     log("inverter: " + config.name + " - shutdown will delay by:" + config.power.delayOff + " seconds");
-                                    st.inverter[x].delayOffTimer = setTimeout(() => {
+                                    state.inverter[x].delayOffTimer = setTimeout(() => {
                                         log("inverter: " + config.name + " - shutdown was delayed, now powering off");
-                                        send(config.power.entity, run);
-                                        st.inverter[x].delayOffTimer = null;
-                                        st.inverter[x].timeShutdown = time.epoch;
+                                        send(config.power.entity, false);
+                                        state.inverter[x].delayOffTimer = null;
+                                        state.inverter[x].timeShutdown = time.epoch;
                                     }, config.power.delayOff * 1000);
                                 }
                             }
-                            if (!faulted) st.inverter[x].state = false;
-                            else st.inverter[x].state = "faulted";
-                            st.inverter[x].step = time.epoch;
+                            if (!faulted) state.inverter[x].state = false;
+                            else state.inverter[x].state = "faulted";
+                            state.inverter[x].step = time.epoch;
                         }
-                        st.inverter[x].delayStep = false;
-                        st.inverter[x].delayVoltsStep = false;
-                        st.inverter[x].delayFaultStep = false;
-                        st.inverter[x].delaySunStep = false;
-                        cfg.inverter.forEach((_, y) => { st.inverter[y].delayStep = false });
-                        cfg.solar.priority.queue.forEach((_, y) => { st.priority.queue[y].delayStep = false });
+                        function toggle() {
+                            let list, delay = 0;
+                            if (run) list = config.transfer.switchOn; else list = config.transfer.switchOff;
+                            for (let y = 0; y < list.length; y++) {
+                                setTimeout(() => {
+                                    // log("inverter: " + config.name + " - intention: " + run + ", transferring ATS switch "
+                                    //      + y + " - state: " + list[y].state);
+                                    send(list[y].entity, list[y].state);
+                                }, delay);
+                                delay += ((list[y].delay == undefined) ? 500 : (list[y].delay * 1e3));
+                            }
+                            if (cfg.inverter[x].entity != undefined) send(cfg.inverter[x].entity, run);
+                        }
+                        state.inverter[x].delayStep = false;
+                        state.inverter[x].delayVoltsStep = false;
+                        state.inverter[x].delayFaultStep = false;
+                        state.inverter[x].delaySunStep = false;
+                        cfg.inverter.forEach((_, y) => { state.inverter[y].delayStep = false });
+                        cfg.solar.priority.queue.forEach((_, y) => { state.priority.queue[y].delayStep = false });
                     },
                     nightMode: function (x) {
                         let nightMode = null, config = cfg.inverter[x];
@@ -380,9 +382,9 @@ module.exports = {
                             else nightMode = false;
                         } else nightMode = false;
                         if (nightMode == true) {
-                            if (st.inverter[x].nightMode == false) {
+                            if (state.inverter[x].nightMode == false) {
                                 log("inverter: " + config.name + " - activating night mode");
-                                st.inverter[x].nightMode = true;
+                                state.inverter[x].nightMode = true;
                                 return true;
                             } else return false;
                         } else return false;
@@ -391,20 +393,20 @@ module.exports = {
                     welder: function () {    // needs to be rewritten for  cfg.inverter.sensorAmps or esp direct
                         if (entity[cfg.inverter[0].espPower].state >= cfg.inverter[0].welderWatts ||  // check inverter meter
                             entity[cfg.grid.espPower].state >= cfg.inverter[0].welderWatts) {           // check grid meter
-                            st.welderStep = time.epoch;                   // extend welter timeout if still heavy loads
-                            if (st.welder == false) {
+                            state.welderStep = time.epoch;                   // extend welter timeout if still heavy loads
+                            if (state.welder == false) {
                                 log("welder detected: " + entity[cfg.inverter[0].espPower].state + "w - shutting down all pumps", 2);
-                                st.welder = true;
-                                st.priority[0] = false;
+                                state.welder = true;
+                                state.priority[0] = false;
                                 send("input_boolean.auto_compressor", false);
                                 send("input_boolean.auto_pump_transfer", false);
                                 //    send("uth-relay1", false);
                                 // turn on fan
                             }
                         } else {
-                            if (st.welder == true && time.epoch - st.welderStep >= cfg.inverter[0].welderTimeout) {
+                            if (state.welder == true && time.epoch - state.welderStep >= cfg.inverter[0].welderTimeout) {
                                 log("welder not detected: " + entity[cfg.inverter[0].espPower].state + "w");
-                                st.welder = false;
+                                state.welder = false;
                             }
                         }
                     },
@@ -434,22 +436,22 @@ module.exports = {
                             inverterWatts = ~~parseFloat(entity[config.inverterWatts].state);
                         if (cfg.solar.sunlight != undefined)
                             sun = Math.round(entity[cfg.solar.sunlight].state * 100) / 100;
-                        return { voltsBat, inverterVolts, ampsBat, sun, inverterWatts, gridWatts, wattsSolar, battery, config, inverter: st.inverter[x] };
+                        return { voltsBat, inverterVolts, ampsBat, sun, inverterWatts, gridWatts, wattsSolar, battery, config, inverter: state.inverter[x] };
                     },
                 }
                 let priority = {
                     auto: function () {
                         ({ st, cfg, nv } = _pointers(_name));
-                        if (!st.priority.boot) {
+                        if (!state.priority.boot) {
                             log("priority queue - system is going ONLINE");
-                            st.priority.boot = true;
+                            state.priority.boot = true;
                         }
                         for (let x = cfg.solar.priority.queue.length - 1; x > -1; x--) priority.on(x);
                         for (let x = 0; x < cfg.solar.priority.queue.length; x++) priority.off(x);
                     },
                     on: function (x) {
                         let { battery, volts, amps, sun } = priority.pointers();
-                        let member = st.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
+                        let member = state.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
                         /*
                         if (member.state == null) {
                             log("priority queue - " + member.cfg.name + " - member is unavailable - priority going offline", 3);
@@ -491,16 +493,16 @@ module.exports = {
                     },
                     off: function (x) {
                         let { battery, volts, amps, sun } = priority.pointers();
-                        let member = st.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
+                        let member = state.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
                         if (member.cfg.entityAuto == undefined
                             || member.cfg.entityAuto != undefined && entity[member.cfg.entityAuto].state == true) {
                             if (member.state == false) {
                                 if (member.cfg.enable == true) {
                                     if (member.cfg.inverter == undefined) {
                                         if (cfg.inverter[0]?.enable == true) {
-                                            if (st.inverter[0].state == true) checkVolts();
+                                            if (state.inverter[0].state == true) checkVolts();
                                         } else checkVolts();
-                                    } else if (st.inverter[member.cfg.inverter].state == true) checkVolts();
+                                    } else if (state.inverter[member.cfg.inverter].state == true) checkVolts();
                                 }
                             }
                         }
@@ -542,7 +544,7 @@ module.exports = {
                         }
                     },
                     trigger: function (x, message, newState, isSun) {
-                        let member = st.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
+                        let member = state.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
                         if (cfg.inverter.length > 0) {
                             if (checkInverter()) proceed();
                         } else proceed();
@@ -551,8 +553,8 @@ module.exports = {
                                 if (cfg.inverter[y].enable) {
                                     if (newState == false) {
                                         if (member.inverter != undefined) {
-                                            if (member.inverter === y) st.inverter[y].delayStep = false;
-                                        } else st.inverter[y].delayStep = false;
+                                            if (member.inverter === y) state.inverter[y].delayStep = false;
+                                        } else state.inverter[y].delayStep = false;
                                     }
                                     if (entity[cfg.inverter[y].entity]?.state == false) return false;
                                 }
@@ -574,15 +576,15 @@ module.exports = {
                         }
                     },
                     send: function (x, newState) {
-                        let member = st.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
+                        let member = state.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
                         for (let y = 0; y < member.cfg.entities.length; y++) {
-                            st.priority.skipLog = true;
+                            state.priority.skipLog = true;
                             send(member.cfg.entities[y], newState);
                         }
-                        cfg.inverter.forEach((_, y) => { st.inverter[y].delayStep = false });
-                        cfg.solar.priority.queue.forEach((_, y) => { st.priority.queue[y].delayStep = false; member.delayStepSun = false; });
+                        cfg.inverter.forEach((_, y) => { state.inverter[y].delayStep = false });
+                        cfg.solar.priority.queue.forEach((_, y) => { state.priority.queue[y].delayStep = false; member.delayStepSun = false; });
                         member.state = newState;
-                        st.priority.step = time.epoch;
+                        state.priority.step = time.epoch;
                     },
                     pointers: function () {
                         let battery = cfg.battery[cfg.battery.findIndex(battery => battery.name === cfg.solar.priority.battery)];
@@ -603,16 +605,16 @@ module.exports = {
                 }
                 let check = {
                     temp: function () {
-                        let config = cfg.fan, fan = st.fan, wattsBat,
-                            wattsInv = Math.round(st.sensor.watt[config.sensor.watt.inverter]), temp = 0,
+                        let config = cfg.fan, fan = state.fan, wattsBat,
+                            wattsInv = Math.round(state.sensor.watt[config.sensor.watt.inverter]), temp = 0,
                             tempUnit = cfg.sensor.temp[config.sensor.temp].unit;
-                        if (Math.sign(st.sensor.watt[config.sensor.watt.battery]) == -1)
-                            wattsBat = (Math.round(st.sensor.watt[config.sensor.watt.battery]) * -1);
-                        else wattsBat = Math.round(st.sensor.watt[config.sensor.watt.battery]);
+                        if (Math.sign(state.sensor.watt[config.sensor.watt.battery]) == -1)
+                            wattsBat = (Math.round(state.sensor.watt[config.sensor.watt.battery]) * -1);
+                        else wattsBat = Math.round(state.sensor.watt[config.sensor.watt.battery]);
                         if (cfg.sensor.temp[config.sensor.temp].CtoF) {
-                            temp = (Math.round((9 / 5 * st.sensor.temp[config.sensor.temp] + 32) * 10) / 10)
+                            temp = (Math.round((9 / 5 * state.sensor.temp[config.sensor.temp] + 32) * 10) / 10)
                         }
-                        else temp = Math.round(st.sensor.temp[config.sensor.temp] * 10) / 10
+                        else temp = Math.round(state.sensor.temp[config.sensor.temp] * 10) / 10
                         switch (fan.run) {
                             case false:
                                 if (temp >= config.temp.on) {
@@ -629,7 +631,7 @@ module.exports = {
                                         }
                                     } else fan.delayStep = false;
                                 } else if (config.watts != undefined) {
-                                    if (config.watts.night != undefined && st.inverter[0].nightMode == true) {
+                                    if (config.watts.night != undefined && state.inverter[0].nightMode == true) {
                                         if (wattsBat >= config.watts.night.on) {
                                             if (fanSwitch(true)) {
                                                 log("(nightmode) battery power is rising: " + wattsBat + "w - temp: " + temp + tempUnit + ", fan turning on ");
@@ -670,7 +672,7 @@ module.exports = {
                                         }
                                     } else fan.delayStep = false;
                                 } else if (config.watts != undefined && temp <= config.temp.off) {
-                                    if (config.watts.night != undefined && st.inverter[0].nightMode == true) {
+                                    if (config.watts.night != undefined && state.inverter[0].nightMode == true) {
                                         if (wattsBat <= config.watts.night.off) {
                                             if (fanSwitch(false)) {
                                                 log("(nightmode) battery power has lowered: " + wattsBat + "w - temp: " + temp + tempUnit + ", fan turning off ");
@@ -764,7 +766,7 @@ module.exports = {
                         // log sunlight daily name
                         // grid statistics , save to nv
                         if (cfg.grid.espVoltage) {
-                            let volts = ~~parseFloat(entity[cfg.grid.espVoltage].state), config = cfg.grid, grid = st.grid;
+                            let volts = ~~parseFloat(entity[cfg.grid.espVoltage].state), config = cfg.grid, grid = state.grid;
                             if (time.boot > 10) {
                                 if (volts >= config.voltMax) {
                                     if (grid.state != false) {
@@ -786,14 +788,14 @@ module.exports = {
                                     grid.state = true;
                                 } else if (grid.state == false) {
                                     if (time.epoch - grid.delayOn >= config.delayRecover) {
-                                        let outage = (time.epoch - st.grid.timerBlackout);
+                                        let outage = (time.epoch - state.grid.timerBlackout);
                                         log("grid back online: " + volts + "v,  offline for: " + outage + "s", 2);
                                         grid.state = true;
                                     }
                                 }
                             }
                             function blackout() {
-                                st.grid.timerBlackout = time.epoch;
+                                state.grid.timerBlackout = time.epoch;
                                 grid.state = false;
                                 grid.delayOn = time.epoch;
                             }
@@ -801,7 +803,7 @@ module.exports = {
                     },
                     battery: function () {
                         for (let x = 0; x < cfg.battery.length; x++) {
-                            let config = cfg.battery[x], bat = st.battery[x], name = cfg.battery[x].name,
+                            let config = cfg.battery[x], bat = state.battery[x], name = cfg.battery[x].name,
                                 amps = entity[config.sensorAmp]?.state;
                             if (nv.battery[name] == undefined) {
                                 log("initializing NV memory for - Battery: " + name);
@@ -919,7 +921,7 @@ module.exports = {
                     },
                 }
                 if (_push === "init") {
-                    state[_name] = {               // initialize automation volatile memory
+                    global.state[_name] = {               // initialize automation volatile memory
                         priority: { step: time.epoch, queue: [], skipLog: false },
                         inverter: [],
                         battery: [],
@@ -932,11 +934,11 @@ module.exports = {
                         welder: { detect: false, step: null },
                         timer: { second: null, minute: null, priority: null },
                     };
-                    nvMem[_name] ||= {};
-                    ({ st, cfg, nv } = _pointers(_name));
+                    global.nv[_name] ||= {};
+                    ({ state, cfg, nv, push } = _pointers(_name));
                     cfg.inverter.forEach(_ => {
-                        st.inverter.push({
-                            state: null, boot: false, step: time.epoch - 20, nightMode: false, delayOffTimer: undefined, switchWatts: 0,
+                        state.inverter.push({
+                            state: null, boot: false, step: time.epoch - 20, nightMode: true, delayOffTimer: undefined, switchWatts: 0,
                             switchSun: 0, switchWattsTimer: time.epoch, delayTimer: time.epoch, delayStep: false, delayVoltsTimer: time.epoch,
                             delayVoltsStep: false, delaySunTimer: time.epoch, delaySunStep: false, delayFaultStep: false,
                             delayFaultTimer: time.epoch, timeShutdown: null,
@@ -944,13 +946,13 @@ module.exports = {
                         });
                     });
                     cfg.solar.priority.queue.forEach(_ => {
-                        st.priority.queue.push({
+                        state.priority.queue.push({
                             state: null, delayStep: false, delayStepSun: false, delayTimer: time.epoch, delayTimerSun: time.epoch,
                             boot: false,
                         })
                     });
                     cfg.battery.forEach(_ => {
-                        st.battery.push({ percent: null, min: null, whPos: 0, whNeg: 0, floatStep: false, floatTimer: null })
+                        state.battery.push({ percent: null, min: null, whPos: 0, whNeg: 0, floatStep: false, floatTimer: null })
                     });
                     (function initNV() {
                         log("initializing NV data");
@@ -962,33 +964,34 @@ module.exports = {
                     })();
                     log("solar automation system starting");
                     setTimeout(() => {
-                        st.timer.second = setInterval(() => {
+                        state.timer.second = setInterval(() => {
                             calcSensor(); check.battery(); check.grid();
                             if (cfg.solar.inverterAuto != undefined && entity[cfg.solar.inverterAuto]?.state == true) {
                                 solar.auto();
-                                // if  (st.welder.detect == false) 
+                                // if  (state.welder.detect == false) 
                             }
                             if (cfg.fan != undefined && cfg.fan.sensor.temp != undefined) check.temp();
                         }, 1e3);      // set minimum rerun time, otherwise this automation function will only be called on ESP and HA events
                         setTimeout(() => {
-                            st.timer.priority = setInterval(() => {
+                            state.timer.priority = setInterval(() => {
                                 if (entity[cfg.solar.priority.entityAuto]?.state == true) priority.auto();
                             }, 1e3);
                         }, 3e3);
                     }, 3e3);
-                    st.timer.minute = setInterval(() => { timer(); }, 60e3);
-                    st.timer.write = setInterval(() => { write(); }, 30e3);
+                    state.timer.minute = setInterval(() => { timer(); }, 60e3);
+                    state.timer.write = setInterval(() => { write(); }, 30e3);
                     if (cfg.solar.inverterAuto != undefined
-                        && entity[cfg.solar.inverterAuto].state == true) log("inverter automation is on");
+                        && entity[cfg.solar.inverterAuto]?.state == true) log("inverter automation is on");
                     else log("inverter automation is off");
                     write();
                     return;
                 } else {
+                   // console.log(_push)
                     for (let x = 0; x < cfg.sensor.amp.length; x++) {
                         const config = cfg.sensor.amp[x];
                         if (config.entity && config.entity[0] === _push.name) {
                             let amps = entity[config.name] ||= {};
-                            let data = _push.newState;
+                            let data = _push.state;
                             let factor = 0, corrected = 0, final = 0;
                             if (config.multiplier != undefined) {
                                 amps.state = parseFloat(data) * config.multiplier;
@@ -1010,7 +1013,7 @@ module.exports = {
                         const config = cfg.sensor.volt[x];
                         if (config.entity === _push.name) {
                             let volts = entity[config.name] ||= {};
-                            let data = _push.newState;
+                            let data = _push.state;
                             let final = null, voltage = parseFloat(data);
                             const table = config.table;
                             if (table !== undefined) {
@@ -1048,7 +1051,7 @@ module.exports = {
                         const config = cfg.sensor.watt[x];
                         if (config.entity && config.entity.length == 1 && !config.solarPower && config.entity[0] === _push.name) {
                             let watts = entity[config.name] ||= {};
-                            let data = _push.newState;
+                            let data = _push.state;
                             let newData;
                             if (config.multiplier != undefined) newData = parseFloat(data) * config.multiplier;
                             else newData = parseFloat(data);
@@ -1068,7 +1071,7 @@ module.exports = {
                                 nv.sensor.kwh[config.name] = { total: 0, min: [], hour: [], day: [], month: [], };
                             }
                             let kwh = nv.sensor.kwh[config.name];
-                            let data = _push.newState;
+                            let data = _push.state;
                             let newData = parseInt(data);
                             if (Number.isFinite(newData)) {
                                 if (newData < 0) return;
@@ -1102,7 +1105,7 @@ module.exports = {
                         const config = cfg.sensor.temp[x];
                         if (config.entity === _push.name) {
                             let temp = entity[config.name] ||= {};
-                            let data = _push.newState;
+                            let data = _push.state;
                             if (config.multiplier != undefined) {
                                 temp.state = parseFloat(data) * config.multiplier;
                                 if (temp.state != null && Number.isFinite(temp.state))
@@ -1114,7 +1117,7 @@ module.exports = {
                         }
                     }
                     if (cfg.solar?.inverterAuto == _push.name) {
-                        let newState = _push.newState;
+                        let newState = _push.state;
                         if (newState == true) log("inverter auto going online");
                         else log("inverter auto going offline");
                         for (let x = 0; x < cfg.inverter.length; x++) {
@@ -1124,16 +1127,16 @@ module.exports = {
                             } else {
                                 log("inverter: " + cfg.inverter[x].name + " - inverter OFF - syncing ATS with inverter state");
                                 syncInverter(x, false);
-                                if (newState == true) st.inverter[x].step = time.epoch - cfg.solar.cycleError - 5;
+                                if (newState == true) state.inverter[x].step = time.epoch - cfg.solar.cycleError - 5;
                             }
                         }
                         return;
                     }
                     for (let x = 0; x < cfg.inverter.length; x++) {
                         if (cfg.inverter[x].entity == _push.name) {
-                            let newState = _push.newState;
+                            let newState = _push.state;
                             if (cfg.inverter[x].enable) {
-                                if (st.inverter[x].state != "faulted" && st.inverter[x].state != newState) {
+                                if (state.inverter[x].state != "faulted" && state.inverter[x].state != newState) {
                                     log("inverter: " + cfg.inverter[x].name + " - operational state entity switching to - syncing power/switches: " + newState);
                                     syncInverter(x, newState);
                                 }
@@ -1142,16 +1145,16 @@ module.exports = {
                         }
                     }
                     if (cfg.solar?.priority?.entityAuto == _push.name) {
-                        let newState = _push.newState;
+                        let newState = _push.state;
                         if (newState == true) log("priority queue - auto going ONLINE");
                         else log("priority queue - auto going offline");
-                        st.priority.step = time.epoch;
+                        state.priority.step = time.epoch;
                         return;
                     }
                     for (let x = 0; x < cfg.solar.priority.queue.length; x++) {
                         let queue = cfg.solar.priority.queue[x];
                         if (queue.entityAuto != undefined && queue.entityAuto == _push.name) {
-                            let newState = _push.newState;
+                            let newState = _push.state;
                             if (newState == true) log("priority queue member" + queue.name + " going online");
                             else log("priority queue member " + queue.name + " going offline");
                             return;
@@ -1159,21 +1162,21 @@ module.exports = {
                         for (let y = 0; y < queue.entities.length; y++) {
                             const element = queue.entities[y];
                             if (element == _push.name) {
-                                let newState = _push.newState;
-                                if (!st.priority.skipLog)
+                                let newState = _push.state;
+                                if (!state.priority.skipLog)
                                     log("syncing priority queue: " + queue.name + "  with entity: " + element + " - new state: " + newState);
-                                st.priority.queue[x].state = newState;
-                                st.priority.step = time.epoch;
-                                st.priority.skipLog = false;
+                                state.priority.queue[x].state = newState;
+                                state.priority.step = time.epoch;
+                                state.priority.skipLog = false;
                                 return;
                             }
                         }
                     }
                     function syncInverter(x, newState) {
-                        st.inverter[x].state = newState;
+                        state.inverter[x].state = newState;
                         solar.nightMode(x);
                         solar.power(x, newState);
-                        st.inverter[x].warn.manualPowerOn = false;
+                        state.inverter[x].warn.manualPowerOn = false;
                     }
                 }
                 function calcSensor() {     // calc watts based on amp/volt sensors 
@@ -1198,7 +1201,7 @@ module.exports = {
                     }
                     for (let x = 0; x < cfg.sensor.watt.length; x++) {
                         let sum = 0, config = cfg.sensor.watt[x];
-                        st.recorder.watt[config.name] ||= { min: null, wh: 0 };
+                        state.recorder.watt[config.name] ||= { min: null, wh: 0 };
                         entity[config.name] ||= {};
                         let watts = entity[config.name];
                         let whFinal = 0;
@@ -1235,12 +1238,12 @@ module.exports = {
                         }
 
                         if (Number.isFinite(watts.state) && Math.sign(watts.state) != -1)
-                            st.recorder.watt[config.name].wh += watts.state;
-                        if (st.recorder.watt[config.name].min == null) {
+                            state.recorder.watt[config.name].wh += watts.state;
+                        if (state.recorder.watt[config.name].min == null) {
                             if (config.record) log("starting recorder for watt sensor - " + config.name);
-                            st.recorder.watt[config.name].min = time.min;
-                        } else if (time.min != st.recorder.watt[config.name].min) {
-                            whFinal = ((st.recorder.watt[config.name].wh / 60) / 60);
+                            state.recorder.watt[config.name].min = time.min;
+                        } else if (time.min != state.recorder.watt[config.name].min) {
+                            whFinal = ((state.recorder.watt[config.name].wh / 60) / 60);
                             nv.sensor.watt[config.name].total += whFinal;
                             if (config.record !== false) {
                                 if (!nv.sensor.watt[config.name]) {
@@ -1251,36 +1254,36 @@ module.exports = {
                             }
 
 
-                            if (st.recorder.watt[config.name].todayReset) {
+                            if (state.recorder.watt[config.name].todayReset) {
                                 log("resetting daily watt meter for: " + config.name);
                                 nv.sensor.watt[config.name].today = 0;
-                                st.recorder.watt[config.name].todayReset = false;
+                                state.recorder.watt[config.name].todayReset = false;
                             }
                             nv.sensor.watt[config.name].today += whFinal;
                             send("kwh_" + config.name + "_today", (nv.sensor.watt[config.name].today / 1000).toFixed(2), "kWh");
                             // console.log("watts today:" + nv.sensor.watt[config.name].today)
 
-                            st.recorder.watt[config.name].wh = 0;
-                            st.recorder.watt[config.name].min = time.min;
+                            state.recorder.watt[config.name].wh = 0;
+                            state.recorder.watt[config.name].min = time.min;
                         }
 
                         watts.update = time.epoch;
                     }
                 }
                 function calcSolarPower() {
-                    if (st.sunlight[sunConverted] == undefined) {
+                    if (state.sunlight[sunConverted] == undefined) {
                         //   log("creating new solar power name: " + sunConverted);
-                        st.sunlight[sunConverted] = { low: solarPower, high: solarPower, average: null };
+                        state.sunlight[sunConverted] = { low: solarPower, high: solarPower, average: null };
                     } else {
-                        if (solarPower < st.sunlight[sunConverted].low) {
-                            st.sunlight[sunConverted].low = solarPower;
-                            st.sunlight[sunConverted].average = Math.round(st.sunlight[sunConverted].low + st.sunlight[sunConverted].high / 2);
-                            //     log("solar power name: " + sunConverted + "  low is being updated: " + solarPower + "  new average: " + st.sunlight[sunConverted].average);
+                        if (solarPower < state.sunlight[sunConverted].low) {
+                            state.sunlight[sunConverted].low = solarPower;
+                            state.sunlight[sunConverted].average = Math.round(state.sunlight[sunConverted].low + state.sunlight[sunConverted].high / 2);
+                            //     log("solar power name: " + sunConverted + "  low is being updated: " + solarPower + "  new average: " + state.sunlight[sunConverted].average);
                         }
-                        if (solarPower > st.sunlight[sunConverted].high) {
-                            st.sunlight[sunConverted].high = solarPower;
-                            st.sunlight[sunConverted].average = Math.round(st.sunlight[sunConverted].low + st.sunlight[sunConverted].high / 2);
-                            //    log("solar power name: " + sunConverted + "  high is being updated: " + solarPower + "  new average: " + st.sunlight[sunConverted].average);
+                        if (solarPower > state.sunlight[sunConverted].high) {
+                            state.sunlight[sunConverted].high = solarPower;
+                            state.sunlight[sunConverted].average = Math.round(state.sunlight[sunConverted].low + state.sunlight[sunConverted].high / 2);
+                            //    log("solar power name: " + sunConverted + "  high is being updated: " + solarPower + "  new average: " + state.sunlight[sunConverted].average);
                         }
                     }
                 }
@@ -1314,7 +1317,7 @@ module.exports = {
                 function timer() {    // called every minute
                     if (time.hour == 3 && time.min == 0) {
                         log("resetting daily watt meters")
-                        cfg.sensor.watt.forEach(config => { st.recorder.watt[config.name].todayReset = true; })
+                        cfg.sensor.watt.forEach(config => { state.recorder.watt[config.name].todayReset = true; })
                     }
                 }
             } catch (error) { console.trace(error) }
@@ -1322,11 +1325,14 @@ module.exports = {
     }
 };
 let _pointers = (_name) => {
+    push[_name] ||= {}
     return {
-        st: state[_name] ?? undefined,
+        state: state[_name] ?? undefined,
         cfg: config[_name] ?? undefined,
-        nv: nvMem[_name] ?? undefined,
+        nv: nv[_name] ?? undefined,
+        push: push[_name] ?? undefined,
         log: (m, l) => slog(m, l, _name),
-        write: () => file.write.nv(_name)
+        write: () => writeNV(_name),
+        send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
     }
 }
