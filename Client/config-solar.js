@@ -1,13 +1,11 @@
 module.exports = {
-    ha: {                              // add all your home assistant entities here
+    entity: {
         subscribe: [
             "input_boolean.auto_priority",
             "input_boolean.auto_inverter",
             "input_boolean.inverter_1",
-        ]
-    },
-    esp: {                              // add all your ESP entities here
-        subscribe: [
+
+            
             "pzem-daren_watts",
             "pzem-daren_meter",
             "pzem-alvarez_watts",
@@ -37,9 +35,9 @@ module.exports = {
             "sunlight"
 
         ],
-        heartbeat: [
-        ],
     },
+    heartbeat: [
+    ],
     config: {
         Solar: {
             grid: { // for blackout detection, needed for inverter ATS switching 
@@ -156,7 +154,7 @@ module.exports = {
                     delaySwitchOn: 20,  //20
                     delaySwitchOff: 30, //30
                     gridWatt: "grid_power",         // optional - esp ID for grid watt sensor - needed to switch back fromm gid (comparing power)
-                    gridWattMultiplier: 1.1,        // multiple of charge power exceeding grid power needed to switch load to inverter
+                    gridWattMultiplier: 1.2,        // multiple of charge power exceeding grid power needed to switch load to inverter
                     inverterWatts: "inverter_11kw", // optional - used for transfer switch (back to inverter)
                     inverterWattsSwitch: false,     // experimental - switch on last switch off watts
                     // inverterVolts: 26,           // optional - AC output voltage, used to sense inverter output voltage fault
@@ -198,34 +196,33 @@ module.exports = {
                         sensorAmp: "battery_current_rs485", // for power computation based of V*A  - must be combined in other sensor
                         solarPower: false,          // special option to show negative power if battery reverse current is greater than inverter output current
                         combineNegative: false,     // combine negative values
-                        record: false
+                        record: false               // do not record sensor to NV mem
                     },
                     {
                         name: "inverter_11kw",         // all inverters
                         entity: ["pzem-alvarez_watts", "pzem-daren_watts", "pzem-sofia_watts"],
-                        record: true
                     },
                     {
                         name: "inverter_10kw",         // all inverters
                         entity: ["pzem-ram-water_watts", "pzem-ram-house_watts"],
-                        record: true
                     },
                     {
                         name: "inverter_all",         // all inverters
                         entity: ["inverter_11kw", "inverter_10kw"],
-                        record: true
                     },
                     {
                         name: "solar_power",
                         solarPower: true,               // this is a solar power sensor
                         entity: ["inverter_all"],         // the esp IDs for inverter amps
                         batteryWatt: ["battery_power"], // must have battery watt sensor for Solar Power Calc
-                        record: true
                     },
                     {
                         name: "grid_power",         // all inverters
                         entity: ["pzem-daren_watts", "pzem-groogies_watts", "pzem-butsoy_watts"],
-                        record: true
+                    },
+                    {
+                        name: "ram_water",         // all inverters
+                        entity: ["pzem-daren_watts", "pzem-groogies_watts", "pzem-butsoy_watts"],
                     },
                 ],
                 volt: [
@@ -320,7 +317,7 @@ module.exports = {
                     sensorAmp: "battery_current_rs485",
                     sensorVolt: "battery_volts_twit",
                     voltsFullCharge: 58.1,
-                    voltsFloatStop: 57.0,
+                    voltsFloatStop: 56.0,
                     ampsResetDischarge: 50.0,
                     socTable: 1,
                 },
