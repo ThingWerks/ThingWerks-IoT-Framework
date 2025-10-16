@@ -1,5 +1,5 @@
 module.exports = {
-    ha: {
+    entity: {
         subscribe: [
             "input_boolean.auto_bubon",
             "input_number.profile_bubon",
@@ -17,12 +17,8 @@ module.exports = {
             "Button Water Irrigation Dalom",
             "input_button.oneshot_irrigation",
             "input_button.oneshot_bubon",
-        ],
-        sync: []
-    },
-    esp: {
-        subscribe: [
-            "psi-main", ,
+
+            "psi-main",
             "psi-irrigation",
             "flow-raw-bubon",
             "flow-raw-carbon-shop",
@@ -31,10 +27,10 @@ module.exports = {
             "solar-relay3-pump-bubon",
             "flow-raw-irrigation"
         ],
-        heartbeat: [      // heartbeats for ESPHome devices 
-            { name: "esp_heartbeat_solar", interval: 3 }, // interval is in seconds
-            { name: "esp_heartbeat_pump", interval: 3 }
-        ],
+    },
+    heartbeat: {
+        "esp_heartbeat_solar": 3000,
+        "esp_heartbeat_pump": 3000
     },
     config: {
         Pumper: {
@@ -99,7 +95,7 @@ module.exports = {
                         // turbo: 5,                                            // secondary high stop pressure point
                         //   profile: "input_number.profile_bubon",             // pressure profile
                         // reserve: 9,                                          // ha entity for reserve tank/pump
-                        oneShot: ["Button Irrigation Entrance", "Button Water Irrigation House Back", "Button Water Irrigation Piggary"
+                        oneShot: ["Button Irrigation Entrance", "Button Water Irrigation House Back", //"Button Water Irrigation Piggary"
                             , "Button Water Irrigation Dalom", "input_button.oneshot_irrigation"],  // single shot pump automation run button, must be array 
                         oneShotTimer: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
                         oneShotExtend: true,                                    // extend OneShot timer after last usage
