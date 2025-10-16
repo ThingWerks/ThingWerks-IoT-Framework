@@ -2,7 +2,7 @@
 module.exports = { // exports added to clean up layout
     automation: {
         Pumper: function (_name, _push, _reload) {
-            let { st, cfg, nv, log, writeNV } = _pointers(_name);
+            let { st, cfg, nv, log, write, send, push } = _pointers(_name);
             if (_reload) {
                 if (_reload == "config") ({ st, cfg, nv } = _pointers(_name));
                 else {
@@ -19,7 +19,7 @@ module.exports = { // exports added to clean up layout
                 return;
             }
             let sensor = {
-                push: function () {
+                ha_push: function () {
                     ({ st, cfg, nv } = _pointers(_name));
                     let sendDelay = 0;
                     let list = ["_total", "_hour", "_day", "_lm", "_today"];
@@ -36,7 +36,7 @@ module.exports = { // exports added to clean up layout
                         let calc = { percent: [], sum: 0 },
                             name = "press_" + cfg.sensor.press[x].name,
                             config = cfg.sensor.press[x],
-                            raw = entity[cfg.sensor.press[x].entity].state,
+                            raw = entity[cfg.sensor.press[x].entity]?.state,
                             stopPressure = null;
                         for (let y = 0; y < cfg.dd.length; y++) {
                             if (cfg.dd[y].press.output == cfg.sensor.press[x].name) {
@@ -621,28 +621,14 @@ module.exports = { // exports added to clean up layout
                 },
             }
             if (_push === "init") {
-                state[_name] = {               // initialize automation volatile memory
+                log("initializing pumper config and state")
+                global.state[_name] = {               // initialize automation volatile memory
                     init: true, dd: [], ha: { pushLast: [] }, fountain: [],
                     timer: {}
                 };
-                nvMem[_name] ||= {};
-                ({ st, cfg, nv } = _pointers(_name));
-                if (cfg.sensor.flow) {
-                    if (!nv.flow) {             // initialize flow meter NV memory if no NV data
-                        log("initializing flow meter data...");
-                        nv.flow = {};
-                        for (let x = 0; x < cfg.sensor.flow.length; x++) {
-                            let flowName = cfg.sensor.flow[x].name;
-                            if (!nv.flow[flowName])
-                                nv.flow[flowName] = { total: 0, today: 0, min: [], hour: [], day: [] }
-                            for (let y = 0; y < 60; y++) nv.flow[flowName].min.push(0);
-                            for (let y = 0; y < 24; y++) nv.flow[flowName].hour.push(0);
-                            for (let y = 0; y < 30; y++) nv.flow[flowName].day.push(0);
-                        }
-                        log("writing NV data to disk...");
-                        writeNV();
-                    }
-                }
+                global.nv[_name] ||= {};
+                ({ st, cfg, nv, push } = _pointers(_name));
+                initNV();
                 cfg.sensor.press.forEach(element => {
                     entity[("press_" + element.name)] ||= { average: [], step: 0, meters: null, psi: null, percent: null, volts: null, };
                 });
@@ -655,6 +641,7 @@ module.exports = { // exports added to clean up layout
                 for (let x = 0; x < cfg.dd.length; x++) {
                     log(cfg.dd[x].name + " - initializing");
                     st.dd.push({     // initialize volatile memory for each Demand Delivery system
+                        cfg:cfg.dd[x],
                         state: {
                             run: false,
                             oneShot: false,
@@ -729,53 +716,60 @@ module.exports = { // exports added to clean up layout
                 }
                 sensor.flow.calc();
                 sensor.flow.meter();
-                sensor.push();
+                sensor.ha_push();
+                st.timer.second = setInterval(() => {     // called every second  -  rerun this automation every second
+                    sensor.flow.calc();
+                    sensor.ha_push(state);
+                    for (let x = 0; x < cfg.dd.length; x++) pump.auto(x);
+                }, 1e3);
+                st.timer.minute = setInterval(() => {
+                    timer();
+                    sensor.flow.meter();
+                    write();
+                }, 60e3);
                 st.timer.hour = setInterval(() => {     // called every hour  -  reset hourly notifications
                     for (let x = 0; x < cfg.dd.length; x++) {
                         st.dd[x].fault.flowOver = false;
                         st.dd[x].warn.tankLow = false;
                     }
                 }, 3600e3);
-                st.timer.second = setInterval(() => {     // called every second  -  rerun this automation every second
-                    sensor.flow.calc();
-                    sensor.push(state);
-                    for (let x = 0; x < cfg.dd.length; x++) pump.auto(x);
-                }, 1e3);
-                st.timer.minute = setInterval(() => { timer(); }, 60e3);
             } else {        // event processing
+                if (_push.state === null) console.log("push error: ", _push)
                 for (let x = 0; x < cfg.dd.length; x++) {
                     let dd = st.dd[x], config = cfg.dd[x];
-                    // log("dd automation toggle: " + _push.name + " state:" + _push.newState)
+                    // log("dd automation toggle: " + _push.name + " state:" + _push.state)
                     if (_push.name == dd.auto.name) {
                         time.sync();
-                        switch (_push.newState) {
-                            case true:
-                                log(dd.cfg.name + " - is going ONLINE");
-                                dd.auto.state = true;
-                                dd.fault.flow = false;
-                                dd.fault.flowRestarts = 0;
-                                dd.fault.inputLevel = false;
-                                dd.warn.tankLow = false;
-                                dd.warn.inputLevel = false;
-                                dd.state.cycleTimer = time.epoch;
-                                dd.state.cycleCount = 0;
-                                clearTimeout(dd.state.flowTimerRestart);
-                                return;
-                            case false:
-                                log(dd.cfg.name + " - is going OFFLINE - pump is stopping");
-                                dd.auto.state = false;
-                                dd.state.oneShot = false;
-                                clearTimeout(dd.state.flowTimerRestart);
-                                clearTimeout(dd.state.flowTimerCheck);
-                                clearTimeout(dd.state.oneShot);
-                                pump.stop(x);
-                                return;
-                        }
+                            switch (_push.state) {
+                                case true:
+                                    //console.log(dd)
+                                    log(config.name + " - is going ONLINE");
+                                    dd.auto.state = true;
+                                    dd.fault.flow = false;
+                                    dd.fault.flowRestarts = 0;
+                                    dd.fault.inputLevel = false;
+                                    dd.warn.tankLow = false;
+                                    dd.warn.inputLevel = false;
+                                    dd.state.cycleTimer = time.epoch;
+                                    dd.state.cycleCount = 0;
+                                    clearTimeout(dd.state.flowTimerRestart);
+                                    return;
+                                case false:
+                                    console.log()
+                                    log(config.name + " - is going OFFLINE - pump is stopping");
+                                    dd.auto.state = false;
+                                    dd.state.oneShot = false;
+                                    clearTimeout(dd.state.flowTimerRestart);
+                                    clearTimeout(dd.state.flowTimerCheck);
+                                    clearTimeout(dd.state.oneShot);
+                                    pump.stop(x);
+                                    return;
+                            }
                         return;
                     }
                     if (config.ha.oneShot && config.ha.oneShot.includes(_push.name)) {
                         clearTimeout(dd.state.oneShot);
-                        if (_push.newState.includes("remote_button_short_press") || !_push.newState.includes("remote_button")) {
+                        if (_push.state?.includes("remote_button_short_press")) {
                             let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
                             log(config.name + " - starting one shot operation - " + "triggered by: "
                                 + _push.name + " - stopping in " + duration + " min");
@@ -784,11 +778,11 @@ module.exports = { // exports added to clean up layout
                                 log(config.name + " - stopping one shot operation after " + duration + " minutes");
                                 send(config.ha.auto, false);
                             }, (duration * 60 * 1e3));
-                        } else if (_push.newState.includes("remote_button_double_press")) {
+                        } else if (_push.state?.includes("remote_button_double_press")) {
                             log(config.name + " - starting system - " + "triggered by: " + _push.name);
                             dd.state.oneShot = false;
                             send(config.ha.auto, true);
-                        } else if (_push.newState.includes("remote_button_long_press")) {
+                        } else if (_push.state?.includes("remote_button_long_press")) {
                             log(config.name + " - STOPPING system - " + "triggered by: " + _push.name);
                             send(config.ha.auto, false);
                         }
@@ -796,7 +790,7 @@ module.exports = { // exports added to clean up layout
                     }
                     if (config.ha.turbo == _push.name) {
                         log(config.name + " - Turbo operation triggered by: " + _push.name);
-                        if (_push.newState == true) {
+                        if (_push.state == true) {
                             log(config.name + " - enabling pump turbo mode");
                             dd.state.turbo = true;
                         } else {
@@ -807,15 +801,15 @@ module.exports = { // exports added to clean up layout
                     }
                     if (config.ha.profile == _push.name) {
                         log(config.name + " - pump profile change triggered by: " + _push.name);
-                        log(config.name + " - pump profile changing to mode: " + ~~_push.newState);
-                        dd.state.profile = parseInt(_push.newState);
+                        log(config.name + " - pump profile changing to mode: " + ~~_push.state);
+                        dd.state.profile = parseInt(_push.state);
                         return;
                     }
                 }
                 for (let x = 0; x < cfg.fountain.length; x++) {
                     if (cfg.fountain[x].haAuto == _push.name) {
                         log(cfg.fountain[x].name + " - automation triggered by: " + _push.name);
-                        if (_push.newState == true) {
+                        if (_push.state == true) {
                             log(cfg.fountain[x].name + " auto is starting");
                             pumpFountain(x, true);
                         } else {
@@ -835,8 +829,29 @@ module.exports = { // exports added to clean up layout
                     log("resetting daily flow meters")
                     for (const name in nv.flow) { nv.flow[name].today = 0; }  // reset daily low meters
                 }
-                sensor.flow.meter();
-                writeNV();
+            }
+            function initNV() {
+                if (cfg.sensor.flow) {
+                    nv.flow ||= {};
+                    let found = false;
+                    for (let x = 0; x < cfg.sensor.flow.length; x++) {
+                        let flowName = cfg.sensor.flow[x].name;
+                        if (!nv.flow[flowName]) {
+                            log("initializing NV data for flowmeter: " + flowName);
+                            nv.flow[flowName] = {
+                                total: 0, today: 0,
+                                min: new Array(60).fill(0),
+                                hour: new Array(24).fill(0),
+                                day: new Array(30).fill(0)
+                            }
+                            found = true;
+                        }
+                    }
+                    if (found) {
+                        log("writing NV data to disk...");
+                        write();
+                    }
+                }
             }
             function fountain(x) {
                 let fount = { st: st.fountain[x], cfg: cfg.fountain[x] }
@@ -898,11 +913,14 @@ module.exports = { // exports added to clean up layout
     }
 };
 let _pointers = (_name) => {
+    push[_name] ||= {}
     return {
         st: state[_name] ?? undefined,
         cfg: config[_name] ?? undefined,
-        nv: nvMem[_name] ?? undefined,
+        nv: nv[_name] ?? undefined,
+        push: push[_name] ?? undefined,
         log: (m, l) => slog(m, l, _name),
-        writeNV: () => file.write.nv(_name)
+        write: () => writeNV(_name),
+        send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
     }
 }
