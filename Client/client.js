@@ -24,42 +24,10 @@ writeNV = function (name) {  // write non-volatile memory to the disk
 }
 core = function (type, data, auto) {
     if (type == "state") {
-        if (data.unit == "owner") {
-            entity[data.name] ||= {};
-            entity[data.name].update = time.epochMil;
-            entity[data.name].stamp = time.stamp;
-            entity[data.name].state = data.state;
-            entityLocal[data?.name]?.names?.forEach((element) => {
-                if (auto != element)
-                    try { automation[element](element, { name: data.name, state: data.state }); } catch { }
-            });
-            let names = entityLocal[data?.name]?.names;
-            if (names)
-                for (let x = 0; x < names.length; x++) {
-                    // console.log("sending entity: " + buf.data.name + " - with state: " + buf.data.state + " - to automation: " + names[x])
-                    if (names[x] == "sync") {
-                        //  console.log("sate update for: " + buf.data.name, entityLocal[buf.data.name])
-                        for (let y = 0; y < entityLocal[data.name].sync.length; y++) {
-                            let partner = entityLocal[data.name].sync[y]
-                            if (!(partner in entity)) {
-                                slog("syncing entity: " + data.name + " - but partner: " + partner + " DOES NOT EXIST", 3);
-                            } else if (entity[data.name]?.state != entity[partner]?.state) {
-                                slog("syncing entity: " + data.name + " - with partner: " + partner + " - state: " + data.state, 0);
-                                core("state", { name: partner, state: data.state });
-                            }
-                        }
-                    }
-                }
-        } else {
-           // console.log(entity[data.name])
-            if (entity[data.name]?.owner?.type == "automation") {
-               // console.log(data)
-                entityLocal[data?.name]?.names?.forEach((element) => {
-                    if (auto != element)
-                        try { automation[element](element, { name: data.name, state: data.state }); } catch { }
-                });
-            }
-        }
+        //  console.log(data)
+        automation.forIn((name, value) => {
+            try { automation[name](name, { name: data.name, state: data.state }); } catch { }
+        })
     }
     udp.send(JSON.stringify({ name: moduleName, type, data, auto }), 65432, '127.0.0.1');
 }
@@ -69,37 +37,18 @@ com = function () {
         //  console.log(buf);
         switch (buf.type) {
             case "state":       // incoming state change (from HA websocket service)
-                slog("receiving state update, entity: " + buf.data.name + " value: " + buf.data.state, 0);
-              //  console.log(buf.data)
+                //  slog("receiving state update, entity: " + buf.data.name + " value: " + buf.data.state, 0);
+                //  console.log(buf.data)
                 entity[buf.data.name] ||= {};
                 entity[buf.data.name].update = time.epochMil;
                 entity[buf.data.name].stamp = time.stamp;
                 entity[buf.data.name].state = buf.data.state;
-                entity[buf.data.name].owner = structuredClone(buf.data.owner);
-                if (online == true) {
-                    if (!(buf.data.name in entityLocal)) {
-                        slog("entity: " + buf.data.name + " - is not referenced locally - pruning");
-                        core("prune", buf.data.name);
-                        return;
-                    }
-                    let names = entityLocal[buf.data.name]?.names;
-                    for (let x = 0; x < names.length; x++) {
-                        // console.log("sending entity: " + buf.data.name + " - with state: " + buf.data.state + " - to automation: " + names[x])
-                        if (names[x] == "sync") {
-                            //  console.log("sate update for: " + buf.data.name, entityLocal[buf.data.name])
-                            for (let y = 0; y < entityLocal[buf.data.name].sync.length; y++) {
-                                let partner = entityLocal[buf.data.name].sync[y]
-                                if (!(partner in entity)) {
-                                    slog("syncing entity: " + buf.data.name + " - but partner: " + partner + " DOES NOT EXIST", 3);
-                                } else if (entity[buf.data.name]?.state != entity[partner]?.state) {
-                                    slog("syncing entity: " + buf.data.name + " - with partner: " + partner + " - state: " + buf.data.state, 0);
-                                    core("state", { name: partner, state: buf.data.state });
-                                }
-                            }
-                        } else try { automation[names[x]](names[x], { name: buf.data.name, state: buf.data.state }); }
+                if (online == true && buf.data.state !== null && buf.data.state !== undefined) {
+                    automation.forIn((name, value) => {
+                        try { automation[name](name, { name: buf.data.name, state: buf.data.state }); }
                         catch (e) { console.trace(e); }
-                    }
-                }
+                    })
+                }// else console.log(buf.data)
                 break;
             case "fetchReply":        // Incoming HA Fetch result
                 slog("received fetch reply");
@@ -130,7 +79,7 @@ com = function () {
                         return value;
                     }, null); // <-- Use null or omit the argument to remove formatting
                 }
-                udp.send(safeStringify({ type: "diag", clientName: moduleName, state, nv, config, entityLocal, entity }), 65432, '127.0.0.1');
+                udp.send(safeStringify({ type: "diag", clientName: moduleName, state, nv, config, entitySubscribe, entity }), 65432, '127.0.0.1');
                 // console.log(state)
                 //core(JSON.stringify({ type: "diag", obj: { state, nv: nv, config } }), 65432, '127.0.0.1');
                 break;
@@ -151,8 +100,14 @@ com = function () {
 }
 register = function (update) {/////no update?
     slog("trying to register with TWIT Core");
-    let obj = { entities: entityLocal ?? undefined, telegram: config.telegram ? true : false };
-
+    let obj = {
+        entities: {
+            subscribe: entitySubscribe ?? undefined,
+            create: entityCreate ?? undefined,
+            sync: entitySync ?? undefined,
+        },
+        telegram: config.telegram ? true : false
+    };
     core((update ? "registerUpdate" : "register"), obj);
     if (config.telegram) {
         if (!nv.telegram) nv.telegram ||= [];
@@ -163,7 +118,7 @@ register = function (update) {/////no update?
 fetch = function () {
     // register(true);
     state.cache = {};
-    if (entityLocal) core("fetch");
+    if (entitySubscribe) core("fetch");
     // if (config.esp?.subscribe) core(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
 }
 checkArgs = function () {
@@ -273,7 +228,7 @@ checkArgs = function () {
 auto = {
     call: function (data) {
         for (const name in automation) {
-            //   if (name in entityLocal[data.name].names)
+            //   if (name in entitySubscribe[data.name].names)
             try { automation[name](name, data); } catch (e) { console.trace(e); }
         }
     },
@@ -293,129 +248,11 @@ auto = {
         if (require.cache[resolvedPath]) delete require.cache[resolvedPath];
     },
     loadEntities: function (configData, fileName, names) { // acting for both internal and external config 
-        if (configData.entities) {
-            configData.entities.forEach(entity => {
-                entityLocal[entity] ||= { names: [] };
-                names.forEach(name => {
-                    if (!entityLocal[entity].names.includes(name)) {
-                        entityLocal[entity].names.push(name);
-                    }
-                });
-            });
-            let hasConfigs = 0;
-            configData.config?.forIn((name, value) => { if (value) hasConfigs++; })
-            if (hasConfigs == 0) {
-                console.log("no automation config entities exist - running top level entities prune");
-                names.forEach(name => { pruneForFile(name); });
-            }
-        }
-        for (const name in configData.config) {
-            if (configData.config[name]?.entities) {
-                configData.config[name].entities.forEach(entity => {
-                    entityLocal[entity] ||= { names: [] };
-                    if (!entityLocal[entity].names.includes(name)) {
-                        entityLocal[entity].names.push(name);
-                    }
-                });
-            }
-            // now that both top-level and per-config entities for `name` are processed,
-            // prune using the union-aware function:
-            pruneForFile(name);
-        }
+        entityCreate = Object.fromEntries((configData.entity?.create ?? []).map(k => [k, {}]));
+        entitySubscribe = Object.fromEntries((configData.entity?.subscribe ?? []).map(k => [k, {}]));
+        entitySync = configData.entity?.sync ?? undefined;
 
-        // console.log(entityLocal)
-        // --- after you've populated entityLocal from top-level and per-config lists ---
-        // Helper: prune for a single fileName using the union of top-level + per-config entities
-        function pruneForFile(fileName) {
-            const keysToFullyDelete = [];
-            // top-level entities from the file being processed (may be undefined)
-            const topEntities = Array.isArray(configData.entities) ? configData.entities : [];
-            // per-config (e.g. configData.config[name]) entities for this fileName (may be undefined)
-            const perEntities = Array.isArray(configData.config?.[fileName]?.entities)
-                ? configData.config[fileName].entities
-                : [];
-
-            for (const entity of Object.keys(entityLocal)) {
-                const nameList = entityLocal[entity].names || [];
-                if (!nameList.includes(fileName)) continue;
-
-                // if entity is present in EITHER the top-level entities list OR the file-specific entities list,
-                // then it still belongs to that file and should NOT be pruned.
-                // console.log("entity local: ", entity, " - entity config: ", topEntities[entity])
-                const stillPresent = topEntities.includes(entity) || perEntities.includes(entity);
-                if (stillPresent) continue;
-
-                // not present anywhere for this file -> remove the fileName from the names array
-                const idx = nameList.indexOf(fileName);
-                if (idx !== -1) nameList.splice(idx, 1);
-
-                if (nameList.length === 0) {
-                    console.log(`found orphaned entity: ${entity} (last automation, scheduling for full delete)`);
-                    keysToFullyDelete.push(entity);
-                } else {
-                    console.log(`found orphaned entity: ${entity} (removed ${fileName}, still used by others)`);
-                }
-            }
-
-            keysToFullyDelete.forEach(e => { delete entityLocal[e]; });
-        }
-
-        // console.log(config)
-        configData.sync?.forEach(sync => {
-            console.log("sync group - loading - ", sync);
-            // 1. Process all new/existing sync relationships (Creation and Partner Pruning)
-            sync.forEach(member => {
-                console.log("sync group - setting up member: ", member);
-                entityLocal[member] ||= { names: [] };
-                // PARTNER PRUNING: Reset the sync list to only include current partners.
-                entityLocal[member].sync = [];
-                // Ensure "sync" is in names
-                if (!entityLocal[member].names.includes("sync"))
-                    entityLocal[member].names.push("sync");
-                // Populate sync partners
-                sync.forEach(memberOther => {
-                    if (memberOther != member)
-                        entityLocal[member].sync.push(memberOther);
-                })
-            });
-        });
-        // --------------------------------------------------------------------------------
-        // 1.5. NEW FEATURE: Prune "sync" flag if the entity has no remaining partners.
-        Object.keys(entityLocal).forEach(entityName => {
-            const entity = entityLocal[entityName];
-            // Check if the entity has the sync flag AND its partner list is empty
-            if (entity.names?.includes("sync") && entity.sync && entity.sync.length === 0) {
-                console.log(`sync group - pruning - entity '${entityName}' has no partners remaining. Removing "sync" flag and key.`);
-                // Remove "sync" from the names array
-                entity.names = entity.names.filter(name => name !== "sync");
-                // Delete the sync key (the empty partner list)
-                delete entity.sync;
-            }
-        });
-        // --------------------------------------------------------------------------------
-        // 2. FEATURE: Cleanup Orphaned Sync Flags/Keys (Removal of Unreferenced Members)
-        const activeSyncMembers = new Set();
-        // Build a set of ALL entity names referenced in the source configData.sync
-        configData.sync?.forEach(syncGroup => {
-            syncGroup.forEach(member => {
-                activeSyncMembers.add(member);
-            });
-        });
-
-        // Iterate over ALL entities in entityLocal
-        Object.keys(entityLocal).forEach(entityName => {
-            const entity = entityLocal[entityName];
-            // Check if the entity has a 'sync' flag and is NO LONGER in the source list
-            if (entity.names?.includes("sync") && !activeSyncMembers.has(entityName)) {
-                console.log(`sync group - cleanup - entity '${entityName}' is orphaned (no references). Removing member.`);
-                // Remove "sync" from the names array
-                entity.names = entity.names.filter(name => name !== "sync");
-                // Delete the sync key (which contains the list of sync partners)
-                delete entity.sync;
-            }
-        });
-
-        //     console.log(configData)
+        //    console.log(configData)
         config.heartbeat ||= {};
         configData.heartbeat ||= {};
         configData?.heartbeat?.forIn((name, value) => {
@@ -430,26 +267,25 @@ auto = {
             }
         })
         config.heartbeat?.forIn((name, value) => {
-
             if (!(name in configData.heartbeat)) {
                 console.log("heartbeat - orphaned - removing: " + name);
                 clearInterval(config.heartbeat[name]?.timer);
                 delete config.heartbeat[name];
             }
         })
-
         function createTimer(name, value) {
             config.heartbeat[name] = { interval: value, timer: null, state: false };
-            member = config.heartbeat[name];
-            member.interval = value;
-            if (member.timer) clearInterval(member.timer);
-            member.timer = setInterval(() => {
-                if (!member.state) { core("state", { name, state: true }); member.state = true; }
-                else { core("state", { name, state: false }); member.state = false; }
+            if (config.heartbeat[name].timer) clearInterval(member.timer);
+            config.heartbeat[name].timer = setInterval(() => {
+                if (config.heartbeat[name].state == false) {
+                    core("state", { name, state: true }); config.heartbeat[name].state = true;
+                }
+                else {
+                    core("state", { name, state: false }); config.heartbeat[name].state = false;
+                }
             }, (value));
         }
         console.log("heartbeat - importation finished - members: ", Object.keys(config.heartbeat));
-
     },
     loadConfig: function (configPath, reload) {
         try {
@@ -701,7 +537,7 @@ sys = {         // ______________________system area, don't need to touch anythi
         auto.module = {}; // map resolvedModulePath -> [automationName, ...]
         nv = {};
         entity = {};
-        entityLocal = {};
+        entitySubscribe = {};
         config = { heartbeat: {} };
         state = { cache: {}, args: "" };
         push = {};
@@ -842,7 +678,7 @@ sys = {         // ______________________system area, don't need to touch anythi
             case 2:
                 clearInterval(bootWait);
                 slog("registered with TWIT Core");
-                if (entityLocal) {
+                if (entitySubscribe) {
                     slog("fetching entities from core");
                     core("fetch");
                     bootWait = setInterval(() => {
