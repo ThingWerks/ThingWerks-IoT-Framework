@@ -27,6 +27,9 @@ module.exports = {
             "solar-relay3-pump-bubon",
             "flow-raw-irrigation"
         ],
+        sync: [["switch.switch_test", "input_boolean.lights_stairs",],
+        ["switch.lights_outside_bedroom", "input_boolean.lights_bedroom_outside"],
+        ["switch.lights_outside_entrance", "input_boolean.lights_house_entrance"],]
     },
     heartbeat: {
         "esp_heartbeat_solar": 3000,
