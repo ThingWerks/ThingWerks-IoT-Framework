@@ -292,7 +292,7 @@ module.exports = {
                             }
                         }
                     },
-                    power: function (x, run, faulted) {
+                    power: function (x, run, faulted, refresh) {
                         let config = cfg.inverter[x];
                         if (run == true) {
                             if (time.epoch - state.inverter[x].step >= cfg.solar.cycleError) {
@@ -361,7 +361,7 @@ module.exports = {
                                 }, delay);
                                 delay += ((list[y].delay == undefined) ? 500 : (list[y].delay * 1e3));
                             }
-                            if (cfg.inverter[x].entity != undefined) send(cfg.inverter[x].entity, run);
+                            if (cfg.inverter[x].entity != undefined && !refresh) send(cfg.inverter[x].entity, run);
                         }
                         state.inverter[x].delayStep = false;
                         state.inverter[x].delayVoltsStep = false;
@@ -415,27 +415,27 @@ module.exports = {
                         if (config.battery != undefined) {
                             battery = cfg.battery[cfg.battery.findIndex(battery => battery.name === config.battery)];
                             if (battery.sensorVolt != undefined)
-                                voltsBat = Math.round(entity[battery.sensorVolt].state * 10) / 10;
+                                voltsBat = round(entity[battery.sensorVolt].state, 10);
                             if (battery.sensorAmp != undefined) {
                                 if (Array.isArray(battery.sensorAmp)) {
                                     let temp = 0;
                                     for (let y = 0; y < battery.sensorAmp.length; y++) {
                                         temp += parseFloat(entity[battery.sensorAmp[y]].state);
-                                        ampsBat = Math.round(temp * 10) / 10;
+                                        ampsBat = round(temp, 10);
                                     }
-                                } else ampsBat = Math.round(entity[battery.sensorAmp].state * 10) / 10;
+                                } else ampsBat = round(entity[battery.sensorAmp].state, 10);
                             }
                             if (battery.sensorWatt != undefined)
-                                wattsSolar = ~~parseFloat(entity[battery.sensorWatt].state);
+                                wattsSolar = round(entity[battery.sensorWatt].state, 1000);
                         }
                         if (config.gridWatt != undefined)
-                            gridWatts = entity[config.gridWatt].state;
+                            gridWatts = round(entity[config.gridWatt].state, 1000);
                         if (config.inverterVolts != undefined)
                             inverterVolts = ~~parseFloat(entity[config.inverterVolts].state);
                         if (config.inverterWatts != undefined)
-                            inverterWatts = ~~parseFloat(entity[config.inverterWatts].state);
+                            inverterWatts = round(entity[config.inverterWatts].state, 1000);
                         if (cfg.solar.sunlight != undefined)
-                            sun = Math.round(entity[cfg.solar.sunlight].state * 100) / 100;
+                            sun = round(entity[cfg.solar.sunlight].state, 100);
                         return { voltsBat, inverterVolts, ampsBat, sun, inverterWatts, gridWatts, wattsSolar, battery, config, inverter: state.inverter[x] };
                     },
                 }
@@ -920,6 +920,195 @@ module.exports = {
                         }
                     },
                 }
+                let push_constructor = {
+                    sensor: {
+                        amp: function (config) {
+                            return (state, name) => {
+                                let amps = entity[config.name] ||= {};
+                                let data = state;
+                                let factor = 0, corrected = 0, final = 0;
+                                if (config.multiplier != undefined) {
+                                    amps.state = parseFloat(data) * config.multiplier;
+                                } else if (config.scale != undefined) {
+                                    factor = config.rating / (config.scale / 2);
+                                    corrected = parseFloat(data) - config.zero;
+                                    final = corrected * factor;
+                                    if (config.inverted == true) amps.state = (final * -1);
+                                    else amps.state = final;
+                                } else amps.state = parseFloat(data);
+                                if (amps.state != null && Number.isFinite(amps.state)) {
+                                    send("amp_" + config.name, Math.round(amps.state * 10) / 10, "A");
+                                }
+                                amps.update = time.epoch;
+                            };
+                        },
+                        volt: function (config) {
+                            return (state, name) => {
+                                let volts = entity[config.name] ||= {};
+                                let data = state;
+                                let final = null, voltage = parseFloat(data);
+                                const table = config.table;
+                                if (table !== undefined) {
+                                    const firstPoint = table[0];
+                                    const lastPoint = table[table.length - 1];
+                                    if (voltage > firstPoint.adc) {
+                                        const secondPoint = table[1];
+                                        final = firstPoint.voltage + ((voltage - firstPoint.adc) * (secondPoint.voltage - firstPoint.voltage) / (secondPoint.adc - firstPoint.adc));
+                                    } else if (voltage < lastPoint.adc) {
+                                        const secondLastPoint = table[table.length - 2];
+                                        final = lastPoint.voltage + ((voltage - lastPoint.adc) * (secondLastPoint.voltage - lastPoint.voltage) / (secondLastPoint.adc - lastPoint.adc));
+                                    } else {
+                                        for (let i = 0; i < table.length - 1; i++) {
+                                            const point1 = table[i];
+                                            const point2 = table[i + 1];
+                                            if (voltage >= point2.adc && voltage <= point1.adc) {
+                                                final = point2.voltage + ((voltage - point2.adc) * (point1.voltage - point2.voltage) / (point1.adc - point2.adc));
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    volts.state = final;
+                                    if (volts.state != null && Number.isFinite(volts.state))
+                                        send("volt_" + config.name, Math.round(final * 10) / 10, "V");
+                                } else if (config.multiplier != undefined) {
+                                    volts.state = voltage * config.multiplier;
+                                    if (volts.state != null && Number.isFinite(volts.state))
+                                        send("volt_" + config.name, Math.round(volts.state * 10) / 10, "V");
+                                } else volts.state = voltage;
+                                volts.update = time.epoch;
+                            };
+                        },
+                        watt: function (config) {
+                            return (state, name) => {
+                                let watts = entity[config.name] ||= {};
+                                let data = state;
+                                let newData;
+                                if (config.multiplier != undefined) newData = parseFloat(data) * config.multiplier;
+                                else newData = parseFloat(data);
+                                if (Number.isFinite(watts.state)) {
+                                    watts.state = newData;
+                                    send("watt_" + config.name, ~~watts.state, "W");
+                                } else watts.state = 0.0;
+                                watts.update = time.epoch;
+                            }
+                        },
+                        kwh: function (config) {
+                            return (state, name) => {
+                                if (!nv.sensor.kwh[config.name]) {
+                                    log("initializing NV memory for - kWh sensor: " + config.name);
+                                    nv.sensor.kwh[config.name] = { total: 0, min: [], hour: [], day: [], month: [], };
+                                }
+                                let kwh = nv.sensor.kwh[config.name];
+                                let data = _push.state;
+                                let newData = parseInt(data);
+                                if (Number.isFinite(newData)) {
+                                    if (newData < 0) return;
+                                    if (newData > 0) {
+                                        if (kwh.total == 0) {
+                                            log("sensor: " + config.name + " first time recording");
+                                            kwh.total = newData;
+                                        }
+                                        if (kwh.last == 0) {
+                                            log("starting recorder for PZEM Meter - " + config.name);
+                                            recorder(kwh, 0, config.name);
+                                            kwh.last = newData;
+                                        } else {
+                                            let diff = newData - kwh.last;
+                                            if (diff < 0) {
+                                                diff = (10000000 - kwh.last) + newData;
+                                                log("PZEM rollover detected: " + config.name + " last=" + kwh.last + " new=" + newData + " diff=" + diff);
+                                            }
+                                            kwh.last = newData;
+                                            if (diff > 0) {
+                                                recorder(kwh, diff, config.name);
+                                                kwh.total += diff;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        temp: function (config) {
+                            return (state, name) => {
+                                let temp = entity[config.name] ||= {};
+                                let data = state;
+                                if (config.multiplier != undefined) {
+                                    temp.state = parseFloat(data) * config.multiplier;
+                                    if (temp.state != null && Number.isFinite(temp.state))
+                                        send("temp_" + config.name, Math.round(temp.state * 10) / 10, config.unit);
+                                } else {
+                                    temp.state = parseFloat(data);
+                                }
+                            }
+                        },
+                        example: function (config) {
+                            return (state, name) => {
+                            }
+                        },
+                    },
+                    inverterAuto: function () {
+                        return (newState, name) => {
+                            if (newState) log("inverter auto going online");
+                            else log("inverter auto going offline");
+                            for (let x = 0; x < cfg.inverter.length; x++) {
+                                if (entity[cfg.inverter[x].entity].state) {
+                                    log("inverter: " + cfg.inverter[x].name + " - inverter ON - syncing ATS with inverter operational state");
+                                    syncInverter(x, true);
+                                } else {
+                                    log("inverter: " + cfg.inverter[x].name + " - inverter OFF - syncing ATS with inverter operational state");
+                                    syncInverter(x, false);
+                                    state.inverter[x].step = time.epoch - cfg.solar.cycleError - 5;
+                                }
+                            }
+                            function syncInverter(x, tState) {
+                                state.inverter[x].state = tState;
+                                solar.nightMode(x);
+                                solar.power(x, tState);
+                                state.inverter[x].warn.manualPowerOn = false;
+                            }
+                        }
+                    },
+                    inverterOperation: function (x) {
+                        return (newState, name) => {
+                            if (cfg.inverter[x].enable) {
+                                if (state.inverter[x].state != "faulted" && state.inverter[x].state != state) {
+                                    log("inverter: " + cfg.inverter[x].name + " - operational state entity switching to - syncing power/switches: " + newState);
+                                    state.inverter[x].state = newState;
+                                    solar.nightMode(x);
+                                    solar.power(x, newState, null, true);
+                                    state.inverter[x].warn.manualPowerOn = false;
+                                }
+                            }
+
+                        }
+                    },
+                    priorityAuto: function () {
+                        return (newState, name) => {
+                            if (newState) log("priority queue - auto going ONLINE");
+                            else log("priority queue - auto going offline");
+                            state.priority.step = time.epoch;
+                        }
+                    },
+                    priorityQueue: function (priority, entity, x, y) {
+                        return (newState, name) => {
+                            if (!state.priority.skipLog)
+                                log("syncing priority queue: " + priority.name + "  with entity: " + entity + " - new state: " + newState);
+                            state.priority.queue[x].state = newState;
+                            state.priority.step = time.epoch;
+                            state.priority.skipLog = false;
+                        }
+                    },
+                    priorityQueueAuto: function (priority) {
+                        return (newState, name) => {
+                            if (newState) log("priority queue member" + priority.name + " going online");
+                            else log("priority queue member " + priority.name + " going offline");
+                        }
+                    },
+                    example: function (config) {
+                        return (newState, name) => {
+                        }
+                    },
+                }
                 if (_push === "init") {
                     global.state[_name] = {               // initialize automation volatile memory
                         priority: { step: time.epoch, queue: [], skipLog: false },
@@ -984,201 +1173,31 @@ module.exports = {
                         && entity[cfg.solar.inverterAuto]?.state == true) log("inverter automation is on");
                     else log("inverter automation is off");
                     write();
+
+
+                    log("initializing push constructors");
+                    for (let sensor of cfg.sensor.amp) push[sensor.entity] = push_constructor.sensor.amp(sensor);
+                    for (let sensor of cfg.sensor.volt) push[sensor.entity] = push_constructor.sensor.volt(sensor);
+                    for (let sensor of cfg.sensor.watt) push[sensor.entity] = push_constructor.sensor.watt(sensor);
+                    for (let sensor of cfg.sensor.kwh) push[sensor.entity] = push_constructor.sensor.kwh(sensor);
+                    for (let sensor of cfg.sensor.temp) push[sensor.entity] = push_constructor.sensor.temp(sensor);
+
+                    push[cfg.solar.inverterAuto] = push_constructor.inverterAuto();
+
+                    cfg.inverter.forEach((inverter, x) => {
+                        push[inverter.entity] = push_constructor.inverterOperation(x);
+                    });
+
+                    push[cfg.solar.priority.entityAuto] = push_constructor.priorityAuto();
+                    cfg.solar.priority.queue.forEach((queue, x) => {
+                        push[queue.entityAuto] = push_constructor.priorityQueueAuto(queue, x);
+                        queue.entities.forEach((entity, y) => {
+                            push[entity] = push_constructor.priorityQueue(queue, entity, x, y);
+                        })
+                    })
+
                     return;
-                } else {
-                   // console.log(_push)
-                    for (let x = 0; x < cfg.sensor.amp.length; x++) {
-                        const config = cfg.sensor.amp[x];
-                        if (config.entity && config.entity[0] === _push.name) {
-                            let amps = entity[config.name] ||= {};
-                            let data = _push.state;
-                            let factor = 0, corrected = 0, final = 0;
-                            if (config.multiplier != undefined) {
-                                amps.state = parseFloat(data) * config.multiplier;
-                            } else if (config.scale != undefined) {
-                                factor = config.rating / (config.scale / 2);
-                                corrected = parseFloat(data) - config.zero;
-                                final = corrected * factor;
-                                if (config.inverted == true) amps.state = (final * -1);
-                                else amps.state = final;
-                            } else amps.state = parseFloat(data);
-                            if (amps.state != null && Number.isFinite(amps.state)) {
-                                send("amp_" + config.name, Math.round(amps.state * 10) / 10, "A");
-                            }
-                            amps.update = time.epoch;
-                            return;
-                        }
-                    }
-                    for (let x = 0; x < cfg.sensor.volt.length; x++) {
-                        const config = cfg.sensor.volt[x];
-                        if (config.entity === _push.name) {
-                            let volts = entity[config.name] ||= {};
-                            let data = _push.state;
-                            let final = null, voltage = parseFloat(data);
-                            const table = config.table;
-                            if (table !== undefined) {
-                                const firstPoint = table[0];
-                                const lastPoint = table[table.length - 1];
-                                if (voltage > firstPoint.adc) {
-                                    const secondPoint = table[1];
-                                    final = firstPoint.voltage + ((voltage - firstPoint.adc) * (secondPoint.voltage - firstPoint.voltage) / (secondPoint.adc - firstPoint.adc));
-                                } else if (voltage < lastPoint.adc) {
-                                    const secondLastPoint = table[table.length - 2];
-                                    final = lastPoint.voltage + ((voltage - lastPoint.adc) * (secondLastPoint.voltage - lastPoint.voltage) / (secondLastPoint.adc - lastPoint.adc));
-                                } else {
-                                    for (let i = 0; i < table.length - 1; i++) {
-                                        const point1 = table[i];
-                                        const point2 = table[i + 1];
-                                        if (voltage >= point2.adc && voltage <= point1.adc) {
-                                            final = point2.voltage + ((voltage - point2.adc) * (point1.voltage - point2.voltage) / (point1.adc - point2.adc));
-                                            break;
-                                        }
-                                    }
-                                }
-                                volts.state = final;
-                                if (volts.state != null && Number.isFinite(volts.state))
-                                    send("volt_" + config.name, Math.round(final * 10) / 10, "V");
-                            } else if (config.multiplier != undefined) {
-                                volts.state = voltage * config.multiplier;
-                                if (volts.state != null && Number.isFinite(volts.state))
-                                    send("volt_" + config.name, Math.round(volts.state * 10) / 10, "V");
-                            } else volts.state = voltage;
-                            volts.update = time.epoch;
-                            return;
-                        }
-                    }
-                    for (let x = 0; x < cfg.sensor.watt.length; x++) {
-                        const config = cfg.sensor.watt[x];
-                        if (config.entity && config.entity.length == 1 && !config.solarPower && config.entity[0] === _push.name) {
-                            let watts = entity[config.name] ||= {};
-                            let data = _push.state;
-                            let newData;
-                            if (config.multiplier != undefined) newData = parseFloat(data) * config.multiplier;
-                            else newData = parseFloat(data);
-                            if (Number.isFinite(watts.state)) {
-                                watts.state = newData;
-                                send("watt_" + config.name, ~~watts.state, "W");
-                            } else watts.state = 0.0;
-                            watts.update = time.epoch;
-                            return;
-                        }
-                    }
-                    for (let x = 0; x < cfg.sensor.kwh.length; x++) {
-                        const config = cfg.sensor.kwh[x];
-                        if (!Array.isArray(config.entity) && config.entity === _push.name) {
-                            if (!nv.sensor.kwh[config.name]) {
-                                log("initializing NV memory for - kWh sensor: " + config.name);
-                                nv.sensor.kwh[config.name] = { total: 0, min: [], hour: [], day: [], month: [], };
-                            }
-                            let kwh = nv.sensor.kwh[config.name];
-                            let data = _push.state;
-                            let newData = parseInt(data);
-                            if (Number.isFinite(newData)) {
-                                if (newData < 0) return;
-                                if (newData > 0) {
-                                    if (kwh.total == 0) {
-                                        log("sensor: " + config.name + " first time recording");
-                                        kwh.total = newData;
-                                    }
-                                    if (kwh.last == 0) {
-                                        log("starting recorder for PZEM Meter - " + config.name);
-                                        recorder(kwh, 0, config.name);
-                                        kwh.last = newData;
-                                    } else {
-                                        let diff = newData - kwh.last;
-                                        if (diff < 0) {
-                                            diff = (10000000 - kwh.last) + newData;
-                                            log("PZEM rollover detected: " + config.name + " last=" + kwh.last + " new=" + newData + " diff=" + diff);
-                                        }
-                                        kwh.last = newData;
-                                        if (diff > 0) {
-                                            recorder(kwh, diff, config.name);
-                                            kwh.total += diff;
-                                        }
-                                    }
-                                }
-                            }
-                            return;
-                        }
-                    }
-                    for (let x = 0; x < cfg.sensor.temp.length; x++) {
-                        const config = cfg.sensor.temp[x];
-                        if (config.entity === _push.name) {
-                            let temp = entity[config.name] ||= {};
-                            let data = _push.state;
-                            if (config.multiplier != undefined) {
-                                temp.state = parseFloat(data) * config.multiplier;
-                                if (temp.state != null && Number.isFinite(temp.state))
-                                    send("temp_" + config.name, Math.round(temp.state * 10) / 10, config.unit);
-                            } else {
-                                temp.state = parseFloat(data);
-                            }
-                            return;
-                        }
-                    }
-                    if (cfg.solar?.inverterAuto == _push.name) {
-                        let newState = _push.state;
-                        if (newState == true) log("inverter auto going online");
-                        else log("inverter auto going offline");
-                        for (let x = 0; x < cfg.inverter.length; x++) {
-                            if (entity[cfg.inverter[x].entity].state) {
-                                log("inverter: " + cfg.inverter[x].name + " - inverter ON - syncing ATS with inverter state");
-                                syncInverter(x, true);
-                            } else {
-                                log("inverter: " + cfg.inverter[x].name + " - inverter OFF - syncing ATS with inverter state");
-                                syncInverter(x, false);
-                                if (newState == true) state.inverter[x].step = time.epoch - cfg.solar.cycleError - 5;
-                            }
-                        }
-                        return;
-                    }
-                    for (let x = 0; x < cfg.inverter.length; x++) {
-                        if (cfg.inverter[x].entity == _push.name) {
-                            let newState = _push.state;
-                            if (cfg.inverter[x].enable) {
-                                if (state.inverter[x].state != "faulted" && state.inverter[x].state != newState) {
-                                    log("inverter: " + cfg.inverter[x].name + " - operational state entity switching to - syncing power/switches: " + newState);
-                                    syncInverter(x, newState);
-                                }
-                            }
-                            return;
-                        }
-                    }
-                    if (cfg.solar?.priority?.entityAuto == _push.name) {
-                        let newState = _push.state;
-                        if (newState == true) log("priority queue - auto going ONLINE");
-                        else log("priority queue - auto going offline");
-                        state.priority.step = time.epoch;
-                        return;
-                    }
-                    for (let x = 0; x < cfg.solar.priority.queue.length; x++) {
-                        let queue = cfg.solar.priority.queue[x];
-                        if (queue.entityAuto != undefined && queue.entityAuto == _push.name) {
-                            let newState = _push.state;
-                            if (newState == true) log("priority queue member" + queue.name + " going online");
-                            else log("priority queue member " + queue.name + " going offline");
-                            return;
-                        }
-                        for (let y = 0; y < queue.entities.length; y++) {
-                            const element = queue.entities[y];
-                            if (element == _push.name) {
-                                let newState = _push.state;
-                                if (!state.priority.skipLog)
-                                    log("syncing priority queue: " + queue.name + "  with entity: " + element + " - new state: " + newState);
-                                state.priority.queue[x].state = newState;
-                                state.priority.step = time.epoch;
-                                state.priority.skipLog = false;
-                                return;
-                            }
-                        }
-                    }
-                    function syncInverter(x, newState) {
-                        state.inverter[x].state = newState;
-                        solar.nightMode(x);
-                        solar.power(x, newState);
-                        state.inverter[x].warn.manualPowerOn = false;
-                    }
-                }
+                } else push[_push.name]?.(_push.state, _push.name);
                 function calcSensor() {     // calc watts based on amp/volt sensors 
                     for (let x = 0; x < cfg.sensor.amp.length; x++) {
                         let config = cfg.sensor.amp[x], sum = 0;
