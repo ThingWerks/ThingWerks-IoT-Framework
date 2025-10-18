@@ -24,9 +24,13 @@ writeNV = function (name) {  // write non-volatile memory to the disk
 }
 core = function (type, data, auto) {
     if (type == "state") {
-        //  console.log(data)
+        entity[data.name] ||= { state: null };
+        entity[data.name].state = data.state;
+        entity[data.name].update = time.epochMil;
+        entity[data.name].stamp = time.stamp;
         automation.forIn((name, value) => {
-            try { automation[name](name, { name: data.name, state: data.state }); } catch { }
+            if (auto != name)
+                try { automation[name](name, { name: data.name, state: data.state }); } catch { }
         })
     }
     udp.send(JSON.stringify({ name: moduleName, type, data, auto }), 65432, '127.0.0.1');
@@ -612,9 +616,8 @@ sys = {         // ______________________system area, don't need to touch anythi
         Object.defineProperty(Object.prototype, "forIn", {
             value: function (callback) {
                 for (const key in this) {
-                    //  if (Object.prototype.hasOwnProperty.call(this, key)) {
-                    callback(key, this[key], this);
-                    //  }
+                //    if (Object.prototype.hasOwnProperty.call(this, key))
+                        callback(key, this[key], this);
                 }
             },
             enumerable: false // so it won't show up in loops
@@ -658,6 +661,7 @@ sys = {         // ______________________system area, don't need to touch anythi
                 }
             }
         };
+        round = function (x, precision) { return Math.round(x * precision) / precision }
         sys.boot(0);
     },
     boot: function (step) {
