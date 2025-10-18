@@ -620,6 +620,95 @@ module.exports = { // exports added to clean up layout
                     }
                 },
             }
+            let push_constructor = {
+                auto: function (dd, index, config) {
+                    return (state) => {
+                        if (state) {
+                            log(config.name + " - is going ONLINE");
+                            dd.auto.state = true;
+                            dd.fault.flow = false;
+                            dd.fault.flowRestarts = 0;
+                            dd.fault.inputLevel = false;
+                            dd.warn.tankLow = false;
+                            dd.warn.inputLevel = false;
+                            dd.state.cycleTimer = time.epoch;
+                            dd.state.cycleCount = 0;
+                            clearTimeout(dd.state.flowTimerRestart);
+                        } else {
+                            log(config.name + " - is going OFFLINE - pump is stopping");
+                            dd.auto.state = false;
+                            dd.state.oneShot = false;
+                            clearTimeout(dd.state.flowTimerRestart);
+                            clearTimeout(dd.state.flowTimerCheck);
+                            clearTimeout(dd.state.oneShot);
+                            pump.stop(index);
+                        }
+                    };
+                },
+                oneShot: function (dd, index, config) {
+                    return (state, name) => {
+
+                        clearTimeout(dd.state.oneShot);
+                        if (state?.includes("remote_button_short_press")) {
+                            let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
+                            log(config.name + " - starting one shot operation - " + "triggered by: "
+                                + name + " - stopping in " + duration + " min");
+                            send(config.ha.auto, true);
+                            dd.state.oneShot = setTimeout(() => {
+                                log(config.name + " - stopping one shot operation after " + duration + " minutes");
+                                send(config.ha.auto, false);
+                            }, (duration * 60 * 1e3));
+                        } else if (state?.includes("remote_button_double_press")) {
+                            log(config.name + " - starting system - " + "triggered by: " + name);
+                            dd.state.oneShot = false;
+                            send(config.ha.auto, true);
+                        } else if (state?.includes("remote_button_long_press")) {
+                            log(config.name + " - STOPPING system - " + "triggered by: " + name);
+                            send(config.ha.auto, false);
+                        }
+                        return;
+                    };
+                },
+                turbo: function (dd, index, config) {
+                    return (state, name) => {
+                        log(config.name + " - Turbo operation triggered by: " + name);
+                        if (state == true) {
+                            log(config.name + " - enabling pump turbo mode");
+                            dd.state.turbo = true;
+                        } else {
+                            log(config.name + " - disabling pump turbo mode");
+                            dd.state.turbo = false;
+                        }
+                        return;
+                    };
+                },
+                profile: function (dd, index, config) {
+                    return (state, name) => {
+                        log(config.name + " - pump profile change triggered by: " + name);
+                        log(config.name + " - pump profile changing to mode: " + ~~state);
+                        dd.state.profile = parseInt(state);
+                        return;
+                    };
+                },
+                fountain: function () {
+                    return (state, name) => {
+                        log(cfg.fountain[x].name + " - automation triggered by: " + name);
+                        if (state == true) {
+                            log(cfg.fountain[x].name + " auto is starting");
+                            pumpFountain(x, true);
+                        } else {
+                            log(cfg.fountain[x].name + " auto is stopping");
+                            pumpFountain(x, false);
+                        }
+                    };
+                },
+                example: function (dd, index, config) {
+                    return (state, name) => {
+
+
+                    };
+                },
+            }
             if (_push === "init") {
                 log("initializing pumper config and state")
                 global.state[_name] = {               // initialize automation volatile memory
@@ -627,6 +716,7 @@ module.exports = { // exports added to clean up layout
                     timer: {}
                 };
                 global.nv[_name] ||= {};
+                global.push[_name] = {};
                 ({ st, cfg, nv, push } = _pointers(_name));
                 initNV();
                 cfg.sensor.press.forEach(element => {
@@ -641,7 +731,7 @@ module.exports = { // exports added to clean up layout
                 for (let x = 0; x < cfg.dd.length; x++) {
                     log(cfg.dd[x].name + " - initializing");
                     st.dd.push({     // initialize volatile memory for each Demand Delivery system
-                        cfg:cfg.dd[x],
+                        cfg: cfg.dd[x],
                         state: {
                             run: false,
                             oneShot: false,
@@ -733,93 +823,21 @@ module.exports = { // exports added to clean up layout
                         st.dd[x].warn.tankLow = false;
                     }
                 }, 3600e3);
-            } else {        // event processing
-                if (_push.state === null) console.log("push error: ", _push)
                 for (let x = 0; x < cfg.dd.length; x++) {
-                    let dd = st.dd[x], config = cfg.dd[x];
-                    // log("dd automation toggle: " + _push.name + " state:" + _push.state)
-                    if (_push.name == dd.auto.name) {
-                        time.sync();
-                            switch (_push.state) {
-                                case true:
-                                    //console.log(dd)
-                                    log(config.name + " - is going ONLINE");
-                                    dd.auto.state = true;
-                                    dd.fault.flow = false;
-                                    dd.fault.flowRestarts = 0;
-                                    dd.fault.inputLevel = false;
-                                    dd.warn.tankLow = false;
-                                    dd.warn.inputLevel = false;
-                                    dd.state.cycleTimer = time.epoch;
-                                    dd.state.cycleCount = 0;
-                                    clearTimeout(dd.state.flowTimerRestart);
-                                    return;
-                                case false:
-                                    console.log()
-                                    log(config.name + " - is going OFFLINE - pump is stopping");
-                                    dd.auto.state = false;
-                                    dd.state.oneShot = false;
-                                    clearTimeout(dd.state.flowTimerRestart);
-                                    clearTimeout(dd.state.flowTimerCheck);
-                                    clearTimeout(dd.state.oneShot);
-                                    pump.stop(x);
-                                    return;
-                            }
-                        return;
-                    }
-                    if (config.ha.oneShot && config.ha.oneShot.includes(_push.name)) {
-                        clearTimeout(dd.state.oneShot);
-                        if (_push.state?.includes("remote_button_short_press")) {
-                            let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
-                            log(config.name + " - starting one shot operation - " + "triggered by: "
-                                + _push.name + " - stopping in " + duration + " min");
-                            send(config.ha.auto, true);
-                            dd.state.oneShot = setTimeout(() => {
-                                log(config.name + " - stopping one shot operation after " + duration + " minutes");
-                                send(config.ha.auto, false);
-                            }, (duration * 60 * 1e3));
-                        } else if (_push.state?.includes("remote_button_double_press")) {
-                            log(config.name + " - starting system - " + "triggered by: " + _push.name);
-                            dd.state.oneShot = false;
-                            send(config.ha.auto, true);
-                        } else if (_push.state?.includes("remote_button_long_press")) {
-                            log(config.name + " - STOPPING system - " + "triggered by: " + _push.name);
-                            send(config.ha.auto, false);
+                    const dd = st.dd[x];
+                    const config = cfg.dd[x];
+                    push[dd.auto.name] = push_constructor.auto(dd, x, config);
+                    push[config.ha.turbo] = push_constructor.turbo(dd, x, config);
+                    push[config.ha.profile] = push_constructor.profile(dd, x, config);
+                    if (config.ha.oneShot) {
+                        for (const key of config.ha.oneShot) {
+                            push[key] = push_constructor.oneShot(dd, x, config);
                         }
-                        return;
-                    }
-                    if (config.ha.turbo == _push.name) {
-                        log(config.name + " - Turbo operation triggered by: " + _push.name);
-                        if (_push.state == true) {
-                            log(config.name + " - enabling pump turbo mode");
-                            dd.state.turbo = true;
-                        } else {
-                            log(config.name + " - disabling pump turbo mode");
-                            dd.state.turbo = false;
-                        }
-                        return;
-                    }
-                    if (config.ha.profile == _push.name) {
-                        log(config.name + " - pump profile change triggered by: " + _push.name);
-                        log(config.name + " - pump profile changing to mode: " + ~~_push.state);
-                        dd.state.profile = parseInt(_push.state);
-                        return;
                     }
                 }
-                for (let x = 0; x < cfg.fountain.length; x++) {
-                    if (cfg.fountain[x].haAuto == _push.name) {
-                        log(cfg.fountain[x].name + " - automation triggered by: " + _push.name);
-                        if (_push.state == true) {
-                            log(cfg.fountain[x].name + " auto is starting");
-                            pumpFountain(x, true);
-                        } else {
-                            log(cfg.fountain[x].name + " auto is stopping");
-                            pumpFountain(x, false);
-                        }
-                        return;
-                    }
-                }
-            }
+                for (let x = 0; x < cfg.fountain.length; x++)
+                    push[cfg.fountain[x].haAuto] = push_constructor.fountain();
+            } else push[_push.name]?.(_push.state, _push.name);
             function timer() {    // called every minute
                 for (let x = 0; x < cfg.dd.length; x++) { st.dd[x].warn.flowFlush = false; }
                 if (time.hour == 4 && time.min == 0) {
@@ -908,7 +926,68 @@ module.exports = { // exports added to clean up layout
             fountain advanced time window - coordinate with solar power profile - fault run time 
             solar fountain controls auto, when low sun, auto fountain resumes with pump stopped (fail safe)
             */
-
+        },
+        Compound: function (_name, _push, _reload) {
+            try {
+                let { st, cfg, nv, log, write, send, push } = _pointers(_name);
+                if (_reload) {
+                    if (_reload != "config") {
+                        log("hot reload initiated");
+                        clearTimeout(st.timer);
+                    } else ({ st, cfg, nv } = _pointers(_name));
+                    return;
+                }
+                if (_push === "init") {
+                    global.state[_name] = { boot: false, timer: null };
+                    global.config[_name] ||= {};
+                    ({ st, cfg, nv, push } = _pointers(_name));
+                    log("automation is starting");
+                    st.timer = setInterval(() => { timer(); }, 60e3);
+                    return;
+                } else { }
+                function timer() {
+                    if (time.hour == 0 && time.min == 0) {
+                        log("Lights - Outside Lights - Turning OFF");
+                        send("input_boolean.lights_stairs", false);
+                        send("switch.lights_bodega_front_1", false);
+                    }
+                    if (time.hour == 2 && time.min == 0) {
+                        // send("switch.relay_bodega_freezer_fujidenzo", false);
+                    }
+                    if (time.hour == 4 && time.min == 0) {
+                        log("Lights - Outside Lights (bodega front 2) - Turning OFF");
+                        send("switch.lights_bodega_front_2", false);
+                        send("switch.lights_outside_entrance", false);
+                    }
+                    if (time.hour == 6 && time.min == 0) {
+                        send("switch.relay_bodega_freezer_fujidenzo", true);
+                    }
+                    if (time.hour == 6 && time.min == 30) {
+                        send("input_boolean.auto_bubon", true);
+                    }
+                    if (time.hour == 17 && time.min == 30) {
+                        send("switch.lights_bodega_front_1", true);
+                    }
+                    if (time.hour == 17 && time.min == 45) {
+                        log("Lights - Outside Lights - Turning ON");
+                        send("input_boolean.lights_stairs", true);
+                        send("switch.lights_bodega_front_2", true);
+                        send("switch.lights_outside_bedroom", true);
+                        send("switch.lights_outside_entrance", true);
+                    }
+                    if (time.hour == 18 && time.min == 0) {
+                        send("input_boolean.auto_bubon", false);
+                        send("switch.lights_bodega_front_1", true);
+                        //   send("switch.relay_bodega_freezer_fujidenzo", false);
+                    }
+                    if (time.hour == 21 && time.min == 0) {
+                        send("switch.relay_bodega_freezer_fujidenzo", true);
+                    }
+                    if (time.hour == 22 && time.min == 0) {
+                        send("switch.lights_outside_bedroom", false);
+                    }
+                }
+            } catch (error) { console.trace(error) }
         },
     }
 };
