@@ -5,7 +5,7 @@ module.exports = {
             "input_boolean.auto_inverter",
             "input_boolean.inverter_1",
 
-            
+
             "pzem-daren_watts",
             "pzem-daren_meter",
             "pzem-alvarez_watts",
@@ -96,7 +96,7 @@ module.exports = {
                         {
                             name: "Inverter 10kw",
                             enable: true,
-                            onAmps: 10.0,
+                            onAmps: 20.0,
                             onSun: 0.5,
                             // offSun: 2.35,        // sunlight level to deactivate this system - independent of battery level
                             offAmps: -15.0,
@@ -105,7 +105,8 @@ module.exports = {
                             // offVolts: 53.7,      // battery level to turn off system - independent of battery level
                             delayOff: 300,          // set delay for shutdown criteria hold time 
                             // inverter: 0          // optional - which inverter carries the load - if not specified, inverter 0 is used
-                            entities: ["solar-relay5-inverter-10kw"]
+                            entities: ["solar-relay5-inverter-10kw"],
+                            entityAuto: null,       // entity to control this members activation
                         },
                         {
                             name: "Ram-Water ATS",
