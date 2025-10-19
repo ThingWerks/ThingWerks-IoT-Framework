@@ -29,7 +29,7 @@ module.exports = {
                     //  push["input_boolean.test"] = (pushState, pushName) => { test2() }
 
                     return;
-                } else push[_push.name](_push.state, _push.name);    // called with every incoming push event
+                } else push[_push.name]?.(_push.state, _push.name);    // called with every incoming push event
 
                 /*
         
@@ -56,7 +56,7 @@ module.exports = {
                     ({ state, config, nv, push } = _pointers(_name)); // you must call pointers directly after config, state and or NV initialization 
                     // init sequence here
                     return;
-                } else push[_push.name](_push.state, _push.name);
+                } else push[_push.name]?.(_push.state, _push.name);
                 /* common functions (for initialization and event shared functions) go here */
             } catch (error) { console.trace(error) }
         },
