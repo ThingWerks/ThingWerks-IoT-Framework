@@ -588,17 +588,17 @@ module.exports = {
                     },
                     pointers: function () {
                         let battery = cfg.battery[cfg.battery.findIndex(battery => battery.name === cfg.solar.priority.battery)];
-                        let volts = Math.round(entity[battery.sensorVolt].state * 10) / 10;
+                        let volts = Math.round(entity[battery.sensorVolt]?.state * 10) / 10;
                         let sun = Math.round(entity[cfg.solar.sunlight]?.state * 100) / 100;
                         let amps;
                         if (cfg.solar.priority.battery != undefined) {
                             if (Array.isArray(battery.sensorAmp)) {
                                 let temp = 0;
                                 for (let y = 0; y < battery.sensorAmp.length; y++) {
-                                    temp += Math.round(entity[battery.sensorAmp[y]].state * 10) / 10;
+                                    temp += Math.round(entity[battery.sensorAmp[y]]?.state * 10) / 10;
                                     amps = temp;
                                 }
-                            } else amps = Math.round(entity[battery.sensorAmp].state * 10) / 10;
+                            } else amps = Math.round(entity[battery.sensorAmp]?.state * 10) / 10;
                         }
                         return { battery, volts, sun, amps }
                     },
