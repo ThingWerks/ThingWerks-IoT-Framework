@@ -156,12 +156,12 @@ module.exports = { // exports added to clean up layout
                     }
                 }
             }
-            let pump = {
+            let delivery = {
                 auto: function (x) {
                     ({ st, cfg, nv } = _pointers(_name));
                     let dd = st.dd[x];
                     dd.cfg = cfg.dd[x];
-                    pump.shared(x);
+                    delivery.shared(x);
                     switch (dd.auto.state) {
                         case true:                  // when Auto System is ONLINE
                             switch (dd.state.run) {
@@ -172,7 +172,7 @@ module.exports = { // exports added to clean up layout
                                                 if (dd.press.out.state.meters <= dd.cfg.press.start) {
                                                     log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.meters.toFixed(2)
                                                         + "m) - pump is starting");
-                                                    pump.start(dd, x);
+                                                    delivery.start(dd, x);
                                                     return;
                                                 }
                                             } else if (dd.state.turbo) {
@@ -180,7 +180,7 @@ module.exports = { // exports added to clean up layout
                                                 if (dd.press.out.state.psi <= dd.cfg.press.turbo.start) {
                                                     log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
                                                         + "psi) - pump turbo is starting");
-                                                    pump.start(dd, x);
+                                                    delivery.start(dd, x);
                                                     return;
                                                 }
                                             } else if (dd.state.profile != null) {
@@ -189,20 +189,20 @@ module.exports = { // exports added to clean up layout
                                                 if (dd.press.out.state.psi <= dd.cfg.press.output.profile[dd.state.profile].start) {
                                                     log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
                                                         + "psi) - pump is starting with profile: " + dd.state.profile);
-                                                    pump.start(dd, x);
+                                                    delivery.start(dd, x);
                                                     return;
                                                 }
                                             } else if (dd.press.out.state.psi <= dd.cfg.press.start) {
                                                 //  console.log("current pressure: ", dd.press.out.state.psi)
                                                 log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
                                                     + "psi) - pump is starting");
-                                                pump.start(dd, x);
+                                                delivery.start(dd, x);
                                                 return;
                                             }
                                             if (dd.state.timeoutOff == true) {  // after pump has been off for a while
                                                 if (dd.pump[dd.state.pump].state === true && dd.sharedPump.run == false) {
                                                     log(dd.cfg.name + " - pump running in HA/ESP but not here - switching pump ON");
-                                                    pump.start(dd, x);
+                                                    delivery.start(dd, x);
                                                     return;
                                                 } else {
                                                     if (dd.flow != undefined && dd.flow[dd.state.pump].lm > dd.cfg.pump[dd.state.pump].flow.startError
@@ -212,7 +212,7 @@ module.exports = { // exports added to clean up layout
                                                         log(dd.cfg.name + " - shutting down auto system");
                                                         send(dd.auto.name, false);
                                                         dd.auto.state = false;
-                                                        pump.stop(x, true);
+                                                        delivery.stop(x, true);
                                                         return;
                                                     }
                                                 }
@@ -224,7 +224,7 @@ module.exports = { // exports added to clean up layout
                                                     log(dd.cfg.name + " - pump is flow faulted but HA pump status is still ON, trying to stop again", 3);
                                                     send(dd.auto.name, false);
                                                     dd.auto.state = false;
-                                                    pump.stop(x, true);
+                                                    delivery.stop(x, true);
                                                     return;
                                                 }
                                             }
@@ -235,20 +235,20 @@ module.exports = { // exports added to clean up layout
                                     if (dd.press.out.cfg.unit == "m") {
                                         if (dd.press.out.state.meters >= dd.cfg.press.stop) {
                                             log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is full - pump is stopping");
-                                            pump.stop(x);
+                                            delivery.stop(x);
                                             return;
                                         }
                                     } else if (dd.state.turbo) {
                                         if (dd.press.out.state.psi >= dd.cfg.press.turbo.stop) {
                                             log(dd.cfg.name + " - " + dd.press.out.cfg.name + " turbo shutoff pressure reached - pump is stopping");
-                                            pump.stop(x);
+                                            delivery.stop(x);
                                             return;
                                         }
                                     } else if (dd.state.profile != null) {
                                         if (dd.press.out.state.psi >= dd.cfg.press.output.profile[dd.state.profile].stop) {
                                             log(dd.cfg.name + " - " + dd.press.out.cfg.name + " pump profile: " + dd.state.profile + " pressure reached: "
                                                 + dd.press.out.state.psi.toFixed(0) + " psi - pump is stopping");
-                                            pump.stop(x);
+                                            delivery.stop(x);
                                             return;
                                         }
                                         if (dd.cfg.pump[dd.state.pump].press.input != undefined && dd.cfg.pump[dd.state.pump].press.input.sensor) {
@@ -270,19 +270,19 @@ module.exports = { // exports added to clean up layout
                                         }
                                     } else if (dd.press.out.state.psi >= dd.cfg.press.stop) {
                                         log(dd.cfg.name + " - " + dd.press.out.cfg.name + " shutoff pressure reached - pump is stopping");
-                                        pump.stop(x);
+                                        delivery.stop(x);
                                         return;
                                     }
                                     if (time.epoch - dd.state.timerRun >= dd.cfg.fault.runLongError * 60) {
                                         log(dd.cfg.name + " - pump: " + dd.pump[dd.state.pump].name + " - max runtime exceeded - DD system shutting down", 3);
-                                        pump.stop(x);
+                                        delivery.stop(x);
                                         send(dd.auto.name, false);
                                         dd.auto.state = false;
                                         return;
                                     }
                                     if (dd.flow == undefined && dd.state.timeoutOn == true && dd.pump[dd.state.pump].state === false) {
                                         log(dd.cfg.name + " - is out of sync - auto is on, system is RUN but pump is off", 2);
-                                        pump.start(dd, x);
+                                        delivery.start(dd, x);
                                         return;
                                     }
                                     if (dd.press.in != undefined && dd.press.in.state.meters <= dd.cfg.press.input.minError) {
@@ -293,14 +293,14 @@ module.exports = { // exports added to clean up layout
                                     }
 
 
-                                    if (dd.cfg.press.output.riseTime != undefined) pump.check.press(dd);
+                                    if (dd.cfg.press.output.riseTime != undefined) delivery.check.press(dd);
                                     if (dd.flow != undefined) {
                                         if (dd.cfg.pump[dd.state.pump].flow.stopFlow != undefined && dd.flow[dd.state.pump].lm <= dd.cfg.pump[dd.state.pump].flow.stopFlow) {
                                             log(dd.cfg.name + " - stop flow rate reached - pump is stopping");
-                                            pump.stop(x);
+                                            delivery.stop(x);
                                             return;
                                         }
-                                        pump.check.flow(dd, x);
+                                        delivery.check.flow(dd, x);
                                     }
                                     break;
                             }
@@ -316,14 +316,14 @@ module.exports = { // exports added to clean up layout
                                     log(dd.cfg.name + " - is out of sync - auto is off but pump is on - switching auto ON", 2);
                                     send(dd.auto.name, true);
                                     dd.auto.state = true;
-                                    pump.start(dd, x, false);
+                                    delivery.start(dd, x, false);
                                     return;
                                 }
                                 if (dd.flow != undefined && dd.flow[dd.state.pump].lm > dd.cfg.pump[dd.state.pump].flow.startError
                                     && dd.warn.flowFlush == false && dd.cfg.fault.flushWarning != false && dd.sharedPump.shared == false) {
                                     dd.warn.flowFlush = true;
                                     log(dd.cfg.name + " - Auto is off but flow is detected (" + dd.flow[dd.state.pump].lm.toFixed(1) + ") possible sensor damage or flush operation", 2);
-                                    if (dd.pump[dd.state.pump].state === null || dd.pump[dd.state.pump].state == true) pump.stop(x, true);
+                                    if (dd.pump[dd.state.pump].state === null || dd.pump[dd.state.pump].state == true) delivery.stop(x, true);
                                     return;
                                 }
                             }
@@ -332,7 +332,7 @@ module.exports = { // exports added to clean up layout
                     if (dd.press.out.state.meters >= (dd.cfg.press.stop + .12) && dd.fault.flowOver == false) {
                         log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is overflowing (" + dd.press.out.state.meters
                             + dd.press.out.cfg.unit + ") - possible SSR or hardware failure", 3);
-                        pump.stop(x);
+                        delivery.stop(x);
                         dd.fault.flowOver = true;
                     }
                 },
@@ -412,7 +412,7 @@ module.exports = { // exports added to clean up layout
                             log(dd.cfg.name + " - checking pump flow");
                             dd.state.flowCheck = true;
                             //automation[_name](_name, slog, send, file, nvMem, entity, state, config);
-                            pump.check.flow(dd, x);
+                            delivery.check.flow(dd, x);
                         }, dd.cfg.pump[dd.state.pump].flow.startWait * 1000);
                     }
                     dd.state.sendRetries = 0;
@@ -436,7 +436,7 @@ module.exports = { // exports added to clean up layout
                         minutes = Math.floor(runTime / 60),
                         extraSeconds = runTime % 60, lbuf;
                     dd.cfg = cfg.dd[x];
-                    pump.shared(x);
+                    delivery.shared(x);
                     if (dd.sharedPump.run == false) {
                         lbuf = dd.cfg.name + " - stopping pump: " + dd.pump[dd.state.pump].cfg.name + " - Runtime: " + hours + "h:" + minutes + "m:" + extraSeconds + "s";
                         send(dd.pump[dd.state.pump].cfg.entity, false);
@@ -521,7 +521,7 @@ module.exports = { // exports added to clean up layout
                                         send(dd.auto.name, false);
                                         dd.auto.state = false;
                                     }
-                                    pump.stop(x, true);
+                                    delivery.stop(x, true);
                                 } else if (flow < pumpConfig.startWarn && dd.warn.flowDaily == false) {
                                     log(dd.cfg.name + " - pump flow is lower than optimal (" + flow.toFixed(1) + "lm) - clean filter", 2);
                                     dd.state.flowCheckPassed = true;
@@ -558,10 +558,10 @@ module.exports = { // exports added to clean up layout
                                             log(dd.cfg.name + msg, 3);
                                             send(dd.auto.name, false);
                                             dd.auto.state = false;
-                                            pump.stop(x, true);
+                                            delivery.stop(x, true);
                                         } else {
                                             log(dd.cfg.name + msg, 1);
-                                            pump.stop(x);
+                                            delivery.stop(x);
                                         }
                                     }
                                 }
@@ -577,7 +577,7 @@ module.exports = { // exports added to clean up layout
                                     if (type == 0) log(dd.cfg.name + " - tank level not rising - DD system shutting down", 3);
                                     send(dd.auto.name, false);
                                     dd.auto.state = false;
-                                    pump.stop(x, true)
+                                    delivery.stop(x, true)
                                     return;
                                 }
                                 else if (!(dd.press.out.state.percent - dd.state.pressStart) > dd.cfg.press.outputRiseWarn) {
@@ -592,7 +592,7 @@ module.exports = { // exports added to clean up layout
                                     if (type == 0) log(dd.cfg.name + " - tank level not rising - DD system shutting down", 3);
                                     send(dd.auto.name, false);
                                     dd.auto.state = false;
-                                    pump.stop(x, true)
+                                    delivery.stop(x, true)
                                     return;
                                 }
                                 else if (!(dd.press.out.state.psi - dd.state.pressStart) > dd.cfg.press.outputRiseWarn) {
@@ -641,7 +641,7 @@ module.exports = { // exports added to clean up layout
                             clearTimeout(dd.state.flowTimerRestart);
                             clearTimeout(dd.state.flowTimerCheck);
                             clearTimeout(dd.state.oneShot);
-                            pump.stop(index);
+                            delivery.stop(index);
                         }
                     };
                 },
@@ -711,10 +711,7 @@ module.exports = { // exports added to clean up layout
             }
             if (_push === "init") {
                 log("initializing pumper config and state")
-                global.state[_name] = {               // initialize automation volatile memory
-                    init: true, dd: [], ha: { pushLast: [] }, fountain: [],
-                    timer: {}
-                };
+                global.state[_name] = { init: true, dd: [], fountain: [], timer: {}, pump: {} };
                 global.nv[_name] ||= {};
                 global.push[_name] = {};
                 ({ st, cfg, nv, push } = _pointers(_name));
@@ -810,7 +807,7 @@ module.exports = { // exports added to clean up layout
                 st.timer.second = setInterval(() => {     // called every second  -  rerun this automation every second
                     sensor.flow.calc();
                     sensor.ha_push(state);
-                    for (let x = 0; x < cfg.dd.length; x++) pump.auto(x);
+                    for (let x = 0; x < cfg.dd.length; x++) delivery.auto(x);
                 }, 1e3);
                 st.timer.minute = setInterval(() => {
                     timer();
