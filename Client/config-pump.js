@@ -97,12 +97,12 @@ module.exports = {
                             name: "1.5hp jetpump",
                             entity: "solar-relay3-pump-bubon",  // ESP/HA cfg ID number
                             flow: {
-                                sensor: "bubon",   // flow sensor number (in cfg.sensor.flow block)
-                                startWarn: 15,          // min start flow before triggering notification (useful for filters)
-                                startError: 10,         // minimum flow rate pump must reach at start
-                                startWait: 6,           // seconds to wait before checking flow after pump starts
-                                runError: 5,
-                                runStop: 12
+                                sensor: "bubon",    // flow sensor number (in cfg.sensor.flow block)
+                                startWarn: 15,      // min start flow before triggering notification (useful for filters)
+                                startError: 10,     // minimum flow rate pump must reach at start
+                                startWait: 6,       // seconds to wait before checking flow after pump starts
+                                runError: 5,        // flow rate to fault 
+                                runStop: 12         // flow rate to stop 
                             },
                             press: {
                                 input: {
@@ -127,8 +127,8 @@ module.exports = {
                         retryFinal: 2,      // time in minutes to wait for final retry
                         runLongError: 10,   // max run time in minutes
                         runLongWarn: 5,     // max run time in minutes
-                        // cycleCount: 0,      // max cycle times per cycleTime window
-                        //  cycleTime: 10,      // max cycleTime time window  (in seconds)
+                        // cycleCount: 0,   // max cycle times per cycleTime window
+                        //  cycleTime: 10,  // max cycleTime time window  (in seconds)
                         flushWarning: false,
                     },
                 },
