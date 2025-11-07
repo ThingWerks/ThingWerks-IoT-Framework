@@ -27,9 +27,11 @@ module.exports = {
             "solar-relay3-pump-bubon",
             "flow-raw-irrigation"
         ],
-        sync: [["switch.switch_test", "input_boolean.lights_stairs",],
-        ["switch.lights_outside_bedroom", "input_boolean.lights_bedroom_outside"],
-        ["switch.lights_outside_entrance", "input_boolean.lights_house_entrance"],]
+        sync: {
+            house_stairs: ["switch.switch_test", "input_boolean.lights_stairs",],
+            house_patio: ["switch.lights_outside_bedroom", "input_boolean.lights_bedroom_outside"],
+            house_entrance: ["switch.lights_outside_entrance", "input_boolean.lights_house_entrance"],
+        }
     },
     heartbeat: {
         "esp_heartbeat_solar": 3000,
@@ -37,6 +39,46 @@ module.exports = {
     },
     config: {
         Pumper: {
+            pump: {
+                "1.5hp jetpump": {
+                    power: {
+                        entity: "solar-relay3-pump-bubon",
+                    },
+
+                    valve: {
+                        entity: undefined,
+                        startDelay: undefined,
+                        stopDelay: undefined,
+                    },
+                    team: {
+                        type: "assist",     // parallel, changeover, assist, 
+                        priority: 0,
+                        members: [],
+                    },
+                    flow: {
+                        entity: "bubon",
+                        startWarn: 15,
+                        startError: 10,
+                        startCheckTime: 5,
+                        runWarn: 8,
+                        runError: 5,
+                    },
+                    press: {
+                        entity: "bubon",
+                        minRise: 22,
+                        minRiseTime: 20,
+                        minFall: 15
+                    },
+                    vfd: {
+                        entity: undefined,
+                        type: "pwm",            // pwm, modbus, HDI, 4P
+                        startSet: undefined,
+                        rampSpeedUp: 20,
+                        rampSpeedDown: 20,
+                        pwm: [],
+                    },
+                }
+            },
             dd: [       // config for the Demand/Delivery automation function, 1 object for each DD system
                 {   // DD system example
                     name: "Bubon",       // Demand Delivery system 2d
@@ -60,7 +102,7 @@ module.exports = {
                                 startError: 10,         // minimum flow rate pump must reach at start
                                 startWait: 6,           // seconds to wait before checking flow after pump starts
                                 runError: 5,
-                                //     stop: 15
+                                runStop: 12
                             },
                             press: {
                                 input: {
@@ -85,8 +127,8 @@ module.exports = {
                         retryFinal: 2,      // time in minutes to wait for final retry
                         runLongError: 10,   // max run time in minutes
                         runLongWarn: 5,     // max run time in minutes
-                        cycleCount: 0,      // max cycle times per cycleTime window
-                        cycleTime: 10,      // max cycleTime time window  (in seconds)
+                        // cycleCount: 0,      // max cycle times per cycleTime window
+                        //  cycleTime: 10,      // max cycleTime time window  (in seconds)
                         flushWarning: false,
                     },
                 },
