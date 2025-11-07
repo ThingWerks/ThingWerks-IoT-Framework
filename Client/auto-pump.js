@@ -14,6 +14,7 @@ module.exports = { // exports added to clean up layout
                         clearTimeout(element.state.flowTimerRestart);
                         clearTimeout(element.state.flowTimerCheck);
                         clearTimeout(element.state.oneShot);
+                        clearInterval(element.state.flowTimerInterval);
                     });
                 }
                 return;
@@ -245,6 +246,7 @@ module.exports = { // exports added to clean up layout
                                             return;
                                         }
                                     } else if (dd.state.profile != null) {
+                                        if (dd.cfg.pump[dd.state.pump].flow?.runStop != undefined) return;
                                         if (dd.press.out.state.psi >= dd.cfg.press.output.profile[dd.state.profile].stop) {
                                             log(dd.cfg.name + " - " + dd.press.out.cfg.name + " pump profile: " + dd.state.profile + " pressure reached: "
                                                 + dd.press.out.state.psi.toFixed(0) + " psi - pump is stopping");
@@ -413,6 +415,9 @@ module.exports = { // exports added to clean up layout
                             dd.state.flowCheck = true;
                             //automation[_name](_name, slog, send, file, nvMem, entity, state, config);
                             delivery.check.flow(dd, x);
+                            dd.state.flowTimerInterval = setInterval(() => {
+                                delivery.check.flow(dd, x);
+                            }, 1e3);
                         }, dd.cfg.pump[dd.state.pump].flow.startWait * 1000);
                     }
                     dd.state.sendRetries = 0;
@@ -460,6 +465,7 @@ module.exports = { // exports added to clean up layout
                     }
 
                     if (dd.flow != undefined) {
+                        clearInterval(dd.state.flowTimerInterval);
                         let tFlow = nv.flow[dd.cfg.pump[dd.state.pump].flow.sensor].total
                             - dd.flow[dd.state.pump].batch;
                         log(lbuf + " - pumped "
@@ -533,6 +539,7 @@ module.exports = { // exports added to clean up layout
                                     dd.fault.flowRestarts = 0;
                                 }
                             } else {
+                               // console.log("flow check passed")
                                 if (pumpConfig.runStop != undefined) {
                                     if (flow <= pumpConfig.runStop) {
                                         trigger((" - RUN flow stop (" + flow.toFixed(1) + "lm) - pump stopping - " + press + " psi"), false);
@@ -740,6 +747,7 @@ module.exports = { // exports added to clean up layout
                             flowCheckRunDelay: false,
                             flowTimerCheck: null,
                             flowTimerRestart: null,
+                            flowTimerInterval: null,
                             timeoutOff: true,
                             timeoutOn: false,
                             timerFlow: null, // for run flow fault delay
