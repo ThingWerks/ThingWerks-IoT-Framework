@@ -235,8 +235,8 @@ if (isMainThread) {
                                 else {
                                     log("client - " + color("purple", buf.name) + " - creating " + color("blue", "Sync Group: ")
                                         + color("cyan", name), 3, 1);
-                                    state.sync[name] = { owner: buf.name, members: [] };
                                 }
+                                state.sync[name] = { owner: buf.name, members: [] };
                                 value.forEach(element => {
                                     state.sync[name].members.push(element);
                                     if (element in entity) {
@@ -1110,10 +1110,9 @@ if (isMainThread) {
         }
     }
     function init() { // initialize system volatile memory
-        state = { client: {}, sync: {}, perf: { ha: [] }, fetchLast: null };
+        state = { client: {}, sync: {}, fetchLast: null };
         entity = {};
         thread = { ha: {}, esp: [], telegram: null };
-        ws = [];
         timer = { fileWrite: null, fileWriteLast: time.epoch };
         logs = { step: 0, sys: [], tg: [], tgStep: 0 };
         fileWatchers = {};
@@ -1930,6 +1929,7 @@ if (isMainThread) {
                                 break;
 
                             case "result":
+                               // console.log(buf)
                                 let count = 0;
                                 if (buf.id == state.query) {
                                     for (let x = 0; x < buf.result?.length; x++) {
@@ -2100,21 +2100,46 @@ if (isMainThread) {
                                 // send via WebSocket
                                 const packet = {
                                     id: state.id++,
-                                    type: (data.unit) ? "set_state" : "call_service",
-                                    ...(data.unit && { entity_id: data.entity, state: data.state }),
-                                    ...(data.unit && {
-                                        attributes: { unit_of_measurement: data.unit },
+
+                                    // If unit exists → this is a sensor update using WS set_state
+                                    ...(data.unit && {  // WS API does not support "set_state" so this is a dead end
+                                        type: "set_state",
+                                        entity_id: data.entity,
+                                        state: data.state,
+                                        attributes: {
+                                            unit_of_measurement: data.unit,
+
+                                            // Choose state_class
+                                            state_class:
+                                                data.unit === "kWh" ? "total_increasing" :
+                                                    (data.unit === "W" || data.unit === "V") ? "measurement" :
+                                                        "measurement",
+
+                                            // device_class
+                                            device_class:
+                                                data.unit === "kWh" ? "energy" :
+                                                    data.unit === "W" ? "power" :
+                                                        data.unit === "V" ? "voltage" :
+                                                            undefined,
+                                        }
                                     }),
+
+                                    // If no unit → this is a normal HA service call (switch/light/etc)
                                     ...(!data.unit && {
+                                        type: "call_service",
                                         domain: (!data.zha) ? data.entity.split(".")[0] : "switch",
-                                        service: data.state == false ? 'turn_off' : 'turn_on',
+                                        service: data.state === false ? "turn_off" : "turn_on",
                                         target: (!data.zha)
                                             ? { entity_id: data.entity }
                                             : { device_id: data.zha },
-                                    }),
+                                    })
                                 };
+                                Object.keys(packet.attributes).forEach(key =>
+                                    (packet.attributes[key] === undefined) && delete packet.attributes[key]
+                                );
                                 try { socket.sendUTF(JSON.stringify(packet)); }
                                 catch (error) { log(error, 3); }
+                               // console.log(packet)
                             } else {
                                 // ✅ send via REST with keep-alive agent
                                 const packet = {
@@ -2122,8 +2147,22 @@ if (isMainThread) {
                                     attributes: {
                                         friendly_name: data.entity,
                                         unit_of_measurement: data.unit,
+
+                                        // --- State Class Logic ---
+                                        state_class: (data.unit === 'kWh') ? 'total_increasing' :
+                                            (data.unit === 'W' || data.unit === 'V') ? 'measurement' :
+                                                'measurement', // Set to undefined if no match
+
+                                        // --- Device Class Logic (Recommended) ---
+                                        device_class: (data.unit === 'kWh') ? 'energy' :
+                                            (data.unit === 'W') ? 'power' :
+                                                (data.unit === 'V') ? 'voltage' :
+                                                    undefined, // Set to undefined if no match
                                     },
                                 };
+                                Object.keys(packet.attributes).forEach(key =>
+                                    (packet.attributes[key] === undefined) && delete packet.attributes[key]
+                                );
                                 const postData = JSON.stringify(packet);
 
                                 const options = {
@@ -2143,6 +2182,10 @@ if (isMainThread) {
                                 const req = http.request(options, (res) => {
                                     // consume response to fully close HTTP stream
                                     res.resume();
+                                    res.on("end", () => {  // WS API does not support "set_state" so this is a dead end
+                                        // state.sensorRestSetup[data.entity] ||= {};
+                                        //  state.sensorRestSetup[data.entity].boot = true;
+                                    });
                                 });
                                 req.on("error", (err) => console.error("HA error:", err));
                                 req.write(postData);
