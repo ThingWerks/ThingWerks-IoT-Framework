@@ -1572,7 +1572,14 @@ if (isMainThread) {
                                     state[name].checkUpdate = Math.floor(Date.now() / 1000);
 
                                     if (state[name].boot === 1) {
-                                        if (data.config.objectId.includes("wifi"))
+                                        if (data.config.objectId.includes("wifi_scan_results"))
+                                            setTimeout(() => {
+                                                log("ESP Home - " + color("cyan", name) +
+                                                    " - connected: " + color("cyan", cfg.ip) +
+                                                    " - " + color("green", data.config.objectId) +
+                                                    " - List: \n" + update.state);
+                                            }, 10);
+                                        else if (data.config.objectId.includes("wifi"))
                                             setTimeout(() => {
                                                 log("ESP Home - " + color("cyan", name) +
                                                     " - connected: " + color("cyan", cfg.ip) +
@@ -1929,7 +1936,7 @@ if (isMainThread) {
                                 break;
 
                             case "result":
-                               // console.log(buf)
+                                // console.log(buf)
                                 let count = 0;
                                 if (buf.id == state.query) {
                                     for (let x = 0; x < buf.result?.length; x++) {
@@ -2062,7 +2069,7 @@ if (isMainThread) {
                                         else if (ibuf == null)
                                             log(`Websocket (${color("cyan", address)}) - sent null/undefined data: ${ibuf}`, 2);
                                         else if (ibuf === "unavailable")
-                                            log(`Websocket (${color("cyan", address)}) - Entity unavailable: ${buf.event.data.new_state.entity_id}`, 2);
+                                            log(`Websocket (${color("cyan", address)}) - Entity went unavailable: ${buf.event.data.new_state.entity_id}`, 2);
                                         else if (!isNaN(ibuf) && isFinite(ibuf)) obuf = Number(ibuf);
                                         else if (ibuf.length === 32) obuf = ibuf;
 
@@ -2100,30 +2107,12 @@ if (isMainThread) {
                                 // send via WebSocket
                                 const packet = {
                                     id: state.id++,
-
                                     // If unit exists → this is a sensor update using WS set_state
                                     ...(data.unit && {  // WS API does not support "set_state" so this is a dead end
                                         type: "set_state",
                                         entity_id: data.entity,
                                         state: data.state,
-                                        attributes: {
-                                            unit_of_measurement: data.unit,
-
-                                            // Choose state_class
-                                            state_class:
-                                                data.unit === "kWh" ? "total_increasing" :
-                                                    (data.unit === "W" || data.unit === "V") ? "measurement" :
-                                                        "measurement",
-
-                                            // device_class
-                                            device_class:
-                                                data.unit === "kWh" ? "energy" :
-                                                    data.unit === "W" ? "power" :
-                                                        data.unit === "V" ? "voltage" :
-                                                            undefined,
-                                        }
                                     }),
-
                                     // If no unit → this is a normal HA service call (switch/light/etc)
                                     ...(!data.unit && {
                                         type: "call_service",
@@ -2134,37 +2123,16 @@ if (isMainThread) {
                                             : { device_id: data.zha },
                                     })
                                 };
-                                Object.keys(packet.attributes).forEach(key =>
-                                    (packet.attributes[key] === undefined) && delete packet.attributes[key]
-                                );
+                                if (packet.attributes) packet.attributes = attributes(data.unit, data.entity);
                                 try { socket.sendUTF(JSON.stringify(packet)); }
                                 catch (error) { log(error, 3); }
-                               // console.log(packet)
+                                // console.log(packet)
                             } else {
                                 // ✅ send via REST with keep-alive agent
-                                const packet = {
-                                    state: data.state,
-                                    attributes: {
-                                        friendly_name: data.entity,
-                                        unit_of_measurement: data.unit,
-
-                                        // --- State Class Logic ---
-                                        state_class: (data.unit === 'kWh') ? 'total_increasing' :
-                                            (data.unit === 'W' || data.unit === 'V') ? 'measurement' :
-                                                'measurement', // Set to undefined if no match
-
-                                        // --- Device Class Logic (Recommended) ---
-                                        device_class: (data.unit === 'kWh') ? 'energy' :
-                                            (data.unit === 'W') ? 'power' :
-                                                (data.unit === 'V') ? 'voltage' :
-                                                    undefined, // Set to undefined if no match
-                                    },
-                                };
-                                Object.keys(packet.attributes).forEach(key =>
-                                    (packet.attributes[key] === undefined) && delete packet.attributes[key]
-                                );
+                                const packet = { state: data.state };
+                                packet.attributes = attributes(data.unit, data.entity);
+                                packet.attributes.friendly_name = data.entity;
                                 const postData = JSON.stringify(packet);
-
                                 const options = {
                                     hostname: address,
                                     port: 8123,
@@ -2190,6 +2158,25 @@ if (isMainThread) {
                                 req.on("error", (err) => console.error("HA error:", err));
                                 req.write(postData);
                                 req.end();
+                            }
+                            function attributes(unit, entity) {
+                                let attributes = {};
+                                switch (unit) {
+                                    case "m3":
+                                        if (entity.includes("total"))
+                                            attributes.state_class = "total_increasing";
+                                        else attributes.state_class = "measurement";
+                                        break;
+                                    case "kWh":
+                                        attributes.device_class = "energy";
+                                        attributes.state_class = "total_increasing";
+                                        break;
+                                    default:
+                                        attributes.state_class = "measurement";
+                                        break;
+                                }
+                                attributes.unit_of_measurement = unit;
+                                return attributes;
                             }
                         } else {
                             try { socket.sendUTF(JSON.stringify(data)); }
