@@ -56,12 +56,14 @@ module.exports = {
                                     solar.power(x, false, true);
                                     send(cfg.solar.inverterAuto, false);
                                 }
+                                //solar.nightMode(x);
                                 inverter.delayStep = false;
                                 inverter.delayVoltsStep = false;
                                 inverter.delayFaultStep = false;
-                                inverter.delaySunStep = false;
+                                inverter.delayStepSun = false;
                                 inverter.delayTimer = time.epoch;
                                 inverter.delayTimerSun = time.epoch;
+                                inverter.stepPower = time.epoch - 20;
                                 inverter.step = time.epoch - 20;
                                 if (inverter.state == false) {
                                     if (config.power.startAuto == true) {
@@ -154,7 +156,7 @@ module.exports = {
                                             + "a  " + voltsBat + "v, exiting night mode");
                                         inverter.nightMode = false;
                                     }
-                                } else solar.changing(x, false); // inverter only exits night mode only when there is sufficient charging
+                                } else solar.changing(x, false); // inverter only exits night mode when there is sufficient charging
                             }
                             if (inverterVolts < 20) {
                                 log("inverter: " + config.name + " - FAULT - no output - Inverter is going offline", 3);
@@ -295,7 +297,7 @@ module.exports = {
                     power: function (x, run, faulted, refresh) {
                         let config = cfg.inverter[x];
                         if (run == true) {
-                            if (time.epoch - state.inverter[x].step >= cfg.solar.cycleError) {
+                            if (time.epoch - state.inverter[x].stepPower >= cfg.solar.cycleError) {
                                 if (config.power.entity == undefined) {
                                     //  log("inverter: " + config.name + " - transferring switches to inverter - wait");
                                     toggle(run);
@@ -349,6 +351,7 @@ module.exports = {
                             if (!faulted) state.inverter[x].state = false;
                             else state.inverter[x].state = "faulted";
                             state.inverter[x].step = time.epoch;
+                            state.inverter[x].stepPower = time.epoch;
                         }
                         function toggle() {
                             let list, delay = 0;
@@ -366,13 +369,13 @@ module.exports = {
                         state.inverter[x].delayStep = false;
                         state.inverter[x].delayVoltsStep = false;
                         state.inverter[x].delayFaultStep = false;
-                        state.inverter[x].delaySunStep = false;
+                        state.inverter[x].delayStepSun = false;
                         cfg.inverter.forEach((_, y) => { state.inverter[y].delayStep = false });
                         cfg.solar.priority.queue.forEach((_, y) => { state.priority.queue[y].delayStep = false });
                     },
                     nightMode: function (x) {
                         let nightMode = null, config = cfg.inverter[x];
-                        if (config.nightMode != undefined && config.nightMode.enable == true) {                     // undefined config returns false
+                        if (config.nightMode?.enable == true) {                     // undefined config returns false
                             if (time.hour == config.nightMode.startHour) {   // if nightMode match
                                 if (config.nightMode.startMin != undefined) {
                                     if (time.min >= config.nightMode.startMin) { nightMode = true; }
@@ -382,13 +385,12 @@ module.exports = {
                             else nightMode = false;
                         } else nightMode = false;
                         if (nightMode == true) {
-                            if (state.inverter[x].nightMode == false) {
+                            if (!state.inverter[x].nightMode) {
                                 log("inverter: " + config.name + " - activating night mode");
                                 state.inverter[x].nightMode = true;
                                 return true;
                             } else return false;
                         } else return false;
-
                     },
                     welder: function () {    // needs to be rewritten for  cfg.inverter.sensorAmps or esp direct
                         if (entity[cfg.inverter[0].espPower].state >= cfg.inverter[0].welderWatts ||  // check inverter meter
@@ -1058,11 +1060,12 @@ module.exports = {
                                     log("inverter: " + cfg.inverter[x].name + " - inverter OFF - syncing ATS with inverter operational state");
                                     syncInverter(x, false);
                                     state.inverter[x].step = time.epoch - cfg.solar.cycleError - 5;
+                                    state.inverter[x].stepPower = time.epoch - cfg.solar.cycleError - 5;
                                 }
                             }
                             function syncInverter(x, tState) {
                                 state.inverter[x].state = tState;
-                                solar.nightMode(x);
+                                // solar.nightMode(x);
                                 solar.power(x, tState);
                                 state.inverter[x].warn.manualPowerOn = false;
                             }
@@ -1074,7 +1077,7 @@ module.exports = {
                                 if (state.inverter[x].state != "faulted" && state.inverter[x].state != state) {
                                     log("inverter: " + cfg.inverter[x].name + " - operational state entity switching to - syncing power/switches: " + newState);
                                     state.inverter[x].state = newState;
-                                    solar.nightMode(x);
+                                    // solar.nightMode(x);
                                     solar.power(x, newState, null, true);
                                     state.inverter[x].warn.manualPowerOn = false;
                                 }
@@ -1127,9 +1130,9 @@ module.exports = {
                     ({ state, cfg, nv, push } = _pointers(_name));
                     cfg.inverter.forEach(_ => {
                         state.inverter.push({
-                            state: null, boot: false, step: time.epoch - 20, nightMode: true, delayOffTimer: undefined, switchWatts: 0,
+                            state: null, boot: false, step: time.epoch - 20, stepPower: time.epoch - 20, nightMode: null, delayOffTimer: undefined, switchWatts: 0,
                             switchSun: 0, switchWattsTimer: time.epoch, delayTimer: time.epoch, delayStep: false, delayVoltsTimer: time.epoch,
-                            delayVoltsStep: false, delaySunTimer: time.epoch, delaySunStep: false, delayFaultStep: false,
+                            delayVoltsStep: false, delaySunTimer: time.epoch, delayStepSun: false, delayFaultStep: false,
                             delayFaultTimer: time.epoch, timeShutdown: null,
                             warn: { manualPowerOn: false, }
                         });
