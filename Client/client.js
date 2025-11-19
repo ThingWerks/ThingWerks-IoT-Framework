@@ -192,7 +192,7 @@ checkArgs = function () {
                 execSync("systemctl start twit-client-" + moduleName);
                 execSync("service twit-client-" + moduleName + " status");
                 slog("service installed and started");
-                console.log("type: journalctl -fu twit-client-" + moduleName);
+                console.log("type: journalctl -fu twit-client-" + moduleName + " --output=cat");
                 process.exit();
             case "--uninstall":
                 console.log(color("yellow", "uninstalling TWIT-Client-" + moduleName + " service..."));
