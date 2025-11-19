@@ -959,7 +959,7 @@ if (isMainThread) {
     function checkArgs() {
         const args = process.argv.slice(2);
         const map = {};
-        let journal = false;
+        let journal = true;
         const execStartArgs = [];
         for (let i = 0; i < args.length; i++) {
             const arg = args[i];
@@ -1025,7 +1025,8 @@ if (isMainThread) {
                     try { execSync("systemctl start twit-core"); } catch { }
                     try { execSync("service twit-core status"); } catch { }
                     console.log("service installed and started");
-                    console.log("type:  journalctl -f -u twit-core  or  tail -f /apps/log-twit-core.txt -n 500");
+                    console.log("type:  journalctl -f -u twit-core --output=cat");
+                  //  console.log("or if not using journal:  tail -f /apps/log-twit-core.txt -n 500");
                     process.exit();
                 case "--uninstall":
                     console.log("uninstalling TWIT-Core service...");
