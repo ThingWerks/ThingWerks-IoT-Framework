@@ -274,9 +274,9 @@ if (isMainThread) {
                     function fetchReply() {
                         for (const name in entity) {
                             if (buf.name in entity[name].client) {
-                                if (state && !(typeof entity[name]?.state === "string" &&
-                                    entity[name].state.includes("remote_button_")
-                                ) && !(typeof name === "string" && name.includes("input_button."))) {
+                                if (entity[name].state && !(typeof entity[name]?.state === "string" &&
+                                    entity[name].state.includes("remote_button_"))
+                                    && !name.includes("input_button.")) {
                                     log("cached entities fetch reply: " + name, 1, 0);
                                     client("state", { name, state: entity[name].state, owner: entity[name].owner }, port);
                                 }
@@ -654,11 +654,20 @@ if (isMainThread) {
                         // console.log(data);
                         if (data.name in entity) {
                             // console.log(entity[data.name])
+                            if (data.name == "input_boolean.debug_core") {
+                                log("logging - TWIT core logging set to: " + data.state);
+                                cfg.logging.debug = (data.state == "on") ? true : (data.state == "off") ? false : data.state;
+                                return;
+                            }
+                            if (data.name == "input_boolean.debug_clients") {
+                                log("logging - TWIT Client logging set to: " + data.state);
+                                cfg.logging.clientDebug = (data.state == "on") ? true : (data.state == "off") ? false : data.state;
+                                return;
+                            }
                             try {
                                 for (const name in entity[data.name].client) {
                                     log("Websocket (" + color("cyan", data.address) + ") - state: " + data.state + " - update for: "
                                         + data.name + " - to client: " + name, 1, 0);
-
                                     entity[data.name].state = (data.state == "on") ? true : (data.state == "off") ? false : data.state;
                                     entity[data.name].owner = { type: "ha", name: data.address };
                                     entity[data.name].update = time.epochMil;
@@ -711,7 +720,7 @@ if (isMainThread) {
                         for (const name in entity) {
                             //  console.log(entity[name])
                             try {
-                                if (!(typeof entity[name]?.state === "string" &&
+                                if (entity[name].state && !(typeof entity[name]?.state === "string" &&
                                     entity[name].state.includes("remote_button_")
                                 ) && !name.includes("input_button.")) {
                                     log(
