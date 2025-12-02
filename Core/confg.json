@@ -5,6 +5,7 @@
         "debug": true,
         "verbose": true,
         "client": false,
+        "clientDebug": false,
         "clientCrash": true
     },
     "homeAssistant": [
