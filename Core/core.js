@@ -273,10 +273,13 @@ if (isMainThread) {
                     } else fetchReply();
                     function fetchReply() {
                         for (const name in entity) {
-                            // console.log(entity[name])
                             if (buf.name in entity[name].client) {
-                                log("cached entities fetch reply: " + name, 1, 0);
-                                client("state", { name, state: entity[name].state, owner: entity[name].owner }, port);
+                                if (state && !(typeof entity[name]?.state === "string" &&
+                                    entity[name].state.includes("remote_button_")
+                                ) && !(typeof name === "string" && name.includes("input_button."))) {
+                                    log("cached entities fetch reply: " + name, 1, 0);
+                                    client("state", { name, state: entity[name].state, owner: entity[name].owner }, port);
+                                }
                             }
                         }
                         log("client - " + color("purple", buf.name) + " - replying with cached fetch - port: " + port, 3);
@@ -653,7 +656,7 @@ if (isMainThread) {
                             // console.log(entity[data.name])
                             try {
                                 for (const name in entity[data.name].client) {
-                                    log("Websocket (" + color("cyan", data.address) + ") - state: " + data.state + " update for: "
+                                    log("Websocket (" + color("cyan", data.address) + ") - state: " + data.state + " - update for: "
                                         + data.name + " - to client: " + name, 1, 0);
 
                                     entity[data.name].state = (data.state == "on") ? true : (data.state == "off") ? false : data.state;
@@ -708,10 +711,15 @@ if (isMainThread) {
                         for (const name in entity) {
                             //  console.log(entity[name])
                             try {
-                                if (data.name in entity[name].client) {
-                                    log("Websocket (" + color("cyan", data.address) + ") - fetch reply to client: "
-                                        + color("purple", data.name) + " - entity: " + name, 1, 0);
-                                    client("state", { name, state: entity[name].state }, data.port);
+                                if (!(typeof entity[name]?.state === "string" &&
+                                    entity[name].state.includes("remote_button_")
+                                ) && !name.includes("input_button.")) {
+                                    log(
+                                        "Websocket (" + color("cyan", data.address) + ") + fetch reply to client: "
+                                        + color("purple", data.name) + " - entity: " + name + " - state: "
+                                        + entity[name]?.state, 1, 0);
+
+                                    client("state", { name, state: entity[name]?.state }, data.port);
                                 }
                             } catch (error) { console.trace("fetch crash: ", entity[name]) }
                         }
@@ -1026,7 +1034,7 @@ if (isMainThread) {
                     try { execSync("service twit-core status"); } catch { }
                     console.log("service installed and started");
                     console.log("type:  journalctl -f -u twit-core --output=cat");
-                  //  console.log("or if not using journal:  tail -f /apps/log-twit-core.txt -n 500");
+                    //  console.log("or if not using journal:  tail -f /apps/log-twit-core.txt -n 500");
                     process.exit();
                 case "--uninstall":
                     console.log("uninstalling TWIT-Core service...");
@@ -1035,7 +1043,7 @@ if (isMainThread) {
                     try { fs.unlinkSync("/etc/systemd/system/twit-core.service"); } catch { }
                     console.log("TWIT-Core service uninstalled");
                     process.exit();
-                case "--d": debug = true; break;
+                case "-d": debug = true; break;
             }
         }
     }
@@ -1317,9 +1325,10 @@ if (isMainThread) {
             if (level != 0) {
                 if (cfg.logging.client || debug) console.log(ubuf);
                 client("log", ubuf, port);
-            } else if (cfg.logging.debug || debug) {
-                if (cfg.logging.clientDebug || debug) console.log(ubuf);
+            } else if (cfg.logging.clientDebug) {
                 client("log", ubuf, port);
+                // console.log(ubuf);
+
             }
         } else if (level == 0 && cfg.logging.debug || debug) console.log(cbuf);
         else if (level != 0) console.log(cbuf);
