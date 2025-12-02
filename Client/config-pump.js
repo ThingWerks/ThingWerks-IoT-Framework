@@ -82,6 +82,7 @@ module.exports = {
             dd: [       // config for the Demand/Delivery automation function, 1 object for each DD system
                 {   // DD system example
                     name: "Bubon",       // Demand Delivery system 2d
+                    enable: true,
                     ha: {
                         auto: "input_boolean.auto_bubon",           // home assistant auto toggle ID number (specified above in cfg.ha config)
                         solar: "input_boolean.auto_solar_bubon",    // solar automation boolean/toggle
@@ -98,8 +99,8 @@ module.exports = {
                             entity: "solar-relay3-pump-bubon",  // ESP/HA cfg ID number
                             flow: {
                                 sensor: "bubon",    // flow sensor number (in cfg.sensor.flow block)
-                                startWarn: 15,      // min start flow before triggering notification (useful for filters)
-                                startError: 10,     // minimum flow rate pump must reach at start
+                                startWarn: 11,      // min start flow before triggering notification (useful for filters)
+                                startError: 9,     // minimum flow rate pump must reach at start
                                 startWait: 6,       // seconds to wait before checking flow after pump starts
                                 runError: 5,        // flow rate to fault 
                                 runStop: 12         // flow rate to stop 
@@ -133,7 +134,8 @@ module.exports = {
                     },
                 },
                 {                           // DD system example
-                    name: "Irrigation",                                         // Demand Delivery system 2d
+                    name: "Irrigation",      
+                    enable: false,                                   
                     ha: {
                         auto: "input_boolean.auto_irrigatiion",                 // home assistant auto toggle ID number (specified above in cfg.ha config)
                         // solar: "input_boolean.auto_solar_bubon",             // solar automation boolean/toggle
@@ -141,7 +143,7 @@ module.exports = {
                         //   profile: "input_number.profile_bubon",             // pressure profile
                         // reserve: 9,                                          // ha entity for reserve tank/pump
                         oneShot: ["Button Irrigation Entrance", "Button Water Irrigation House Back", //"Button Water Irrigation Piggary"
-                            , "Button Water Irrigation Dalom", "input_button.oneshot_irrigation"],  // single shot pump automation run button, must be array 
+                            , "Button Water Irrigation Dalom", "input_button.oneshot_irrigation", "Button Water Irrigation Piggary"],  // single shot pump automation run button, must be array 
                         oneShotTimer: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
                         oneShotExtend: true,                                    // extend OneShot timer after last usage
                     },
