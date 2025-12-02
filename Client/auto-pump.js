@@ -16,6 +16,8 @@ module.exports = { // exports added to clean up layout
                         clearTimeout(element.state.oneShot);
                         clearInterval(element.state.flowTimerInterval);
                     });
+                    if (push) push.forIn((name, value) => { delete push[name]; })
+                    push = {};
                 }
                 return;
             }
@@ -169,52 +171,54 @@ module.exports = { // exports added to clean up layout
                                 case false:     // when pump is STOPPED (local perspective)
                                     switch (dd.fault.flow) {
                                         case false: // when pump is STOPPED and not flow faulted
-                                            if (dd.press.out.cfg.unit == "m") {
-                                                if (dd.press.out.state.meters <= dd.cfg.press.start) {
-                                                    log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.meters.toFixed(2)
-                                                        + "m) - pump is starting");
-                                                    delivery.start(dd, x);
-                                                    return;
-                                                }
-                                            } else if (dd.state.turbo) {
-                                                //  console.log("turbo ", dd.press.out.state.psi)
-                                                if (dd.press.out.state.psi <= dd.cfg.press.turbo.start) {
-                                                    log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
-                                                        + "psi) - pump turbo is starting");
-                                                    delivery.start(dd, x);
-                                                    return;
-                                                }
-                                            } else if (dd.state.profile != null) {
-                                                //  console.log("profile pressure: ", dd.press.out.state.psi, " - starting pressure: "
-                                                //     + dd.cfg.press.output.profile[dd.state.profile].start)
-                                                if (dd.press.out.state.psi <= dd.cfg.press.output.profile[dd.state.profile].start) {
-                                                    log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
-                                                        + "psi) - pump is starting with profile: " + dd.state.profile);
-                                                    delivery.start(dd, x);
-                                                    return;
-                                                }
-                                            } else if (dd.press.out.state.psi <= dd.cfg.press.start) {
-                                                //  console.log("current pressure: ", dd.press.out.state.psi)
-                                                log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
-                                                    + "psi) - pump is starting");
-                                                delivery.start(dd, x);
-                                                return;
-                                            }
-                                            if (dd.state.timeoutOff == true) {  // after pump has been off for a while
-                                                if (dd.pump[dd.state.pump].state === true && dd.sharedPump.run == false) {
-                                                    log(dd.cfg.name + " - pump running in HA/ESP but not here - switching pump ON");
-                                                    delivery.start(dd, x);
-                                                    return;
-                                                } else {
-                                                    if (dd.flow != undefined && dd.flow[dd.state.pump].lm > dd.cfg.pump[dd.state.pump].flow.startError
-                                                        && dd.warn.flowFlush == false && dd.sharedPump.shared == false) {
-                                                        log(dd.cfg.name + " - flow is detected (" + dd.flow[dd.state.pump].lm.toFixed(0) + "lpm) possible sensor damage or flush operation", 2);
-                                                        dd.warn.flowFlush = true;
-                                                        log(dd.cfg.name + " - shutting down auto system");
-                                                        send(dd.auto.name, false);
-                                                        dd.auto.state = false;
-                                                        delivery.stop(x, true);
+                                            if (dd.cfg.enable) {
+                                                if (dd.press.out.cfg.unit == "m") {
+                                                    if (dd.press.out.state.meters <= dd.cfg.press.start) {
+                                                        log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.meters.toFixed(2)
+                                                            + "m) - pump is starting");
+                                                        delivery.start(dd, x);
                                                         return;
+                                                    }
+                                                } else if (dd.state.turbo) {
+                                                    //  console.log("turbo ", dd.press.out.state.psi)
+                                                    if (dd.press.out.state.psi <= dd.cfg.press.turbo.start) {
+                                                        log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
+                                                            + "psi) - pump turbo is starting");
+                                                        delivery.start(dd, x);
+                                                        return;
+                                                    }
+                                                } else if (dd.state.profile != null) {
+                                                    //  console.log("profile pressure: ", dd.press.out.state.psi, " - starting pressure: "
+                                                    //     + dd.cfg.press.output.profile[dd.state.profile].start)
+                                                    if (dd.press.out.state.psi <= dd.cfg.press.output.profile[dd.state.profile].start) {
+                                                        log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
+                                                            + "psi) - pump is starting with profile: " + dd.state.profile);
+                                                        delivery.start(dd, x);
+                                                        return;
+                                                    }
+                                                } else if (dd.press.out.state.psi <= dd.cfg.press.start) {
+                                                    //  console.log("current pressure: ", dd.press.out.state.psi)
+                                                    log(dd.cfg.name + " - " + dd.press.out.cfg.name + " is low (" + dd.press.out.state.psi.toFixed(0)
+                                                        + "psi) - pump is starting");
+                                                    delivery.start(dd, x);
+                                                    return;
+                                                }
+                                                if (dd.state.timeoutOff == true) {  // after pump has been off for a while
+                                                    if (dd.pump[dd.state.pump].state === true && dd.sharedPump.run == false) {
+                                                        log(dd.cfg.name + " - pump running in HA/ESP but not here - switching pump ON");
+                                                        delivery.start(dd, x);
+                                                        return;
+                                                    } else {
+                                                        if (dd.flow != undefined && dd.flow[dd.state.pump].lm > dd.cfg.pump[dd.state.pump].flow.startError
+                                                            && dd.warn.flowFlush == false && dd.sharedPump.shared == false) {
+                                                            log(dd.cfg.name + " - flow is detected (" + dd.flow[dd.state.pump].lm.toFixed(0) + "lpm) possible sensor damage or flush operation", 2);
+                                                            dd.warn.flowFlush = true;
+                                                            log(dd.cfg.name + " - shutting down auto system");
+                                                            send(dd.auto.name, false);
+                                                            dd.auto.state = false;
+                                                            delivery.stop(x, true);
+                                                            return;
+                                                        }
                                                     }
                                                 }
                                             }
@@ -539,7 +543,7 @@ module.exports = { // exports added to clean up layout
                                     dd.fault.flowRestarts = 0;
                                 }
                             } else {
-                               // console.log("flow check passed")
+                                // console.log("flow check passed")
                                 if (pumpConfig.runStop != undefined) {
                                     if (flow <= pumpConfig.runStop) {
                                         trigger((" - RUN flow stop (" + flow.toFixed(1) + "lm) - pump stopping - " + press + " psi"), false);
@@ -631,6 +635,11 @@ module.exports = { // exports added to clean up layout
                 auto: function (dd, index, config) {
                     return (state) => {
                         if (state) {
+                            if (!config.enable) {
+                                log(config.name + " - system disabled - cannot go online", 2);
+                                send(dd.auto.name, false);
+                                return;
+                            }
                             log(config.name + " - is going ONLINE");
                             dd.auto.state = true;
                             dd.fault.flow = false;
@@ -654,9 +663,39 @@ module.exports = { // exports added to clean up layout
                 },
                 oneShot: function (dd, index, config) {
                     return (state, name) => {
-
+                       // console.log("oneshot firing")
                         clearTimeout(dd.state.oneShot);
-                        if (state?.includes("remote_button_short_press")) {
+                        if (state?.includes("remote_button_")) {  // for zigbee buttons
+                            if (state?.includes("remote_button_short_press")) {
+                                if (!config.enable) {
+                                    log(config.name + " - system disabled - cannot perform one-shot - trigger: " + name, 2);
+                                    return;
+                                }
+                                let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
+                                log(config.name + " - starting one shot operation - " + "triggered by: "
+                                    + name + " - stopping in " + duration + " min");
+                                send(config.ha.auto, true);
+                                dd.state.oneShot = setTimeout(() => {
+                                    log(config.name + " - stopping one shot operation after " + duration + " minutes");
+                                    send(config.ha.auto, false);
+                                }, (duration * 60 * 1e3));
+                            } else if (state?.includes("remote_button_double_press")) {
+                                if (!config.enable) {
+                                    log(config.name + " - system disabled - cannot start system", 2);
+                                    return;
+                                }
+                                log(config.name + " - starting system - " + "triggered by: " + name);
+                                dd.state.oneShot = false;
+                                send(config.ha.auto, true);
+                            } else if (state?.includes("remote_button_long_press")) {
+                                log(config.name + " - STOPPING system - " + "triggered by: " + name);
+                                send(config.ha.auto, false);
+                            }
+                        } else {    // for home assistant buttons
+                            if (!config.enable) {
+                                log(config.name + " - system disabled - cannot perform one-shot - trigger: " + name, 2);
+                                return;
+                            }
                             let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
                             log(config.name + " - starting one shot operation - " + "triggered by: "
                                 + name + " - stopping in " + duration + " min");
@@ -665,13 +704,6 @@ module.exports = { // exports added to clean up layout
                                 log(config.name + " - stopping one shot operation after " + duration + " minutes");
                                 send(config.ha.auto, false);
                             }, (duration * 60 * 1e3));
-                        } else if (state?.includes("remote_button_double_press")) {
-                            log(config.name + " - starting system - " + "triggered by: " + name);
-                            dd.state.oneShot = false;
-                            send(config.ha.auto, true);
-                        } else if (state?.includes("remote_button_long_press")) {
-                            log(config.name + " - STOPPING system - " + "triggered by: " + name);
-                            send(config.ha.auto, false);
                         }
                         return;
                     };
@@ -733,7 +765,8 @@ module.exports = { // exports added to clean up layout
                     st.fountain.push({ step: null, timerFlow: null, flowCheck: false, })
                 }
                 for (let x = 0; x < cfg.dd.length; x++) {
-                    log(cfg.dd[x].name + " - initializing");
+                    if (!cfg.dd[x].enable) log(cfg.dd[x].name + " - initializing - " + color("yellow", "DISABLED"));
+                    else log(cfg.dd[x].name + " - initializing");
                     st.dd.push({     // initialize volatile memory for each Demand Delivery system
                         cfg: cfg.dd[x],
                         state: {
@@ -815,7 +848,7 @@ module.exports = { // exports added to clean up layout
                 st.timer.second = setInterval(() => {     // called every second  -  rerun this automation every second
                     sensor.flow.calc();
                     sensor.ha_push(state);
-                    for (let x = 0; x < cfg.dd.length; x++) delivery.auto(x);
+                    for (let x = 0; x < cfg.dd.length; x++) if (cfg.dd[x].enable) delivery.auto(x);
                 }, 1e3);
                 st.timer.minute = setInterval(() => {
                     timer();
@@ -828,6 +861,7 @@ module.exports = { // exports added to clean up layout
                         st.dd[x].warn.tankLow = false;
                     }
                 }, 3600e3);
+                log("loading constructors");
                 for (let x = 0; x < cfg.dd.length; x++) {
                     const dd = st.dd[x];
                     const config = cfg.dd[x];
@@ -836,6 +870,7 @@ module.exports = { // exports added to clean up layout
                     push[config.ha.profile] = push_constructor.profile(dd, x, config);
                     if (config.ha.oneShot) {
                         for (const key of config.ha.oneShot) {
+                           // log("loading constructor for oneshot entity: " + key)
                             push[key] = push_constructor.oneShot(dd, x, config);
                         }
                     }
@@ -973,7 +1008,7 @@ module.exports = { // exports added to clean up layout
                     if (time.hour == 17 && time.min == 30) {
                         send("switch.lights_bodega_front_1", true);
                     }
-                    if (time.hour == 17 && time.min == 45) {
+                    if (time.hour == 17 && time.min == 30) {
                         log("Lights - Outside Lights - Turning ON");
                         send("input_boolean.lights_stairs", true);
                         send("switch.lights_bodega_front_2", true);
