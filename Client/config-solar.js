@@ -111,9 +111,9 @@ module.exports = {
                         {
                             name: "Ram-Water ATS",
                             enable: true,
-                            onSun: 0.6,
-                            onAmps: 60.0,
-                            offAmps: -10.0,
+                            onSun: 3.0,
+                            onAmps: 100.0,
+                            offAmps: 40.0,
                             offAmpsFloat: -10.0,
                             entities: ["solar-ram-relay1-water"]
                         },
@@ -162,12 +162,12 @@ module.exports = {
                     // blackout: true,              // optional - switch to inverter on blackout if voltage is less than (voltsRun)
                     // blackoutVoltMin: 54.0,       // optional - minimum voltage needed to recover from blackout 
                     // voltsRun: 54.0,              // optional - volts to start inverter - in addition to sunlight/amps if configured
-                    voltsStop: 52.0,                // volts to stop inverter - will stop Independent of sunlight level
-                    sunRunFloat: 0.7,               // optional - sunlight sensor level to start inverter (while floating) 
-                    sunRun: 0.7,                    // optional - sunlight sensor level to start inverter (while charging)                                
+                    voltsStop: 53.5,                // volts to stop inverter - will stop Independent of sunlight level
+                   // sunRunFloat: 1.8,               // optional - sunlight sensor level to start inverter (while floating) 
+                   // sunRun: 0.7,                    // optional - sunlight sensor level to start inverter (while charging)                                
                     ampsRun: 45.0,                  // optional - charger amp level to transfer load to inverter - (must use espgridWatt if not)
-                    ampsStop: -5.0,                 // optional - discharge amp level to transfer load to grid 
-                    ampsStopFloat: -10.0,           // optional - discharge amp level to transfer load to grid when floating
+                   // ampsStop: -5.0,                 // optional - discharge amp level to transfer load to grid 
+                   // ampsStopFloat: -10.0,           // optional - discharge amp level to transfer load to grid when floating
                     // ampsStopVoltsMin: 52.5,      // optional - minimum voltage needed to enable amp stop switching 
                     battery: "main",                // optional - battery bank assigned to this inverter - required to use ampsStopFloat
                     floatRetryInterval: undefined,
@@ -310,7 +310,7 @@ module.exports = {
                         ampGrid: undefined,
                         voltGrid: undefined,
                         voltStart: 57.4,
-                        voltStop: 58.2,
+                        voltStop: 58.6,
                         topOffID: undefined,
                         sensorGrid: undefined,
                     },
