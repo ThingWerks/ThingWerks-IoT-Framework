@@ -3,8 +3,8 @@ bot = function (id, data, obj) {
 };
 slog = function (message, level, system) {
     if (level == undefined) level = 1;
-    if (!system) core("log", { message: message, mod: (moduleName + "-Client"), level: level });
-    else core("log", { message: message, mod: system, level: level });
+    if (!system) core("log", { message, mod: (moduleName + "-Client"), level });
+    else core("log", { message, mod: system, level });
 };
 writeNV = function (name) {  // write non-volatile memory to the disk
     let lname = name.toLocaleLowerCase();
@@ -41,12 +41,14 @@ com = function () {
         //  console.log(buf);
         switch (buf.type) {
             case "state":       // incoming state change (from HA websocket service)
-                //  slog("receiving state update, entity: " + buf.data.name + " value: " + buf.data.state, 0);
-                //  console.log(buf.data)
+                slog("receiving state update, entity: " + buf.data.name + " value: " + buf.data.state, 0);
+               // if (buf.data?.name?.includes("input_button.")) console.log(buf.data)
+                // console.log(buf.data)
                 entity[buf.data.name] ||= {};
                 entity[buf.data.name].update = time.epochMil;
                 entity[buf.data.name].stamp = time.stamp;
-                entity[buf.data.name].state = buf.data.state;
+                if (!(typeof buf.data?.state === "string" && buf.data.state.includes("remote_button_"))
+                    && !buf.data.name?.includes("input_button.")) { entity[buf.data.name].state = buf.data.state; }
                 if (online == true && buf.data.state !== null && buf.data.state !== undefined) {
                     automation.forIn((name, value) => {
                         try { automation[name](name, { name: buf.data.name, state: buf.data.state }); }
@@ -396,7 +398,7 @@ auto = {
 
             // 3) now load the new module and register fresh automations
             const newModuleExports = auto.load(automationFilePath, internal);
-            setTimeout(() => { register(); fetch(); }, 2e3);
+
             // 4) initialise only the new automations
             const newNames = auto.module[resolvedPath] || [];
             for (const name of newNames) {
@@ -616,8 +618,8 @@ sys = {         // ______________________system area, don't need to touch anythi
         Object.defineProperty(Object.prototype, "forIn", {
             value: function (callback) {
                 for (const key in this) {
-                //    if (Object.prototype.hasOwnProperty.call(this, key))
-                        callback(key, this[key], this);
+                    //    if (Object.prototype.hasOwnProperty.call(this, key))
+                    callback(key, this[key], this);
                 }
             },
             enumerable: false // so it won't show up in loops
