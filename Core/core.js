@@ -85,7 +85,7 @@ if (isMainThread) {
 
                             ent.owner = { type: "telemetry", client: buf.name, auto: buf.auto };
 
-                            if (ent.state != buf.data.state || (time.epochMil - ent.update) > 300000) {
+                            if (ent.state !== buf.data.state || (time.epochMil - ent.update) > 300000) {
                                 // log("telemetry - updating HA sensor: " + buf.data.name);
                                 ent.state = buf.data.state;
                                 sendPacket("HA");
