@@ -82,10 +82,17 @@ if (isMainThread) {
                             if (!buf.data.address)
                                 packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
                             else packet = { address: buf.data.address, unit: buf.data.unit };
-                            sendPacket("HA");
 
                             ent.owner = { type: "telemetry", client: buf.name, auto: buf.auto };
-                            ent.state = buf.data.state;
+
+                            if (ent.state != buf.data.state || (time.epochMil - ent.update) > 300000) {
+                                // log("telemetry - updating HA sensor: " + buf.data.name);
+                                ent.state = buf.data.state;
+                                sendPacket("HA");
+                            } else {
+                               // log("telemetry - NOT updating HA sensor: " + buf.data.name);
+                            }
+
                             ent.unit = buf.data.unit;
                             ent.update = time.epochMil;
                             ent.stamp = time.stamp;
@@ -105,7 +112,7 @@ if (isMainThread) {
                                     return;
                                 }
                                 if (ent.owner.type == "TWIT") {
-                                    ent = entity[buf.data.name] ?? undefined;
+                                  //  ent = entity[buf.data.name] ?? undefined;
                                     ent.state = buf.data.state;
                                     ent.update = time.epochMil;
                                     ent.stamp = time.stamp;
