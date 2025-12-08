@@ -67,7 +67,7 @@ if (isMainThread) {
             switch (buf.type) {
                 case "heartbeat": try { state.client[buf.name].heartbeat = true; } catch (e) { console.log(e) } break; // start heartbeat 
                 case "state":
-                    //console.log(buf)
+                    // console.log(buf)
                     // console.log(entity)
                     if (buf.data.name in entity || buf.data.unit) {
                         // console.log(entity[buf.data.name])
@@ -90,7 +90,7 @@ if (isMainThread) {
                                 ent.state = buf.data.state;
                                 sendPacket("HA");
                             } else {
-                               // log("telemetry - NOT updating HA sensor: " + buf.data.name);
+                                // log("telemetry - NOT updating HA sensor: " + buf.data.name);
                             }
 
                             ent.unit = buf.data.unit;
@@ -111,8 +111,13 @@ if (isMainThread) {
                                         + " that " + color("red", "DOES NOT EXIST"), 3, 3);
                                     return;
                                 }
+
+                                log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
+                                    + " - state update: " + color("blue", buf.data.state.toString()), 3, 0);
+
+
                                 if (ent.owner.type == "TWIT") {
-                                  //  ent = entity[buf.data.name] ?? undefined;
+                                    //  ent = entity[buf.data.name] ?? undefined;
                                     ent.state = buf.data.state;
                                     ent.update = time.epochMil;
                                     ent.stamp = time.stamp;
@@ -128,6 +133,8 @@ if (isMainThread) {
                                             + " - is a " + color("blue", "Sync Group member "), 3, 0);
                                         com.syncGroup(buf.data.name, buf.data.state);
                                     }
+
+                                    file.write.nv();
 
                                 } else if (ent.owner.type == "esp") {
                                     packet.esp_entity_id = ent.esp_entity_id;
@@ -258,8 +265,6 @@ if (isMainThread) {
                                 });
                             })
                         })();
-
-
                     }
 
 
@@ -281,9 +286,9 @@ if (isMainThread) {
                     function fetchReply() {
                         for (const name in entity) {
                             if (buf.name in entity[name].client) {
-                                if (entity[name].state && !(typeof entity[name]?.state === "string" &&
-                                    entity[name].state.includes("remote_button_"))
-                                    && !name.includes("input_button.")) {
+                                if (entity[name].state != null) {
+                                    if (typeof entity[name].state === "string" && entity[name].state.includes("remote_button_")) continue
+                                    if (name.includes("input_button.")) continue
                                     log("cached entities fetch reply: " + name, 1, 0);
                                     client("state", { name, state: entity[name].state, owner: entity[name].owner }, port);
                                 }
@@ -727,15 +732,16 @@ if (isMainThread) {
                         for (const name in entity) {
                             //  console.log(entity[name])
                             try {
-                                if (entity[name].state && !(typeof entity[name]?.state === "string" &&
-                                    entity[name].state.includes("remote_button_")
-                                ) && !name.includes("input_button.")) {
+                                if (entity[name].state != null && data.name in entity[name].client) {
+                                    console.log(entity[name])
+                                    if (typeof entity[name]?.state === "string" && entity[name].state.includes("remote_button_")) continue;
+                                    if (name.includes("input_button.")) continue;
                                     log(
-                                        "Websocket (" + color("cyan", data.address) + ") + fetch reply to client: "
+                                        "Websocket (" + color("cyan", data.address) + ") - fetch reply to client: "
                                         + color("purple", data.name) + " - entity: " + name + " - state: "
                                         + entity[name]?.state, 1, 0);
 
-                                    client("state", { name, state: entity[name]?.state }, data.port);
+                                    client("state", { name, state: entity[name].state }, data.port);
                                 }
                             } catch (error) { console.trace("fetch crash: ", entity[name]) }
                         }
