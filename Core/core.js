@@ -1183,8 +1183,8 @@ if (isMainThread) {
             write: {
                 nv: function () {  // write non-volatile memory to the disk
                     clearTimeout(timer.fileWrite);
-                    if (time.epoch - timer.fileWriteLast > 9) writeFile();
-                    else timer.fileWrite = setTimeout(() => { writeFile(); }, 10e3);
+                    if (time.epoch - timer.fileWriteLast > 2) writeFile();
+                    else timer.fileWrite = setTimeout(() => { writeFile(); }, 2e3);
                     function writeFile() {
                         log("writing NV data...", 0, 0);
                         timer.fileWriteLast = time.epoch;
