@@ -1,6 +1,10 @@
 #!/usr/bin/node
 module.exports = {
-    sync: [],
+    entity: {
+        subscribe: [],
+        create: [],
+        sync: {},
+    },
     heartbeat: [],
     automation: {
         yourAutomationsName: function (_name, _push, _reload) {
@@ -10,7 +14,7 @@ module.exports = {
                     if (_reload != "config") {
                         log("hot reload initiated");
                         //clear event timers clearInterval(state.timer.second);
-                        if (push) push.forIn((name, value) => { delete push[name]; })
+                        if (push) push.forIn(name => { delete push[name]; })
                         push = {}; // clean up push initialization 
                     } else ({ state, config, nv } = _pointers(_name));
                     return;
@@ -47,7 +51,7 @@ module.exports = {
                 if (_reload) {   // called after modification/reload of this automation file
                     if (_reload != "config") {
                         log("hot reload initiated");
-                        if (push) push.forIn((name, value) => { delete push[name]; })
+                        if (push) push.forIn(name => { delete push[name]; })
                         push = {};  // clean up push initialization 
                     } else ({ state, config, nv } = _pointers(_name));// called after modification/reload of this automations config file
                     return;
