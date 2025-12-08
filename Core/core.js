@@ -733,7 +733,6 @@ if (isMainThread) {
                             //  console.log(entity[name])
                             try {
                                 if (entity[name].state != null && data.name in entity[name].client) {
-                                    console.log(entity[name])
                                     if (typeof entity[name]?.state === "string" && entity[name].state.includes("remote_button_")) continue;
                                     if (name.includes("input_button.")) continue;
                                     log(
