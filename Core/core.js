@@ -67,98 +67,107 @@ if (isMainThread) {
             switch (buf.type) {
                 case "heartbeat": try { state.client[buf.name].heartbeat = true; } catch (e) { console.log(e) } break; // start heartbeat 
                 case "state":
+                    let ent, packet;
                     // console.log(buf)
                     // console.log(entity)
-                    if (buf.data.name in entity || buf.data.unit) {
-                        // console.log(entity[buf.data.name])
-                        let ent, packet;
-                        if (buf.data.unit) { // for ha telemetry/sensors
-                            if (!entity[buf.data.name]) {
+                    // console.log(entity[buf.data.name])
+                    if (buf.data.unit) { // for ha telemetry/sensors
+                        if (!entity[buf.data.name]) {
+                            log("client - " + color("purple", buf.name)
+                                + " - is registering new HA sensor: " + buf.data.name, 3, 0);
+                            entity[buf.data.name] = { client: {}, }
+                        }
+                        ent = entity[buf.data.name];
+                        if (!buf.data.address)
+                            packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
+                        else packet = { address: buf.data.address, unit: buf.data.unit };
+
+                        ent.owner = { type: "telemetry", client: buf.name, auto: buf.auto };
+
+                        if (ent.state !== buf.data.state || (time.epochMil - ent.update) > 300000) {
+                            // log("telemetry - updating HA sensor: " + buf.data.name);
+                            ent.state = buf.data.state;
+                            sendPacket("HA");
+                        } else {
+                            // log("telemetry - NOT updating HA sensor: " + buf.data.name);
+                        }
+
+                        ent.unit = buf.data.unit;
+                        ent.update = time.epochMil;
+                        ent.stamp = time.stamp;
+
+                        ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
+                            if (value.port != port)
+                                client("state", { name: buf.data.name, state: buf.data.state }, value.port);
+                        })
+
+                    } else if (buf.data.name in entity) { // for all other entities
+                        try {
+                            // console.log(buf);
+                            // console.log(entity[buf.data.name]);
+                            ent = entity[buf.data.name];
+                            if (!ent.owner) {
                                 log("client - " + color("purple", buf.name)
-                                    + " - is registering new HA sensor: " + buf.data.name, 3, 0);
-                                entity[buf.data.name] = { client: {}, }
+                                    + " - is setting the state for entity: " + color("cyan", buf.data.name)
+                                    + " that " + color("red", "HAS NO OWNER"), 3, 3);
+                                return;
                             }
-                            ent = entity[buf.data.name] ?? undefined;
-                            if (!buf.data.address)
-                                packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
-                            else packet = { address: buf.data.address, unit: buf.data.unit };
 
-                            ent.owner = { type: "telemetry", client: buf.name, auto: buf.auto };
+                            log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
+                                + " - state update: " + color("blue", buf.data.state.toString()), 3, 0);
 
-                            if (ent.state !== buf.data.state || (time.epochMil - ent.update) > 300000) {
-                                // log("telemetry - updating HA sensor: " + buf.data.name);
+                            if (ent.owner?.type == "TWIT") { // for TWIT entities
+                                //  ent = entity[buf.data.name] ?? undefined;
                                 ent.state = buf.data.state;
+                                ent.update = time.epochMil;
+                                ent.stamp = time.stamp;
+                                nv.entity[buf.data.name].stamp = time.stamp;
+                                nv.entity[buf.data.name].update = time.epochMil;
+                                // console.log(ent)
+                                // console.log(buf )
+                                ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
+                                    if (value.port != port) // only reply if not the owner
+                                        client("state", { name: buf.data.name, state: buf.data.state, owner: ent.owner }, value.port);
+                                })
+
+                                if (ent.syncGroup) {
+                                    log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
+                                        + " - is a " + color("blue", "Sync Group member "), 3, 0);
+                                    com.syncGroup(buf.data.name, buf.data.state);
+                                }
+
+                                file.write.nv();
+
+                            } else if (ent.owner.type == "esp") {
+                                packet = { address: ent.owner.name }
+                                packet.esp_entity_id = ent.esp_entity_id;
+                                sendPacket("ESP");
+                            } else if (ent.owner.type.includes("ha")) {
+                                packet = { address: ent.owner.name }
+                                if (ent.zha) packet.zha = ent.zha.regID;
                                 sendPacket("HA");
-                            } else {
-                                // log("telemetry - NOT updating HA sensor: " + buf.data.name);
                             }
-
-                            ent.unit = buf.data.unit;
-                            ent.update = time.epochMil;
-                            ent.stamp = time.stamp;
-
-                            ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
-                                if (value.port != port)
-                                    client("state", { name: buf.data.name, state: buf.data.state }, value.port);
-                            })
-
-                        } else {    // for TWIT and Sync entities
-                            try {
-                                ent = entity[buf.data.name];
-                                try { packet = { address: ent.owner.name } } catch {
-                                    log("client - " + color("purple", buf.name)
-                                        + " - is setting the state for an entity: " + color("cyan", buf.data.name)
-                                        + " that " + color("red", "DOES NOT EXIST"), 3, 3);
-                                    return;
-                                }
-
-                                log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
-                                    + " - state update: " + color("blue", buf.data.state.toString()), 3, 0);
-
-
-                                if (ent.owner.type == "TWIT") {
-                                    //  ent = entity[buf.data.name] ?? undefined;
-                                    ent.state = buf.data.state;
-                                    ent.update = time.epochMil;
-                                    ent.stamp = time.stamp;
-                                    // console.log(ent)
-                                    // console.log(buf )
-                                    ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
-                                        if (value.port != port) // only reply if not the owner
-                                            client("state", { name: buf.data.name, state: buf.data.state, owner: ent.owner }, value.port);
-                                    })
-
-                                    if (ent.syncGroup) {
-                                        log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
-                                            + " - is a " + color("blue", "Sync Group member "), 3, 0);
-                                        com.syncGroup(buf.data.name, buf.data.state);
-                                    }
-
-                                    file.write.nv();
-
-                                } else if (ent.owner.type == "esp") {
-                                    packet.esp_entity_id = ent.esp_entity_id;
-                                    sendPacket("ESP");
-                                } else if (ent.owner.type.includes("ha")) {
-                                    if (ent.zha) packet.zha = ent.zha.regID;
-                                    sendPacket("HA");
-                                }
-                            } catch (error) { console.log("state setting error - buf: ", buf.data, "selected entity: ", ent, " \nerror: ", error) }
-                        }
-                        function sendPacket(type) {
-                            if (packet) {
-                                packet.type = "state";
-                                packet.entity = buf.data.name;
-                                packet.state = buf.data.state;
-                                // console.log(packet)
-                                if (type == "HA") thread.ha.postMessage(packet);
-                                if (type == "ESP") thread.esp[entity[buf.data.name].owner.thread].postMessage(packet);
-                            } else log("client - " + color("purple", buf.name)
-                                + " - is sending invalid " + type + " state update: " + buf.data.name, 3);
-
-                            // console.log(packet)
-                        }
+                        } catch (error) { console.log("state setting error - buf: ", buf.data, "selected entity: ", ent, " \nerror: ", error) }
+                    } else {
+                        log("client - " + color("purple", buf.name)
+                            + " - is setting the state for entity: " + color("cyan", buf.data.name)
+                            + " that " + color("red", "DOES NOT EXIST"), 3, 3);
+                        return;
                     }
+                    function sendPacket(type) {
+                        if (packet) {
+                            packet.type = "state";
+                            packet.entity = buf.data.name;
+                            packet.state = buf.data.state;
+                            // console.log(packet)
+                            if (type == "HA") thread.ha.postMessage(packet);
+                            if (type == "ESP") thread.esp[entity[buf.data.name].owner.thread].postMessage(packet);
+                        } else log("client - " + color("purple", buf.name)
+                            + " - is sending invalid " + type + " state update: " + buf.data.name, 3);
+
+                        // console.log(packet)
+                    }
+
                     break;
                 case "register":    // incoming registrations
                     //  log("client - " + color("purple", buf.name) + " - is initiating new registration", 3);
