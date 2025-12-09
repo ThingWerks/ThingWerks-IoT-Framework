@@ -28,9 +28,10 @@ core = function (type, data, auto) {
         entity[data.name].state = data.state;
         entity[data.name].update = time.epochMil;
         entity[data.name].stamp = time.stamp;
-        automation.forIn((name, value) => {
-            if (auto != name)
-                try { automation[name](name, { name: data.name, state: data.state }); } catch { }
+        automation.forIn(name => {
+            if (auto != name) try {
+                automation[name](name, { name: data.name, state: data.state });
+            } catch { }
         })
     }
     udp.send(JSON.stringify({ name: moduleName, type, data, auto }), 65432, '127.0.0.1');
