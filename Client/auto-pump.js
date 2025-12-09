@@ -72,14 +72,16 @@ module.exports = { // exports added to clean up layout
                         HAsend(name + "_percent", entity[name].percent.toFixed(0), '%');
                         HAsend(name + "_meters", entity[name].meters.toFixed(2), 'm');
                         HAsend(name + "_psi", entity[name].psi.toFixed(0), 'psi');
-                        send("cdata", {
-                            name: config.name,
-                            state: {
-                                percent: entity[name].percent.toFixed(0),
-                                meters: entity[name].meters.toFixed(2),
-                                psi: entity[name].psi.toFixed(0)
-                            }
-                        });
+                        /*  
+                      send("cdata", {
+                          name: config.name,
+                          state: {
+                              percent: entity[name].percent.toFixed(0),
+                              meters: entity[name].meters.toFixed(2),
+                              psi: entity[name].psi.toFixed(0)
+                          }
+                      });
+                      */
                     }
                     function HAsend(name, value, unit) { setTimeout(() => { send(name, value, unit) }, sendDelay); sendDelay += 25; };
                 },
@@ -663,7 +665,7 @@ module.exports = { // exports added to clean up layout
                 },
                 oneShot: function (dd, index, config) {
                     return (state, name) => {
-                       // console.log("oneshot firing")
+                        // console.log("oneshot firing")
                         clearTimeout(dd.state.oneShot);
                         if (state?.includes("remote_button_")) {  // for zigbee buttons
                             if (state?.includes("remote_button_short_press")) {
@@ -870,7 +872,7 @@ module.exports = { // exports added to clean up layout
                     push[config.ha.profile] = push_constructor.profile(dd, x, config);
                     if (config.ha.oneShot) {
                         for (const key of config.ha.oneShot) {
-                           // log("loading constructor for oneshot entity: " + key)
+                            // log("loading constructor for oneshot entity: " + key)
                             push[key] = push_constructor.oneShot(dd, x, config);
                         }
                     }
