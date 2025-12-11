@@ -665,7 +665,6 @@ module.exports = { // exports added to clean up layout
                 },
                 oneShot: function (dd, index, config) {
                     return (state, name) => {
-                        // console.log("oneshot firing")
                         clearTimeout(dd.state.oneShot);
                         if (state?.includes("remote_button_")) {  // for zigbee buttons
                             if (state?.includes("remote_button_short_press")) {
@@ -673,8 +672,12 @@ module.exports = { // exports added to clean up layout
                                     log(config.name + " - system disabled - cannot perform one-shot - trigger: " + name, 2);
                                     return;
                                 }
+                                if (entity[config.ha.auto].state) {
+                                    log(config.name + " - auto already online - ignoring one-shot request - trigger: " + name, 2);
+                                    return;
+                                }
                                 let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
-                                log(config.name + " - starting one shot operation - " + "triggered by: "
+                                log(config.name + " - starting one shot operation - " + "trigger: "
                                     + name + " - stopping in " + duration + " min");
                                 send(config.ha.auto, true);
                                 dd.state.oneShot = setTimeout(() => {
@@ -696,6 +699,10 @@ module.exports = { // exports added to clean up layout
                         } else {    // for home assistant buttons
                             if (!config.enable) {
                                 log(config.name + " - system disabled - cannot perform one-shot - trigger: " + name, 2);
+                                return;
+                            }
+                            if (entity[config.ha.auto].state) {
+                                log(config.name + " - auto already online - ignoring one-shot request - trigger: " + name, 2);
                                 return;
                             }
                             let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
