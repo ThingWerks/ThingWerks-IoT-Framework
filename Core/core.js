@@ -121,6 +121,7 @@ if (isMainThread) {
                                 ent.state = buf.data.state;
                                 ent.update = time.epochMil;
                                 ent.stamp = time.stamp;
+                                nv.entity[buf.data.name].state = buf.data.state;
                                 nv.entity[buf.data.name].stamp = time.stamp;
                                 nv.entity[buf.data.name].update = time.epochMil;
                                 // console.log(ent)
@@ -222,7 +223,8 @@ if (isMainThread) {
                                 entity[name].owner = { type: "TWIT", name: buf.name, port };
                                 nv.entity ||= {};
                                 nv.entity[name] = structuredClone(entity[name]);
-                                nv.entity[name].client = {};
+                                delete nv.entity[name].owner.port;
+                                delete nv.entity[name].client;
                                 delete nv.entity[name].syncGroup;
                                 file.write.nv();
                             })
@@ -1102,24 +1104,53 @@ if (isMainThread) {
                 log("actual working directory: " + workingDir);
                 log("initializing system states done");
                 log("Loading non-volatile data...");
-                fs.readFile(workingDir + "/nv-core.json", function (err, data) {
-                    if (err) {
-                        log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
-                            + "\nnv.json file should be in same folder as core.js file");
-                        nv = { entity: {} };
-                        file.write.nv();
-                        boot(2);
-                    } else {
-                        nv = JSON.parse(data);
-                        if (nv.entity) {
-                            log("Loading entities from NV data");
-                            nv.entity.forIn((name, value) => {
-                                entity[name] = value;
-                            })
+
+                let filePath = workingDir + "/nv-core.json";
+                if (!fs.existsSync(filePath)) {
+                    // Logic for NON-EXISTENT file (as in original 'if (err)' block)
+                    log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
+                        + "\nnv.json file should be in same folder as core.js file");
+                    nv = { entity: {} };
+                    file.write.nv();
+                    boot(2);
+
+                } else {
+                    // 2. File EXISTS, now attempt to READ it
+                    log("non-volatile data file exists, parsing...");
+                    fs.readFile(filePath, function (err, data) {
+
+                        // Check 2: Handle file READ error (e.g., permissions, corrupted disk)
+                        if (err) {
+                            // Error reading file, throw and quit.
+                            console.error(`\x1b[31;1mFATAL ERROR:\x1b[37;m Could not read Non-Volatile Storage file at: ${filePath}`);
+                            console.error(err.message);
+                            process.exit(1); // Quit Node.js process
                         }
-                        boot(2);
-                    }
-                });
+
+                        // Check 3: Attempt to PARSE the data
+                        try {
+                            nv = JSON.parse(data);
+                            let count = 0;
+                            // Original success logic
+                            if (nv.entity) {
+                                log("Loading entities from NV data");
+                                nv.entity.forIn((name, value) => {
+                                    entity[name] = value;
+                                    entity[name].client = {};
+                                    count++;
+                                })
+                            }
+                            log("loaded " + count + " entities from NV data");
+                            boot(2);
+
+                        } catch (parseError) {
+                            // Error parsing JSON, throw and quit.
+                            console.error(`\x1b[31;1mFATAL ERROR:\x1b[37;m Non-Volatile Storage file exists but contains invalid JSON: ${filePath}`);
+                            console.error(parseError.message);
+                            process.exit(1); // Quit Node.js process
+                        }
+                    });
+                }
                 break;
             case 2: services.telegram(); services.webserver(); boot(3); break;
             case 3:     // connect to ESP and Home Assistant
@@ -1338,7 +1369,7 @@ if (isMainThread) {
                 try {
                     for (let x = 0; x < cfg.telegram.users.length; x++) {
                         if (cfg.telegram.logESPDisconnect == false) {
-                            if (!message.includes("had a connection error, resetting connection...")
+                            if (!message.includes("connection error, resetting...")
                                 && !message.includes("failed to connect, trying to reconnect...")) {
 
 
