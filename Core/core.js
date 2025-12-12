@@ -429,6 +429,7 @@ if (isMainThread) {
     }
     let services = {
         telegram: function () {
+            /*
             (() => {
                 try {
                     const Module = require('module');
@@ -450,6 +451,7 @@ if (isMainThread) {
                     };
                 } catch (e) { }
             })();
+            
             const rp = require('request-promise-core');
             const origError = rp.RequestError;
 
@@ -464,7 +466,7 @@ if (isMainThread) {
                 const firstLine = msg.split('\n')[0];
                 log("GLOBAL unhandledRejection: " + firstLine, 3);
             });
-
+            */
             // --- TELEGRAM SETUP ---
             if (cfg.telegram?.enable) {
                 const TelegramBot = require('node-telegram-bot-api');
