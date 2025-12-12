@@ -1113,12 +1113,10 @@ if (isMainThread) {
                     nv = { entity: {} };
                     file.write.nv();
                     boot(2);
-
                 } else {
                     // 2. File EXISTS, now attempt to READ it
                     log("non-volatile data file exists, parsing...");
                     fs.readFile(filePath, function (err, data) {
-
                         // Check 2: Handle file READ error (e.g., permissions, corrupted disk)
                         if (err) {
                             // Error reading file, throw and quit.
@@ -1126,7 +1124,6 @@ if (isMainThread) {
                             console.error(err.message);
                             process.exit(1); // Quit Node.js process
                         }
-
                         // Check 3: Attempt to PARSE the data
                         try {
                             nv = JSON.parse(data);
@@ -1141,14 +1138,12 @@ if (isMainThread) {
                                 })
                             }
                             log("loaded " + count + " entities from NV data");
-                            boot(2);
-
                         } catch (parseError) {
                             // Error parsing JSON, throw and quit.
                             console.error(`\x1b[31;1mFATAL ERROR:\x1b[37;m Non-Volatile Storage file exists but contains invalid JSON: ${filePath}`);
                             console.error(parseError.message);
                             process.exit(1); // Quit Node.js process
-                        }
+                        } finally { boot(2); }
                     });
                 }
                 break;
