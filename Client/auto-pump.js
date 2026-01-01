@@ -635,14 +635,14 @@ module.exports = { // exports added to clean up layout
             }
             let push_constructor = {
                 auto: function (dd, index, config) {
-                    return (state) => {
+                    return (state, oneShot) => {
                         if (state) {
                             if (!config.enable) {
                                 log(config.name + " - system disabled - cannot go online", 2);
                                 send(dd.auto.name, false);
                                 return;
                             }
-                            log(config.name + " - is going ONLINE");
+                            log(config.name + " - is going ONLINE")
                             dd.auto.state = true;
                             dd.fault.flow = false;
                             dd.fault.flowRestarts = 0;
@@ -654,11 +654,11 @@ module.exports = { // exports added to clean up layout
                             clearTimeout(dd.state.flowTimerRestart);
                         } else {
                             log(config.name + " - is going OFFLINE - pump is stopping");
-                            dd.auto.state = false;
-                            dd.state.oneShot = false;
                             clearTimeout(dd.state.flowTimerRestart);
                             clearTimeout(dd.state.flowTimerCheck);
                             clearTimeout(dd.state.oneShot);
+                            dd.auto.state = false;
+                            dd.state.oneShot = false;
                             delivery.stop(index);
                         }
                     };
@@ -1009,10 +1009,14 @@ module.exports = { // exports added to clean up layout
                         send("switch.lights_outside_entrance", false);
                     }
                     if (time.hour == 6 && time.min == 0) {
-                        send("switch.relay_bodega_freezer_fujidenzo", true);
+                        log("Auto Bubon - Turning ON");
+                        clearTimeout(global.state["Pumper"].dd[0].oneShot);
+                        global.state["Pumper"].dd[0].oneShot = false;
+                        send("input_boolean.auto_bubon", true);
+                        // send("switch.relay_bodega_freezer_fujidenzo", true);
                     }
                     if (time.hour == 6 && time.min == 30) {
-                        send("input_boolean.auto_bubon", true);
+
                     }
                     if (time.hour == 17 && time.min == 30) {
                         send("switch.lights_bodega_front_1", true);
@@ -1027,10 +1031,10 @@ module.exports = { // exports added to clean up layout
                     if (time.hour == 18 && time.min == 0) {
                         send("input_boolean.auto_bubon", false);
                         send("switch.lights_bodega_front_1", true);
-                        //   send("switch.relay_bodega_freezer_fujidenzo", false);
+                        // send("switch.relay_bodega_freezer_fujidenzo", false);
                     }
                     if (time.hour == 21 && time.min == 0) {
-                        send("switch.relay_bodega_freezer_fujidenzo", true);
+                        // send("switch.relay_bodega_freezer_fujidenzo", true);
                     }
                     if (time.hour == 22 && time.min == 0) {
                         send("switch.lights_outside_bedroom", false);
