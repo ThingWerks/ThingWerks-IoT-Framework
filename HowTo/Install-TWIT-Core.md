@@ -6,18 +6,10 @@ sudo mkdir /apps/twit  -p
 sudo chown $USER /apps -R
 cd /apps/twit
 ```
+- copy TWIT files into `/apps/twit`
 
-### Install Packages: 
-To install packages, you must have build-essential: `sudo apt install build-essential`
-- `npm i express` - needed only if `cfg.webDiag` is enabled
-- `sudo npm i nodemon -g` used for service installer `node /apps/twit/core.js -i`
-#### For Telegram Notification:
-- `npm i node-telegram-bot-api`
-#### For Home Assistant Integration
-- `npm i homeassistant`
-- `npm i websocket`
-#### For ESPHome Integration
-- `npm i @2colors/esphome-native-api`
+### Prepare TWIT Core Environment: 
+- `node /apps/twit/core.js --prep`
 
 ### Setup Core config.json File: 
 - [Get config.json template](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/confg.json)
@@ -25,12 +17,15 @@ To install packages, you must have build-essential: `sudo apt install build-esse
 - Add ESPHome Devices (IP and key)
 
 ### Run and Test Core
-- Its suggested to use Tmux for testing Core and Clients side by side
+- Tmux is suggested for testing Core and Clients side by side
 - [download TWIT core.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js)
-- run the Core.js file using nodemon:  ```sudo nodemon /apps/twit/core.js -w /apps/twit/core.js -w /apps/twit/config.json```
-- install the Core as a service when its working to your liking: 
-  -  Install using Journal Logging ```sudo node /apps/twit/core.js -i -j```
-  -  Install using Logging File ```sudo node /apps/twit/core.js -i```
-  -  View logging file live: ```tail -f /apps/log-twit-core.txt -n 500``` or ```journalctl -fu twit-core```
-- uninstall the service if needed: ```sudo node /apps/twit/core.js -u```
+- test/run the core.js:  ```sudo nodemon /apps/twit/core.js -w /apps/twit/core.js -w /apps/twit/config.json```
 
+### Install TWIT Core Service:
+- `node /apps/twit/core.js --install`
+
+### View TWIT Core Logging (live)
+- `sudo journalctl -efu twit-core --output=cat`
+
+### Other Commands
+- Remove Service `node /apps/twit/core.js --uninstall`
