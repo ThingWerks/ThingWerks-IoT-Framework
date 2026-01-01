@@ -17,8 +17,8 @@ cd /apps/twit
   - `-n` nane of this TWIT Client
   - `-a` path of automation file
   - `-c` optional, path of automation config file
-  - `--install` appending entire command with this creates service with command "as is"
-  - `--uninstall` stop and remove service  
+  - `--install` optional, appending entire command with this creates service with command "as is"
+  - `--uninstall` optional, stop and remove service  
 - Example run command: ```sudo nodemon /apps/twit/client-myCleitnName.js -w /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/twit/config-auto-test.js```
 
 ### View TWIT Core Logging (live)
