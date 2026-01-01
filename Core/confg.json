@@ -3,7 +3,6 @@
     "webDiagPort": 20000,
     "logging": {
         "debug": true,
-        "verbose": true,
         "client": false,
         "clientDebug": false,
         "clientCrash": true
@@ -30,7 +29,7 @@
         "logESPDisconnect": true,
         "token": "----:----------",
         "users": [
-            ----------
+            1234567890
         ]
     },
     "rocket": {
@@ -42,7 +41,7 @@
         "channel": "TWIT-Mambaroto"
     },
     "esp": {
-        "enable": true,
+        "enable": false,
         "max_devices_per_thread": 10,
         "devices": {
             "Solar": {
