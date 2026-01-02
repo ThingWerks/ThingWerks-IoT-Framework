@@ -6,6 +6,11 @@ module.exports = {
         sync: {},
         heartbeat: [],
     },
+    config: { // this can be removed if loading externally or upon each global.config[_name] declaration 
+        // if using this for automation config, create an object for each below
+        "---automation name here----": {},
+        "---another automation name here----": {}
+    },
     automation: {
         "---automation name here----": function (_name, _push, _reload) {
             try {
@@ -26,9 +31,9 @@ module.exports = {
         
                 */
 
-                        
+
                 if (_push === "init") { // ran only once - your initialization procedure
-                    global.config[_name] = {};  // initialize automation's configurations or from -c config File
+                    global.config[_name] = {};  // initialize automation's configurations here or from -c config File or from config object above
                     global.state[_name] = {};   // initialize automation's volatile memory
                     global.nv[_name] ||= {};    // initialize automation's non-volatile memory
                     global.push[_name] = {};    // initialize push functions 
@@ -45,6 +50,7 @@ module.exports = {
                     return;
                 } else push[_push.name]?.(_push.state, _push.name);    // called with every incoming push event
             } catch (error) { console.trace(error) }
+
         },
     },
 }
