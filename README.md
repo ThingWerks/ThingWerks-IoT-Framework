@@ -1,14 +1,41 @@
+
+
 # ThingWerks IoT Framework (TWIT)
-The TWIT project was created with the sole purpose of making a highly reliable, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while having the ability to leverage Home Assistant for its Graphical Interface. 
 
-The TWIT framework is a NodeJS Core-Client system with template-based client-side extensible modules. After years of industrial system development and having few options for a smartphone/web monitoring and control interface, Home Assistant is the perfect addition. Using TWIT with Home Assistant allows for rapid development of automation systems that look pleasing and are highly functional; this also significantly reduces development costs. 
+## Fastest way to get started?
+- download [core.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js) and [config.jsson](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/confg.json) template. In the config, delete the rocket and telegram blocks unless you want notification. Remove ESP and Home Assistant examples and add your own if needed.
+- configure the config.json file using the [Configuration Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Core-Config-Guide.md).
+- run `node core.js --prep` to install and prep your PC for TWIT Core
+  - this installs the required system and npm packages 
+  - this software is intended to run on Debian/Armbian/Ubuntu or similar linux only
+  - TWIT Core [Setup Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Core.md)
+- download [client.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client.js) and [auto.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js).
+- have a brief look are the extremely simple [Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Programming-Guide.md) and [Automation Example](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.js).
+- create your automation scrip and test run it:
+  - `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js`
+  - or with [external config file](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/config-example.js) `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/twit/config-auto-test.js`
+  - or NodeMon `sudo nodemon /apps/twit/client-myCleitnName.js -w /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/twit/config-auto-test.js`
 
-TWIT is also perfect for those who want to use Home Assistant but don't want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns that TWIT directly alleviates.
+## What you gain from TWIT
+TWIT is an extremely simple automation framework. It is very reliable, sets up in a few minutes and has virtually no learning curve. 
 
-If you want to use Home Assistant with TWIT, do not use Home Assistant Supervised unless absolutely necessary. It is unstable and can seriously lag on low powered hardware and had noticeable issues with TWIT during development; also the response time is nearly 10 times faster with Home Assistant Core. We only recommend using TWIT with Home Assistant Core.  
+TWIT removes all of the foundational and background effort normally required for a complete automation system. 
+
+Logging, system and device communication, notifications, state initialization and management, non-volatile memory and many other fundamental capabilities are ready to go allowing you to just focus on automation logic. 
+
+## Further explanation 
+The TWIT project was created with the sole purpose of making a highly reliable, lightweight, low latency, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while using JavaScript for its automation logic.
+
+TWIT has the ability to leverage Home Assistant only for its awesome Graphical Interface, though, all logic is performed by TWIT and there is no dependency whatsoever, just solid integration. There are few options for a smartphone/web monitoring and control interface for automation and Home Assistant is the perfect addition. 
+
+Using TWIT allow you to easily develop complex config file based automations that can be easily adapted to other environments like our own PowerWerks and PumperPro industrial control systems.
+
+Using TWIT with Home Assistant allows for rapid development of automation systems that look pleasing and are highly functional; this also significantly reduces development costs. TWIT is also perfect for those who want to use Home Assistant but don't want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns that TWIT directly alleviates.
+
+If you want to use Home Assistant with TWIT, do not use Home Assistant Supervised unless absolutely necessary. It is unstable and can seriously lag on low powered hardware and had noticeable issues with TWIT during development; also the response time can be nearly 10 times faster with Home Assistant Core. We only recommend using TWIT with Home Assistant Core.  
 
 ## Target Use Cases
-- Suitable for virtually all industrial automation and control applications requiring >=100ms response time.
+- Suitable for virtually all industrial automation and control applications requiring >100ms latency.
 - Infrastructure monitoring and disaster reduction systems 
 - Automated industrial pump operations, water treatment and delivery systems
 - Irrigation control systems with AI and weather integration
@@ -21,24 +48,52 @@ This system has been tested and used in various commercial and municipal industr
 ## Principal of Operation
 
 #### The Core
-Acts as a communication hub between PLCs, IoT and ESPHome devices, Home Assistant, and the TWIT Automation Clients. It has centralized communication, logging and notification of all devices and TWIT Clients.   
+Acts as a communication hub between PLCs, IoT and ESPHome devices, Home Assistant and TWIT Clients. It has centralized communication, logging and notification of all devices and TWIT Clients.   
 
-- [How To install TWIT Core](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Core.md)
-- [Core Configuration Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Core-Config-Guide.md)
+- all device and system connectivity is specified in the Core configuration file
+- the Core configuration file supports Hot Reloading - zero downtime.
+- Telegram can be used for notifications
+- client errors or crashes can trigger notifications
+
+Related:
+- [TWIT Core File](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js)
+- [TWIT Core Config Example File](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/confg.json)
+- [TWIT Core Installation](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Core.md)
+- [Configuration Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Core-Config-Guide.md)
 
 #### The Client
-The TWIT Clients consist of the TWIT boiler plate code. You insert your automation code into the designated automation area in JavaScript format. You Follow the programming structure as defined in the TWIT-Client Example and utilize the methods explained there for logging, processing telemetry data, toggling outputs, etc.
+The TWIT Clients load and manage your automations. They create a safety zone between the TWIT Core, other TWIT clients and automations preventing crashes or errors from affecting other systems.  
 
-- [Client Example](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client-example.js)
-- [Client Template](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client-blank.js)
-- [Client Installation Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Client.md)
-- [Client Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Programming-Guide.md)
-- [Telegram Remote Control Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Telegram-Guide.md)
+- Used to load end-user automation files
+- Automatically detects changes to automation files and config and performs Hot-Reloading, zero downtime
+- Each client supports only 1 automation file but multiple scripts can be in each file
+
+Related:
+- [TWIT Client File](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client.js)
+- [TWIT Client Installation](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Client.md)
+
+#### The Automation Scripts
+The Automation files contain the TWIT framework template. Your automation code goes inside clearly designated areas.
+
+Use  as defined in the TWIT-Client Example and utilize the methods explained there for logging, processing telemetry data, toggling outputs, etc.
+
+- framework makes sate management, non-volatile memory, config/logic modification, multiple system integration an absolute breeze
+- automations run on push events or timed interval or both  
+- One automation file can contain multiple isolated automation scripts 
+- automation script or config changes instantly trigger a Hot-Reload, zero downtime
+- external automation config file can be ether .json or .js ether format is allowed
+- 1 config file is used for all the scripts within a automation file (auto object names must match) see example file
+
+Related:
+- [Automation Template File](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js)
+- [Automation Example File](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.js)
+- [External Config File Example](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/config-example.js)
+- [Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Programming-Guide.md)
 
 ## Features
 - Centralized logging, debugging and notification
 - Remote control and notification with Telegram
-- immune to network, power and connectivity interruptions 
+- Immune to network, power and connectivity interruptions 
 - Extremely lightweight and easy to setup; get your automations up and running within minutes
 - Has been developed with high reliability and compartmentalization
 - Supports multiple Home Assistant servers and can synchronize them
@@ -67,7 +122,13 @@ SolarWerks is a solar power management and automation control system.
 ## Example Industrial Systems
 
 ### Production Systems Using TWIT
-
+ - compact button layout uses "card-mod" plugin
+ - multi dimensional graphing uses "apexcharts-card" plugin
+ - GUI examples in [here](https://github.com/ThingWerks/ThingWerks-IoT-Framework/tree/main/GUI)
+<img width="300" height="2460" alt="Screenshot_20260102-145512" src="https://github.com/user-attachments/assets/8e4706fd-ce2b-4295-90dd-3d66c7e3b965" />
+<img width="300" height="2460" alt="Screenshot_20260102-145518" src="https://github.com/user-attachments/assets/01647f03-3c58-45e3-89a8-115cfaa60d42" />
+<img width="300" height="2460" alt="Screenshot_20260102-150250" src="https://github.com/user-attachments/assets/6ff3251c-9f30-453d-b3de-a710b1911ce0" />
+<img width="300" height="2460" alt="Screenshot_20260102-150256" src="https://github.com/user-attachments/assets/58a5cd4c-ee2c-40a2-a67b-91095e85023d" />
 <img src="https://github.com/user-attachments/assets/264c2f16-12da-41d9-bb0f-9260f0d84ce4" width="300">
 <img src="https://github.com/user-attachments/assets/0b80fde8-d1a7-4d58-98ca-a836f914912e" width="300">
 <img src="https://github.com/user-attachments/assets/d5f32293-0004-486a-8dee-9622bf420f2a" width="300">
