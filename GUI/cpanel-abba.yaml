@@ -1,0 +1,814 @@
+title: Abba
+views:
+  - type: sections
+    max_columns: 8
+    title: HUD
+    path: hud
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: subtitle
+          - type: tile
+            entity: input_button.pump_uth_one_shot
+            features_position: bottom
+            vertical: false
+            name: Pump OneShot
+            tap_action:
+              action: toggle
+            icon_tap_action:
+              action: call-service
+              service: script.increment_pump_profile
+          - type: tile
+            entity: input_number.auto_pump_profile
+            features_position: bottom
+            vertical: false
+            name: Pump  Pressure
+            tap_action:
+              action: call-service
+              service: script.increment_pump_profile
+            icon_tap_action:
+              action: call-service
+              service: script.increment_pump_profile
+          - type: tile
+            entity: input_boolean.auto_pump_pressure
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            name: Main Pump Sys
+            icon: mdi:pipe
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.pump_uth_reserve
+                state: 'on'
+            card:
+              show_name: false
+              show_icon: false
+              show_state: true
+              type: glance
+              entities:
+                - entity: sensor.flow_uth_pump_lm
+                - entity: sensor.flow_uth_pump_today
+              state_color: false
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.pump_uth_reserve
+                state: 'off'
+            card:
+              show_name: false
+              show_icon: false
+              show_state: true
+              type: glance
+              entities:
+                - entity: sensor.flow_lth_submersible_lm
+                - entity: sensor.flow_lth_submersible_today
+              state_color: false
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: tile
+            entity: input_boolean.pump_uth_reserve
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            icon: mdi:swap-horizontal
+            name: Reserve Pump
+          - type: custom:bar-card
+            max: 45
+            severity:
+              - from: 0
+                to: 15
+                color: red
+              - from: 16
+                to: 24
+                color: orange
+            height: 20px
+            padding: 20px
+            positions:
+              icon: false
+              name: inside
+              value: inside
+            entities:
+              - entity: sensor.pump_uth_psi
+            grid_options:
+              columns: 6
+              rows: auto
+            color: '#2F4FBf'
+            card_mod:
+              style: |
+                bar-card-name {
+                  color: white !important;
+                }
+                bar-card-value {
+                  color: white !important;
+                }
+          - type: tile
+            entity: input_boolean.auto_compressor
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            name: Compressor
+          - type: custom:bar-card
+            name: UTH
+            severity:
+              - from: 0
+                to: 39
+                color: red
+              - from: 40
+                to: 60
+                color: orange
+            height: 20px
+            padding: 20px
+            positions:
+              icon: false
+              name: inside
+              value: inside
+            entities:
+              - entity: sensor.tank_uth_percent
+                name_style:
+                  - null
+            grid_options:
+              columns: 6
+              rows: auto
+            color: '#2F4FBf'
+            card_mod:
+              style: |
+                bar-card-name {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+                bar-card-value {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+          - type: tile
+            entity: input_boolean.auto_pump_transfer
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            name: Transfer
+          - type: custom:bar-card
+            name: LTH
+            severity:
+              - from: 0
+                to: 39
+                color: red
+              - from: 40
+                to: 60
+                color: orange
+            height: 20px
+            padding: 20px
+            positions:
+              icon: false
+              name: inside
+              value: inside
+            entities:
+              - entity: sensor.tank_lth_percent
+            grid_options:
+              columns: 6
+              rows: auto
+            color: '#2F4FBf'
+            card_mod:
+              style: |
+                bar-card-name {
+                  color: white !important;
+                }
+                bar-card-value {
+                  color: white !important;
+                }
+          - type: tile
+            entity: input_boolean.all_systems_timer
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            name: Timers
+          - type: tile
+            entity: input_boolean.auto_fountain
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            name: Fountain
+          - type: custom:bar-card
+            entities:
+              - sensor.tank_uth_psi: null
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: subtitle
+          - type: custom:bar-card
+            name: Solar
+            max: 10000
+            height: 20px
+            padding: 20px
+            positions:
+              icon: none
+              name: inside
+              value: inside
+            entities:
+              - entity: sensor.watt_solar_power
+            grid_options:
+              columns: 6
+              rows: auto
+            color: '#2F4FBf'
+            card_mod:
+              style: |
+                bar-card-name {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+                bar-card-value {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+          - type: custom:bar-card
+            name: Inverter
+            max: 12000
+            severity:
+              - from: 10001
+                to: 12000
+                color: red
+              - from: 8001
+                to: 10000
+                color: orange
+              - from: 0
+                to: 8000
+            height: 20px
+            padding: 20px
+            positions:
+              icon: none
+              name: inside
+              value: inside
+            entities:
+              - entity: sensor.watt_inverter_power
+            grid_options:
+              columns: 6
+              rows: auto
+            color: '#2F4FBf'
+            card_mod:
+              style: |
+                bar-card-name {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+                bar-card-value {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+          - type: custom:bar-card
+            name: Grid
+            min: 10
+            max: 10000
+            severity:
+              - from: 1000
+                to: 10000
+                color: red
+              - from: 10
+                to: 999
+                color: orange
+            height: 20px
+            padding: 20px
+            positions:
+              icon: none
+              name: inside
+              value: inside
+            entities:
+              - entity: sensor.watt_grid_power
+            grid_options:
+              columns: 6
+              rows: auto
+            color: '#2F4FBf'
+            card_mod:
+              style: |
+                bar-card-name {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+                bar-card-value {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+          - type: custom:bar-card
+            name: Discharge
+            max: -8000
+            min: 0
+            severity:
+              - from: -2000
+                to: -100
+                color: orange
+              - from: -2001
+                to: -12000
+                color: red
+            height: 20px
+            padding: 20px
+            positions:
+              icon: none
+              name: inside
+              value: inside
+            entities:
+              - entity: sensor.watt_battery_power
+            grid_options:
+              columns: 6
+              rows: auto
+            visibility:
+              - condition: numeric_state
+                entity: sensor.watt_battery_power
+                below: -100
+            color: '#2F4FBf'
+            card_mod:
+              style: |
+                bar-card-name {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+                bar-card-value {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+          - type: custom:bar-card
+            name: Charge
+            max: 10000
+            min: 0
+            severity:
+              - from: 8000
+                to: 100
+                color: orange
+            height: 20px
+            padding: 20px
+            positions:
+              icon: none
+              name: inside
+              value: inside
+            entities:
+              - entity: sensor.watt_battery_power
+            grid_options:
+              columns: 6
+              rows: auto
+            visibility:
+              - condition: numeric_state
+                entity: sensor.watt_battery_power
+                above: -100
+            color: '#2F4FBf'
+            card_mod:
+              style: |
+                bar-card-name {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+                bar-card-value {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+          - type: custom:bar-card
+            name: Battery
+            severity:
+              - from: 0
+                to: 20
+                color: red
+              - from: 21
+                to: 50
+                color: orange
+            height: 20px
+            padding: 20px
+            positions:
+              icon: none
+              name: inside
+              value: inside
+            entities:
+              - entity: sensor.battery_main
+            grid_options:
+              columns: 6
+              rows: auto
+            color: '#2F4FBf'
+            card_mod:
+              style: |
+                bar-card-name {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+                bar-card-value {
+                  color: #f0f0f0 !important;
+                  font-weight: bold !important;
+                }
+          - type: conditional
+            conditions: []
+            card:
+              show_name: false
+              show_icon: false
+              show_state: true
+              type: glance
+              entities:
+                - entity: sensor.volt_battery_power1
+                - entity: sensor.amp_battery_amps
+              state_color: false
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: conditional
+            conditions: []
+            card:
+              show_name: false
+              show_icon: false
+              show_state: true
+              type: glance
+              entities:
+                - entity: sensor.kwh_battery_main_charge_today
+                - entity: sensor.kwh_battery_main_discharge_today
+              state_color: false
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: tile
+            entity: input_boolean.auto_inverter
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+          - type: tile
+            entity: input_boolean.inverter_8kw
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            name: Inverter Run
+          - type: tile
+            entity: input_boolean.auto_solar_compressor
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            name: Solar Compressor
+          - type: tile
+            entity: input_boolean.auto_solar_transfer
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            name: Solar Transfer
+          - type: tile
+            entity: switch.power1_power1_relay6
+            features_position: bottom
+            vertical: false
+            tap_action:
+              action: toggle
+            name: UPS Mode
+    cards: []
+    top_margin: false
+    background:
+      opacity: 80
+      alignment: center
+      size: cover
+      repeat: repeat
+      attachment: fixed
+  - title: All Systems
+    cards: []
+    type: sections
+    sections:
+      - type: grid
+        cards:
+          - show_current: true
+            show_forecast: true
+            type: weather-forecast
+            entity: weather.sipalay
+            forecast_type: daily
+            grid_options:
+              columns: 12
+              rows: 3
+            secondary_info_attribute: uv_index
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: ''
+              show_states: true
+              colorize_states: true
+            apex_config:
+              legend:
+                show: false
+              chart:
+                height: 180
+              grid:
+                padding:
+                  bottom: -20
+                  top: -20
+            all_series_config:
+              stroke_width: 2
+            graph_span: 24h
+            yaxis:
+              - id: wind
+                min: 0
+                opposite: true
+              - id: rain
+                min: 0
+                opposite: false
+            series:
+              - entity: sensor.sipalay_precipitation
+                name: Rain
+                color: '#08f'
+                yaxis_id: rain
+              - entity: sensor.sipalay_wind_speed
+                name: Wind Speed
+                color: '#f5f'
+                yaxis_id: wind
+              - entity: sensor.sipalay_wind_gust_speed
+                name: Gust Speed
+                color: '#f80'
+                yaxis_id: wind
+          - type: entities
+            entities:
+              - entity: input_boolean.all_systems_timer
+              - entity: input_button.pump_uth_one_shot
+                name: Pump One Shot
+              - entity: input_number.pump_uth_timer
+                name: Timer
+              - entity: input_number.auto_pump_profile
+                name: Pressure
+              - entity: sensor.pump_uth_psi
+                name: Pump Pressure
+                icon: mdi:gauge
+              - entity: sensor.flow_lth_submersible_lm
+                name: Pump Submersible Flow
+                icon: mdi:waves-arrow-right
+              - entity: sensor.flow_uth_pump_lm
+                icon: mdi:waves-arrow-right
+                name: Pump UTH Flow
+              - entity: sensor.flow_lth_submersible_today
+                icon: mdi:waves-arrow-right
+                name: Submersible Flow Today
+              - entity: sensor.flow_uth_pump_today
+                name: UTH Pump Flow Today
+                icon: mdi:waves-arrow-right
+              - entity: input_boolean.auto_pump_pressure
+                icon: mdi:pump
+                name: Auto Pump System
+              - entity: input_boolean.pump_uth_reserve
+                name: Auto Pump Reserve Option
+              - entity: input_boolean.auto_compressor
+                name: Auto Compressor
+                icon: mdi:water-pump
+              - entity: sensor.tank_lth_percent
+                name: Tank LTH
+                icon: mdi:tower-fire
+              - entity: input_boolean.auto_pump_transfer
+              - entity: sensor.tank_uth_percent
+                name: Tank UTH
+                icon: mdi:tower-fire
+              - entity: input_boolean.auto_fountain
+            title: Water Systems
+            show_header_toggle: false
+          - type: entities
+            entities:
+              - entity: input_boolean.auto_solar_compressor
+              - entity: input_boolean.auto_solar_transfer
+              - entity: input_boolean.auto_solar_fountain
+              - entity: input_boolean.auto_inverter
+                name: Inverter-Auto
+              - entity: input_boolean.inverter_8kw
+                name: Inverter-Run
+              - entity: switch.power1_power1_relay6
+                name: Charger
+                icon: mdi:ev-station
+              - entity: sensor.watt_solar_power
+                name: Solar Power
+                icon: mdi:solar-power
+              - entity: sensor.watt_inverter_power
+                name: Inverter Power
+                icon: mdi:lightning-bolt
+              - entity: sensor.battery_main
+                name: Battery Percent
+                icon: mdi:car-battery
+              - entity: sensor.amp_battery_amps
+                name: Battery Amps
+                icon: mdi:battery-charging-medium
+              - entity: sensor.volt_battery_power1
+                name: Battery Voltage
+                icon: mdi:car-battery
+              - entity: sensor.power1_grid_power_safe
+                name: Grid Power
+                icon: mdi:flash
+              - entity: sensor.power1_grid_voltage_safe
+                name: Grid Voltage
+                icon: mdi:sine-wave
+              - entity: sensor.power1_8kw_energy
+                name: 12Kw Total
+                icon: mdi:meter-electric
+              - entity: sensor.power2_10kw_energy
+                name: 10Kw Total
+                icon: mdi:meter-electric
+              - entity: sensor.power1_grid_energy
+                name: Grid Total
+                icon: mdi:meter-electric
+            title: Solar Systems
+            show_header_toggle: false
+      - type: grid
+        cards:
+          - type: custom:apexcharts-card
+            header:
+              title: ''
+              show: true
+              show_states: true
+              colorize_states: true
+            apex_config:
+              legend:
+                show: false
+              chart:
+                height: 180
+              grid:
+                padding:
+                  bottom: -20
+                  top: -20
+            graph_span: 12h
+            all_series_config:
+              stroke_width: 2
+              float_precision: 0
+              group_by:
+                duration: 1m
+                func: avg
+            series:
+              - entity: sensor.watt_inverter_power
+                color: cyan
+                name: Inverter Output
+                yaxis_id: watts
+              - entity: sensor.watt_solar_power
+                color: magenta
+                name: Solar Power
+                yaxis_id: watts
+              - entity: sensor.power1_grid_power
+                color: red
+                name: Grid Output
+                yaxis_id: watts
+          - type: custom:apexcharts-card
+            header:
+              title: ''
+              show: true
+              show_states: true
+              colorize_states: true
+            apex_config:
+              legend:
+                show: false
+              chart:
+                height: 180
+              grid:
+                padding:
+                  bottom: -20
+                  top: -20
+            graph_span: 12h
+            all_series_config:
+              stroke_width: 2
+              float_precision: 0
+              group_by:
+                duration: 6m
+                func: avg
+            yaxis:
+              - id: volts
+              - id: sun
+                opposite: true
+              - id: amps
+            series:
+              - entity: sensor.power2_sunlight_pv
+                name: Sun
+                color: orange
+                float_precision: 2
+                yaxis_id: sun
+              - entity: sensor.amp_battery_amps
+                name: Amps
+                color: magenta
+                float_precision: 2
+                yaxis_id: amps
+              - entity: sensor.volt_battery_power1
+                name: Battery
+                color: cyan
+                float_precision: 2
+                yaxis_id: volts
+          - chart_type: line
+            period: hour
+            type: statistics-graph
+            entities:
+              - sensor.flow_lth_submersible_day
+            stat_types:
+              - mean
+            days_to_show: 7
+          - chart_type: line
+            period: hour
+            type: statistics-graph
+            entities:
+              - sensor.kwh_8kw_power1_day
+            stat_types:
+              - mean
+            hide_legend: true
+            title: 8kw - Daily kWh
+          - chart_type: line
+            period: 5minute
+            type: statistics-graph
+            entities:
+              - sensor.volt_battery_power1
+            stat_types:
+              - mean
+            hide_legend: true
+            days_to_show: 1
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: ''
+              show_states: true
+              colorize_states: true
+            apex_config:
+              legend:
+                show: false
+              chart:
+                height: 180
+              grid:
+                padding:
+                  bottom: -20
+                  top: -20
+            all_series_config:
+              stroke_width: 4
+            graph_span: 24h
+            yaxis:
+              - id: wind
+                min: 0
+                opposite: true
+              - id: rain
+                min: 0
+                opposite: false
+            series:
+              - entity: sensor.sipalay_solar_irradiance_day_0
+                name: Irradiance
+                color: '#08f'
+                yaxis_id: rain
+          - type: custom:apexcharts-card
+            header:
+              title: ''
+              show: true
+              show_states: true
+              colorize_states: true
+            apex_config:
+              legend:
+                show: false
+              chart:
+                height: 180
+              grid:
+                padding:
+                  bottom: -20
+                  top: -20
+            graph_span: 8h
+            all_series_config:
+              stroke_width: 2
+              float_precision: 0
+              group_by:
+                duration: 4m
+                func: avg
+            yaxis:
+              - id: sun
+                opposite: true
+              - id: kw
+            series:
+              - entity: sensor.power2_sunlight_pv
+                color: orange
+                name: Inverter Output
+                yaxis_id: sun
+              - entity: sensor.watt_solar_power
+                color: magenta
+                name: Solar Power
+                yaxis_id: kw
+  - title: Stats
+    path: test
+    cards:
+      - chart_type: line
+        period: hour
+        type: statistics-graph
+        entities:
+          - sensor.kwh_solar_power_day
+          - sensor.kwh_battery_main_discharge_day
+          - sensor.kwh_battery_main_charge_day
+          - sensor.kwh_inverter_power_day
+          - sensor.kwh_grid_power1_30days
+        stat_types:
+          - mean
+        hide_legend: true
+        days_to_show: 7
+      - type: entities
+        entities:
+          - entity: sensor.battery_main_charge_today
+          - entity: sensor.kwh_battery_main_charge_day
+          - entity: sensor.battery_main_discharge_today
+          - entity: sensor.kwh_battery_main_discharge_day
+          - entity: sensor.battery_main_charge_total
+          - entity: sensor.battery_main_discharge_total
+          - entity: sensor.kwh_solar_power_day
+          - entity: sensor.kwh_inverter_power_day
+          - entity: sensor.kwh_grid_power1_day
+          - entity: sensor.battery_main_cycles
+          - entity: sensor.battery_main_efficiency
+          - entity: sensor.kwh_solar_power_30days
+          - entity: sensor.kwh_8kw_power1_30days
+          - entity: sensor.kwh_10kw_power2_30days
