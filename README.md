@@ -99,14 +99,14 @@ Related:
 #### The Automation Scripts
 The Automation files contain the TWIT framework template. Your automation code goes inside clearly designated areas.
 
-Use  as defined in the TWIT-Client Example and utilize the methods explained there for logging, processing telemetry data, toggling outputs, etc.
+Use as defined in the [Automation Example File](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.js) and utilize the methods explained there for logging, processing telemetry data, toggling outputs, etc.
 
-- framework makes sate management, non-volatile memory, config/logic modification, multiple system integration an absolute breeze
-- automations run on push events or timed interval or both  
-- One automation file can contain multiple isolated automation scripts 
+- framework makes state management, non-volatile memory, config/logic modification, multiple system integration an absolute breeze
+- automations run on push events or on a timed interval or both  
+- one automation file can contain multiple isolated automation scripts 
 - automation script or config changes instantly trigger a Hot-Reload, zero downtime
 - external automation config file can be ether .json or .js ether format is allowed
-- 1 config file is used for all the scripts within a automation file (auto object names must match) see example file
+- 1 config file is used for all the scripts within a automation file (auto object names must match) see [Automation Example File](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.js)
 
 Related:
 - [Automation Template File](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js)
