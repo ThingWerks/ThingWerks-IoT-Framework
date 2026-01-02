@@ -48,11 +48,15 @@ TWIT removes all of the foundational and background effort normally required for
 Logging, system and device communication, notifications, state initialization and management, non-volatile memory and many other fundamental capabilities are ready to go allowing you to just focus on automation logic. 
 
 ## Further explanation 
-The TWIT project was created with the sole purpose of making a highly reliable, lightweight, low latency, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while using JavaScript for its automation logic.
+The TWIT project was created with the sole purpose of making a highly reliable, lightweight, low latency, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while using JavaScript for its automation logic. 
 
-TWIT has the ability to leverage Home Assistant only for its awesome Graphical Interface, though, all logic is performed by TWIT and there is no dependency whatsoever, just solid integration. There are few options for a smartphone/web monitoring and control interface for automation and Home Assistant is the perfect addition. 
+TWIT from inception was designed so that two completely independent control systems could easily interact and influence each other. For example an isolated solar power system could initiate or throttle certain operations on another control system like PumperPro as based on available energy levels. For making tiered based or smart energy delivery and interactive control systems. TWIT does this easily because TWIT Clients can seamlessly interact with each other through the TWIT Core via a shared IoT device subscription or Local TWIT Entities and or both redundantly via a sync group. 
 
-Using TWIT allow you to easily develop complex config file based automations that can be easily adapted to other environments like our own PowerWerks and PumperPro industrial control systems.
+Sync Groups also assist in making possible redundant multi-point realtime control interfaces tieing together physical control panels, smartphones, webapps, Home Assistant interface, MQTT, ZHA and other custom solutions. It is extremely easy to integrate with other software APis and control interfaces like ProfiNet, MODBUS, anything you want. 
+
+Using TWIT allow you to easily develop complex config file based automations that can be easily adapted to other environments via simple config file changes. For example our own PowerWerks and PumperPro industrial control systems are designed like this.
+
+TWIT has the ability to leverage Home Assistant only for its awesome Graphical Interface, though, all logic is performed by TWIT and there is no dependency whatsoever, just solid integration. There are few options for a smartphone/web monitoring and control interface when it comes to automation and Home Assistant is the perfect addition. 
 
 Using TWIT with Home Assistant allows for rapid development of automation systems that look pleasing and are highly functional; this also significantly reduces development costs. TWIT is also perfect for those who want to use Home Assistant but don't want to rely on it for automation or those who prefer writing automations in pure JavaScript. Extensive testing with Home Assistant’s automation revealed serious inconsistency and reliability concerns that TWIT directly alleviates.
 
