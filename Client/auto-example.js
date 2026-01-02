@@ -1,6 +1,4 @@
 #!/usr/bin/node
-
-
 module.exports = {
     entity: {
         subscribe: [    // entities to subscribe to 
