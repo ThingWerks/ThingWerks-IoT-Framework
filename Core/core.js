@@ -849,8 +849,6 @@ if (isMainThread) {
             }
         },
         ha: function () {
-
-            //  ha.ws(x);
             newWorker(true);
             function newWorker(boot) {
                 if (boot) log("initializing HA worker thread");
@@ -862,10 +860,9 @@ if (isMainThread) {
                     console.log(error);
                     //  newWorker();
                 });
-                //  thread.ha.on('exit', (code) => { log("ESP worker: " + x + " exited", 0, 3); newWorker(x, obj); });
+                //thread.ha.on('exit', (code) => { log("ESP worker: " + x + " exited", 0, 3); newWorker(x, obj); });
                 // log("connecting to Home Assistant: " + color("cyan", server.address), 1);
                 thread.ha.postMessage({ type: "config", cfg: cfg.homeAssistant });
-
             }
         },
         espAdd: function (cfg, name) {
@@ -996,6 +993,17 @@ if (isMainThread) {
                     })
                     cfg.esp = cfgTemp.esp;
                     log("ESP config was changed");
+                }
+                if (JSON.stringify(cfg.homeAssistant) !== JSON.stringify(cfgTemp.homeAssistant)) {
+                    log("found updated config for Home Assistant, terminating thread");
+                    thread.ha.terminate();
+                    cfg.homeAssistant = cfgTemp.homeAssistant;
+                    setTimeout(() => {
+                        if (cfg.homeAssistant) {
+                            log("reloading Home Assistant thread");
+                            workerThreads.ha()
+                        }
+                    }, 300);
                 }
             } catch (e) {
                 console.error("Error parsing config.json:", e);
