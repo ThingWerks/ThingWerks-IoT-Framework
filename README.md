@@ -2,22 +2,46 @@
 
 # ThingWerks IoT Framework (TWIT)
 
-## Fastest way to get started?
-- download [core.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js) and [config.jsson](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/confg.json) template. In the config, delete the rocket and telegram blocks unless you want notification. Remove ESP and Home Assistant examples and add your own if needed.
+## Fastest way to get started
+
+
+- if you have a question or documentation is incomplete, just ask us. Open a new [Issue](https://github.com/ThingWerks/ThingWerks-IoT-Framework/issues)
+- download [core.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js) and [config.jsson](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/confg.json) template. 
+  - delete the rocket and/or telegram blocks unless you want notification using ether of them. 
+  - remove ESP and Home Assistant examples and add your own if needed.
 - configure the config.json file using the [Configuration Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Core-Config-Guide.md).
-- run `node core.js --prep` to install and prep your PC for TWIT Core
+- run `sudo node core.js --prep` to install and prep your PC for TWIT Core
   - this installs the required system and npm packages 
   - this software is intended to run on Debian/Armbian/Ubuntu or similar linux only
-  - TWIT Core [Setup Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Core.md)
+  - for more info: TWIT Core [Setup Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Core.md)
 - download [client.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client.js) and [auto.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js).
+  - for more info: TWOT Client [Setup Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Client.md)
 - have a brief look are the extremely simple [Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Programming-Guide.md) and [Automation Example](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.js).
 - create your automation scrip and test run it:
   - `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js`
   - or with [external config file](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/config-example.js) `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/twit/config-auto-test.js`
-  - or NodeMon `sudo nodemon /apps/twit/client-myCleitnName.js -w /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/twit/config-auto-test.js`
+  - or NodeMon `sudo nodemon /apps/twit/client-myCleitnName.js -w /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/
+  twit/config-auto-test.js`
+
+## Want to use TWIT only to sync two Home Assistant Servers? 
+
+Follow these steps but no need to create an automation. 
+- download [core.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js), [config.jsson](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/confg.json)
+  - add your Home Assistant servers configurations 
+- download [client.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client.js) and [auto.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js)
+  - no need to create a custom automation script, just name the example automation like "sync" 
+  - create a named array for each sync group under the entities.sync object:
+  - like `"myFirstSyncGroup": ["input_boolean.test_switch", "input_boolean.test", "test-led", "test-local-sensor"],`
+  - not only two different toggles on different server but even ESP or any other entities can be synced together
+- start all the files
+  - first prep for TWIT Core: `sudo node core.js --prep`
+  - then start the TWIT Core: `sudo node core.js`
+  - then start the TWIT Client: `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js`
 
 ## What you gain from TWIT
-TWIT is an extremely simple automation framework. It is very reliable, sets up in a few minutes and has virtually no learning curve. 
+TWIT is an extremely simple automation framework. It is very reliable, sets up in a few minutes and has virtually no learning curve provided you already know JavaScript or NodeJS. 
+
+Quickly put together an event based automation system with powerful GUI.
 
 TWIT removes all of the foundational and background effort normally required for a complete automation system. 
 
