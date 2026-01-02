@@ -16,10 +16,16 @@ cd /apps/twit
 - Command must include:
   - `-n` nane of this TWIT Client
   - `-a` path of automation file
-  - `-c` optional, path of automation config file
-  - `--install` optional, appending entire command with this creates service with command "as is"
-  - `--uninstall` optional, stop and remove service  
+- Optional Flags:
+  - `-c` path of automation config file
+  - `--install` appending entire command with this creates service with command "as is"
+  - `--uninstall` stop and remove service
+- Rules:
+  - only one `-a` and/or `-c` can be specified per client instance
+  - the automation file can contain multiple automation scripts
+  - multiple `client.js` instances can be created
+    - but the `-n` "client name" must be unique
 - Example run command: ```sudo nodemon /apps/twit/client-myCleitnName.js -w /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/twit/config-auto-test.js```
 
-### View TWIT Core Logging (live)
+### View this TWIT Client Logging (live)
 - `sudo journalctl -efu yourClientsName --output=cat`
