@@ -154,12 +154,30 @@ module.exports = {
                 // run my automation in some interval:
                 state.timer.myAuto = setInterval(() => { myAuto(); }, 1e3);
 
+                // run the timer function once per minute
+                state.timer.minute = setInterval(() => { timer(); }, 60e3);
 
+
+                
                 // any other initialization sequence here
 
 
 
             } else push[_push.name]?.(_push.state, _push.name);
+
+
+            function timer() { // called once per minute   
+                if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
+                    log("turning on outside lights", 1);
+                    send("switch.light_outside_switch", true);
+                }
+                if (time.hour == 22 && time.min == 0) {
+                    log("turning off outside lights", 1);
+                    send("switch.light_outside_switch", false);
+                }
+            };
+
+
 
         },
 
