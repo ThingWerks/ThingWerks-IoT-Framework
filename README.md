@@ -52,6 +52,8 @@ The TWIT project was created with the sole purpose of making a highly reliable, 
 
 TWIT from inception was designed so that two completely independent control systems could easily interact and influence each other. For example an isolated solar power system could initiate or throttle certain operations on another control system like PumperPro as based on available energy levels. For making tiered based or smart energy delivery and interactive control systems. TWIT does this easily because TWIT Clients can seamlessly interact with each other through the TWIT Core via a shared IoT device subscription or Local TWIT Entities and or both redundantly via a sync group. 
 
+Not only dissimilar systems integration but externally influenced systems such as irrigation control systems that may leverage outside weather systems but fail back to or be cross-compared with local onsite meterological or precipitation sensors. TWIT has made the integration of dissimilar systems, sensor collection and input/output manipulation a simple matter of 1 or 2 lines of javascript, it doesnt get any easier then that.   
+
 Sync Groups also assist in making possible redundant multi-point realtime control interfaces tieing together physical control panels, smartphones, webapps, Home Assistant interface, MQTT, ZHA and other custom solutions. It is extremely easy to integrate with other software APis and control interfaces like ProfiNet, MODBUS, anything you want. 
 
 Using TWIT allow you to easily develop complex config file based automations that can be easily adapted to other environments via simple config file changes. For example our own PowerWerks and PumperPro industrial control systems are designed like this.
