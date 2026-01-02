@@ -14,7 +14,7 @@ module.exports = {
             // "test-local-sensor",
             // "test-local-sensor2",
         ],
-        sync: {         // entities to sync
+        sync: {         // entities to sync - any type of binary output can be synced. TWIT, ESP or even Toggles on different HA servers 
             // string is any group name you want, followed by array of entities, any entity change is parroted to all others
             // "testGroup": ["input_boolean.test_switch", "input_boolean.test", "test-led", "test-local-sensor"],
         },
@@ -158,7 +158,7 @@ module.exports = {
                 state.timer.minute = setInterval(() => { timer(); }, 60e3);
 
 
-                
+
                 // any other initialization sequence here
 
 
