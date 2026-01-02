@@ -1210,20 +1210,12 @@ if (isMainThread) {
         if (cfg.homeAssistant) {
             WebSocketClient = require('websocket').client;
         }
-        rocket = {
-            enable: false,
-            server: "10.21.0.1",
-            port: 3000,
-            user: "xBD2x76tdL8KYqXpe",
-            token: "lDwlkylzC9nQ1O95tAfnYY9VtG_xFUT8XaZC4t2NfCp",
-            channel: "TWIT-Mambaroto",
-        };
         Object.defineProperty(Object.prototype, "forIn", {
             value: function (callback) {
                 for (const key in this) {
-                    //  if (Object.prototype.hasOwnProperty.call(this, key)) {
-                    callback(key, this[key], this);
-                    //  }
+                    if (Object.prototype.hasOwnProperty.call(this, key)) { // ignore inheritance 
+                        callback(key, this[key], this);
+                    }
                 }
             },
             enumerable: false // so it won't show up in loops
