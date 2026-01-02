@@ -31,11 +31,11 @@ module.exports = {
             house_stairs: ["switch.switch_test", "input_boolean.lights_stairs",],
             house_patio: ["switch.lights_outside_bedroom", "input_boolean.lights_bedroom_outside"],
             house_entrance: ["switch.lights_outside_entrance", "input_boolean.lights_house_entrance"],
-        }
-    },
-    heartbeat: {
-        "esp_heartbeat_solar": 3000,
-        "esp_heartbeat_pump": 3000
+        },
+        heartbeat: {
+            "esp_heartbeat_solar": 3000,
+            "esp_heartbeat_pump": 3000
+        },
     },
     config: {
         Pumper: {
@@ -134,8 +134,8 @@ module.exports = {
                     },
                 },
                 {                           // DD system example
-                    name: "Irrigation",      
-                    enable: false,                                   
+                    name: "Irrigation",
+                    enable: false,
                     ha: {
                         auto: "input_boolean.auto_irrigatiion",                 // home assistant auto toggle ID number (specified above in cfg.ha config)
                         // solar: "input_boolean.auto_solar_bubon",             // solar automation boolean/toggle
