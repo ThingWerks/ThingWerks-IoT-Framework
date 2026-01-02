@@ -60,559 +60,729 @@ color = function (color, input, ...option) {   //  ascii color function for term
     return vbuf;
 }
 if (isMainThread) {
-    let com = {
-        udp: function (data, info) {
-            let buf = null, port = info.port; prep();
-            // console.log(buf)
-            switch (buf.type) {
-                case "heartbeat": try { state.client[buf.name].heartbeat = true; } catch (e) { console.log(e) } break; // start heartbeat 
-                case "state":
-                    let ent, packet;
-                    // console.log(buf)
-                    // console.log(entity)
-                    // console.log(entity[buf.data.name])
-                    if (buf.data.unit) { // for ha telemetry/sensors
-                        if (!entity[buf.data.name]) {
-                            log("client - " + color("purple", buf.name)
-                                + " - is registering new HA sensor: " + buf.data.name, 3, 0);
-                            entity[buf.data.name] = { client: {}, }
-                        }
-                        ent = entity[buf.data.name];
-                        if (!buf.data.address)
-                            packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
-                        else packet = { address: buf.data.address, unit: buf.data.unit };
-
-                        ent.owner = { type: "telemetry", client: buf.name, auto: buf.auto };
-
-                        if (ent.state !== buf.data.state || (time.epochMil - ent.update) > 300000) {
-                            // log("telemetry - updating HA sensor: " + buf.data.name);
-                            ent.state = buf.data.state;
-                            sendPacket("HA");
-                        } else {
-                            // log("telemetry - NOT updating HA sensor: " + buf.data.name);
-                        }
-
-                        ent.unit = buf.data.unit;
-                        ent.update = time.epochMil;
-                        ent.stamp = time.stamp;
-
-                        ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
-                            if (value.port != port)
-                                client("state", { name: buf.data.name, state: buf.data.state }, value.port);
-                        })
-
-                    } else if (buf.data.name in entity) { // for all other entities
-                        try {
-                            // console.log(buf);
-                            // console.log(entity[buf.data.name]);
-                            ent = entity[buf.data.name];
-                            if (!ent.owner) {
+    let
+        com = {
+            udp: function (data, info) {
+                let buf = null, port = info.port; prep();
+                // console.log(buf)
+                switch (buf.type) {
+                    case "heartbeat": try { state.client[buf.name].heartbeat = true; } catch (e) { console.log(e) } break; // start heartbeat 
+                    case "state":
+                        let ent, packet;
+                        // console.log(buf)
+                        // console.log(entity)
+                        // console.log(entity[buf.data.name])
+                        if (buf.data.unit) { // for ha telemetry/sensors
+                            if (!entity[buf.data.name]) {
                                 log("client - " + color("purple", buf.name)
-                                    + " - is setting the state for entity: " + color("cyan", buf.data.name)
-                                    + " that " + color("red", "HAS NO OWNER"), 3, 3);
-                                return;
+                                    + " - is registering new HA sensor: " + buf.data.name, 3, 0);
+                                entity[buf.data.name] = { client: {}, }
                             }
+                            ent = entity[buf.data.name];
+                            if (!buf.data.address)
+                                packet = { address: cfg.homeAssistant[0].address, unit: buf.data.unit };
+                            else packet = { address: buf.data.address, unit: buf.data.unit };
 
-                            log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
-                                + " - state update: " + color("blue", buf.data.state.toString()), 3, 0);
+                            ent.owner = { type: "telemetry", client: buf.name, auto: buf.auto };
 
-                            if (ent.owner?.type == "TWIT") { // for TWIT entities
-                                //  ent = entity[buf.data.name] ?? undefined;
+                            if (ent.state !== buf.data.state || (time.epochMil - ent.update) > 300000) {
+                                // log("telemetry - updating HA sensor: " + buf.data.name);
                                 ent.state = buf.data.state;
-                                ent.update = time.epochMil;
-                                ent.stamp = time.stamp;
-                                nv.entity[buf.data.name].state = buf.data.state;
-                                nv.entity[buf.data.name].stamp = time.stamp;
-                                nv.entity[buf.data.name].update = time.epochMil;
-                                // console.log(ent)
-                                // console.log(buf )
-                                ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
-                                    if (value.port != port) // only reply if not the owner
-                                        client("state", { name: buf.data.name, state: buf.data.state, owner: ent.owner }, value.port);
-                                })
-
-                                if (ent.syncGroup) {
-                                    log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
-                                        + " - is a " + color("blue", "Sync Group member "), 3, 0);
-                                    com.syncGroup(buf.data.name, buf.data.state);
-                                }
-
-                                file.write.nv();
-
-                            } else if (ent.owner.type == "esp") {
-                                packet = { address: ent.owner.name }
-                                packet.esp_entity_id = ent.esp_entity_id;
-                                sendPacket("ESP");
-                            } else if (ent.owner.type.includes("ha")) {
-                                packet = { address: ent.owner.name }
-                                if (ent.zha) packet.zha = ent.zha.regID;
                                 sendPacket("HA");
+                            } else {
+                                // log("telemetry - NOT updating HA sensor: " + buf.data.name);
                             }
-                        } catch (error) { console.log("state setting error - buf: ", buf.data, "selected entity: ", ent, " \nerror: ", error) }
-                    } else {
-                        log("client - " + color("purple", buf.name)
-                            + " - is setting the state for entity: " + color("cyan", buf.data.name)
-                            + " that " + color("red", "DOES NOT EXIST"), 3, 3);
-                        return;
-                    }
-                    function sendPacket(type) {
-                        if (packet) {
-                            packet.type = "state";
-                            packet.entity = buf.data.name;
-                            packet.state = buf.data.state;
-                            // console.log(packet)
-                            if (type == "HA") thread.ha.postMessage(packet);
-                            if (type == "ESP") thread.esp[entity[buf.data.name].owner.thread].postMessage(packet);
-                        } else log("client - " + color("purple", buf.name)
-                            + " - is sending invalid " + type + " state update: " + buf.data.name, 3);
 
-                        // console.log(packet)
-                    }
+                            ent.unit = buf.data.unit;
+                            ent.update = time.epochMil;
+                            ent.stamp = time.stamp;
 
-                    break;
-                case "register":    // incoming registrations
-                    //  log("client - " + color("purple", buf.name) + " - is initiating new registration", 3);
-                    //  console.log(buf)
-                    if (state.client[buf.name]) {
-
-                        (function entity_subscribe() {
-                            log("client - " + color("purple", buf.name) + " - updating registration", 3, 1);
-                            state.client[buf.name].entities?.subscribe?.forIn((name, value) => {
-                                if (!(name in buf.data?.entities?.subscribe)) {
-                                    log("client - " + color("purple", buf.name) + " - found orphaned entity in core: " +
-                                        color("cyan", name) + " -  deleting", 3, 1);
-                                    //com.deleteReg()
-                                }
+                            ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
+                                if (value.port != port)
+                                    client("state", { name: buf.data.name, state: buf.data.state }, value.port);
                             })
-                            // console.log(state.client[buf.name])
-                            state.client[buf.name].entities.subscribe = structuredClone(buf.data?.entities?.subscribe) ?? undefined;
-                            buf.data.entities?.subscribe?.forIn((name, value) => {
-                                if (name in entity) {
-                                    log("client - " + color("purple", buf.name) + " - is registering entity: " + color("cyan", name), 3, 0);
-                                } else {
-                                    log("client - " + color("purple", buf.name) + " - is registering an " + color("yellow", "UNKNOWN")
-                                        + " entity: " + color("cyan", name), 3, 2);
-                                    // console.log(entity[name].client)
+
+                        } else if (buf.data.name in entity) { // for all other entities
+                            try {
+                                // console.log(buf);
+                                // console.log(entity[buf.data.name]);
+                                ent = entity[buf.data.name];
+                                if (!ent.owner) {
+                                    log("client - " + color("purple", buf.name)
+                                        + " - is setting the state for entity: " + color("cyan", buf.data.name)
+                                        + " that " + color("red", "HAS NO OWNER"), 3, 3);
+                                    return;
                                 }
-                                entity[name] ||= {};
-                                entity[name].client ||= {};
-                                entity[name].client[buf.name] = { port };
-                                // console.log(entity[name].client)
-                            })
-                        })();
 
+                                log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
+                                    + " - state update: " + color("blue", buf.data.state.toString()), 3, 0);
 
-                        (function entity_TWIT() {
-                            entity.forIn((name, value) => {
-                                if (value.owner?.type == "TWIT" && value.owner?.name == buf.name && !(name in buf.data?.entities?.create)) {
-                                    log("client - " + color("purple", buf.name) + " - found orphaned TWIT entity: " +
-                                        color("cyan", name) + " - " + color("yellow", "totally deleting"), 3, 2);
-                                    delete entity[name];
-                                    delete nv.entity[name];
+                                if (ent.owner?.type == "TWIT") { // for TWIT entities
+                                    //  ent = entity[buf.data.name] ?? undefined;
+                                    ent.state = buf.data.state;
+                                    ent.update = time.epochMil;
+                                    ent.stamp = time.stamp;
+                                    nv.entity[buf.data.name].state = buf.data.state;
+                                    nv.entity[buf.data.name].stamp = time.stamp;
+                                    nv.entity[buf.data.name].update = time.epochMil;
+                                    // console.log(ent)
+                                    // console.log(buf )
+                                    ent.client.forIn((name, value) => { // send this sensor to other clients who've registered for it
+                                        if (value.port != port) // only reply if not the owner
+                                            client("state", { name: buf.data.name, state: buf.data.state, owner: ent.owner }, value.port);
+                                    })
+
+                                    if (ent.syncGroup) {
+                                        log("client - " + color("purple", buf.name) + " - entity: " + color("cyan", buf.data.name)
+                                            + " - is a " + color("blue", "Sync Group member "), 3, 0);
+                                        com.syncGroup(buf.data.name, buf.data.state);
+                                    }
+
                                     file.write.nv();
+
+                                } else if (ent.owner.type == "esp") {
+                                    packet = { address: ent.owner.name }
+                                    packet.esp_entity_id = ent.esp_entity_id;
+                                    sendPacket("ESP");
+                                } else if (ent.owner.type.includes("ha")) {
+                                    packet = { address: ent.owner.name }
+                                    if (ent.zha) packet.zha = ent.zha.regID;
+                                    sendPacket("HA");
                                 }
-                            })
-                            buf.data.entities?.create?.forIn((name, value) => {
-                                if (name in entity) log("client - " + color("purple", buf.name) + " - updating " + color("green", "TWIT entity")
-                                    + " in core: " + color("cyan", name), 3, 1);
-                                else log("client - " + color("purple", buf.name) + " - creating " + color("green", "TWIT entity")
-                                    + " in core: " + color("cyan", name), 3, 1);
-                                entity[name] ||= {};
-                                entity[name].client ||= {};
-                                entity[name].client[buf.name] = { port };
-                                entity[name].owner = { type: "TWIT", name: buf.name, port };
-                                nv.entity ||= {};
-                                nv.entity[name] = structuredClone(entity[name]);
-                                delete nv.entity[name].owner.port;
-                                delete nv.entity[name].client;
-                                delete nv.entity[name].syncGroup;
-                                file.write.nv();
-                            })
-                        })();
+                            } catch (error) { console.log("state setting error - buf: ", buf.data, "selected entity: ", ent, " \nerror: ", error) }
+                        } else {
+                            log("client - " + color("purple", buf.name)
+                                + " - is setting the state for entity: " + color("cyan", buf.data.name)
+                                + " that " + color("red", "DOES NOT EXIST"), 3, 3);
+                            return;
+                        }
+                        function sendPacket(type) {
+                            if (packet) {
+                                packet.type = "state";
+                                packet.entity = buf.data.name;
+                                packet.state = buf.data.state;
+                                // console.log(packet)
+                                if (type == "HA") thread.ha.postMessage(packet);
+                                if (type == "ESP") thread.esp[entity[buf.data.name].owner.thread].postMessage(packet);
+                            } else log("client - " + color("purple", buf.name)
+                                + " - is sending invalid " + type + " state update: " + buf.data.name, 3);
+
+                            // console.log(packet)
+                        }
+
+                        break;
+                    case "register":    // incoming registrations
+                        //  log("client - " + color("purple", buf.name) + " - is initiating new registration", 3);
+                        //  console.log(buf)
+                        if (state.client[buf.name]) {
+
+                            (function entity_subscribe() {
+                                log("client - " + color("purple", buf.name) + " - updating registration", 3, 1);
+                                state.client[buf.name].entities?.subscribe?.forIn((name, value) => {
+                                    if (!(name in buf.data?.entities?.subscribe)) {
+                                        log("client - " + color("purple", buf.name) + " - found orphaned entity in core: " +
+                                            color("cyan", name) + " -  deleting", 3, 1);
+                                        //com.deleteReg()
+                                    }
+                                })
+                                // console.log(state.client[buf.name])
+                                state.client[buf.name].entities.subscribe = structuredClone(buf.data?.entities?.subscribe) ?? undefined;
+                                buf.data.entities?.subscribe?.forIn((name, value) => {
+                                    if (name in entity) {
+                                        log("client - " + color("purple", buf.name) + " - is registering entity: " + color("cyan", name), 3, 0);
+                                    } else {
+                                        log("client - " + color("purple", buf.name) + " - is registering an " + color("yellow", "UNKNOWN")
+                                            + " entity: " + color("cyan", name), 3, 2);
+                                        // console.log(entity[name].client)
+                                    }
+                                    entity[name] ||= {};
+                                    entity[name].client ||= {};
+                                    entity[name].client[buf.name] = { port };
+                                    // console.log(entity[name].client)
+                                })
+                            })();
 
 
-                        (function entity_sync() {
-                            // console.log(state.sync)
-                            state.sync?.forIn((name, value) => {
-                                if (buf.name == value.owner) {
-                                    if (!buf.data.entities.sync || !(name in buf.data.entities.sync)) deleteSync();
-                                }
-                                function deleteSync() {
-                                    // console.log(value)
-                                    log("client - " + color("purple", buf.name) + " - found orphaned Sync group: " +
-                                        color("cyan", name) + " - " + color("yellow", "tearing down group"), 3, 2);
-                                    value.members.forEach(element => {
+                            (function entity_TWIT() {
+                                entity.forIn((name, value) => {
+                                    if (value.owner?.type == "TWIT" && value.owner?.name == buf.name && !(name in buf.data?.entities?.create)) {
+                                        log("client - " + color("purple", buf.name) + " - found orphaned TWIT entity: " +
+                                            color("cyan", name) + " - " + color("yellow", "totally deleting"), 3, 2);
+                                        delete entity[name];
+                                        delete nv.entity[name];
+                                        file.write.nv();
+                                    }
+                                })
+                                buf.data.entities?.create?.forIn((name, value) => {
+                                    if (name in entity) log("client - " + color("purple", buf.name) + " - updating " + color("green", "TWIT entity")
+                                        + " in core: " + color("cyan", name), 3, 1);
+                                    else log("client - " + color("purple", buf.name) + " - creating " + color("green", "TWIT entity")
+                                        + " in core: " + color("cyan", name), 3, 1);
+                                    entity[name] ||= {};
+                                    entity[name].client ||= {};
+                                    entity[name].client[buf.name] = { port };
+                                    entity[name].owner = { type: "TWIT", name: buf.name, port };
+                                    nv.entity ||= {};
+                                    nv.entity[name] = structuredClone(entity[name]);
+                                    delete nv.entity[name].owner.port;
+                                    delete nv.entity[name].client;
+                                    delete nv.entity[name].syncGroup;
+                                    file.write.nv();
+                                })
+                            })();
+
+
+                            (function entity_sync() {
+                                // console.log(state.sync)
+                                state.sync?.forIn((name, value) => {
+                                    if (buf.name == value.owner) {
+                                        if (!buf.data.entities.sync || !(name in buf.data.entities.sync)) deleteSync();
+                                    }
+                                    function deleteSync() {
+                                        // console.log(value)
+                                        log("client - " + color("purple", buf.name) + " - found orphaned Sync group: " +
+                                            color("cyan", name) + " - " + color("yellow", "tearing down group"), 3, 2);
+                                        value.members.forEach(element => {
+                                            if (element in entity) {
+                                                log("client - " + color("purple", buf.name) + " - removing orphaned Sync group: " +
+                                                    color("cyan", name) + "from member: " + color("cyan", element), 3, 0);
+                                                delete entity[element].syncGroup;
+                                            }
+                                        });
+                                        log("client - " + color("purple", buf.name) + " - removing orphaned Sync group: " +
+                                            color("cyan", name), 3, 1);
+                                        delete state.sync[name];
+                                    }
+                                })
+                                buf.data.entities?.sync?.forIn((name, value) => {
+                                    if (name in state.sync)
+                                        log("client - " + color("purple", buf.name) + " - updating " + color("blue", "Sync Group: ")
+                                            + color("cyan", name), 3, 1);
+                                    else {
+                                        log("client - " + color("purple", buf.name) + " - creating " + color("blue", "Sync Group: ")
+                                            + color("cyan", name), 3, 1);
+                                    }
+                                    state.sync[name] = { owner: buf.name, members: [] };
+                                    value.forEach(element => {
+                                        state.sync[name].members.push(element);
                                         if (element in entity) {
-                                            log("client - " + color("purple", buf.name) + " - removing orphaned Sync group: " +
-                                                color("cyan", name) + "from member: " + color("cyan", element), 3, 0);
-                                            delete entity[element].syncGroup;
+                                            log("client - " + color("purple", buf.name) + color("blue", " - Sync Group: ") + color("cyan", name)
+                                                + " - adding entity: " + color("cyan", element), 3, 1);
+                                            entity[element].syncGroup = name;
+                                            //  console.log("creating sensor here: ", element, "\n\n", entity[element])
+                                        } else {
+                                            log("client - " + color("purple", buf.name) + color("blue", " - Sync Group: ") + color("cyan", name)
+                                                + " - UNKNOWN entity: " + color("cyan", element), 3, 3);
                                         }
                                     });
-                                    log("client - " + color("purple", buf.name) + " - removing orphaned Sync group: " +
-                                        color("cyan", name), 3, 1);
-                                    delete state.sync[name];
-                                }
-                            })
-                            buf.data.entities?.sync?.forIn((name, value) => {
-                                if (name in state.sync)
-                                    log("client - " + color("purple", buf.name) + " - updating " + color("blue", "Sync Group: ")
-                                        + color("cyan", name), 3, 1);
-                                else {
-                                    log("client - " + color("purple", buf.name) + " - creating " + color("blue", "Sync Group: ")
-                                        + color("cyan", name), 3, 1);
-                                }
-                                state.sync[name] = { owner: buf.name, members: [] };
-                                value.forEach(element => {
-                                    state.sync[name].members.push(element);
-                                    if (element in entity) {
-                                        log("client - " + color("purple", buf.name) + color("blue", " - Sync Group: ") + color("cyan", name)
-                                            + " - adding entity: " + color("cyan", element), 3, 1);
-                                        entity[element].syncGroup = name;
-                                        //  console.log("creating sensor here: ", element, "\n\n", entity[element])
-                                    } else {
-                                        log("client - " + color("purple", buf.name) + color("blue", " - Sync Group: ") + color("cyan", name)
-                                            + " - UNKNOWN entity: " + color("cyan", element), 3, 3);
-                                    }
-                                });
-                            })
-                        })();
-                    }
-
-
-                    if (buf.data.telegram) {
-                        log("client - " + color("purple", buf.name) + " - is registering as telegram agent", 1);
-                        state.client[buf.name].telegram = true;
-                        // state.telegram.port = info.port;
-                    }
-                    client("proceed", null, port);
-                    break;
-                case "fetch":
-                    log("client - " + color("purple", buf.name) + " - requesting fetch - port: " + port, 3);
-                    // console.log("time now: " + time.epoch + " -  last fetch: " + (time.epoch - state.fetchLast))
-                    if ((time.epoch - state.fetchLast) < 60) fetchReply()
-                    else if (cfg.homeAssistant?.length > 0) {
-                        thread.ha.postMessage({ type: "fetch", name: buf.name, port });
-                        //  state.fetchLast = time.epoch;
-                    } else fetchReply();
-                    function fetchReply() {
-                        for (const name in entity) {
-                            if (buf.name in entity[name].client) {
-                                if (entity[name].state != null) {
-                                    if (typeof entity[name].state === "string" && entity[name].state.includes("remote_button_")) continue
-                                    if (name.includes("input_button.")) continue
-                                    log("cached entities fetch reply: " + name, 1, 0);
-                                    client("state", { name, state: entity[name].state, owner: entity[name].owner }, port);
-                                }
-                            }
-                        }
-                        log("client - " + color("purple", buf.name) + " - replying with cached fetch - port: " + port, 3);
-                        setTimeout(() => { client("fetchReply", null, port); }, 500);
-                    }
-                    break;
-                case "log":         // incoming log messages from UDP clients
-                    log(buf.data.message, buf.data.mod, buf.data.level, port);
-                    break;
-                case "telegram":
-                    console.log("receiving telegram data: ", buf);
-                    switch (buf.data.class) {
-                        case "send":
-                            bot.sendMessage(buf.data.id, buf.data.text)
-                                .catch(error => {
-                                    log("telegram sending error");
-                                    console.log(error)
                                 })
-                            break;
-                    }
-                    break;
-                default:            // default to heartbeat
-                    break;
-            }
-            function prep() {
-                try { buf = JSON.parse(data); }
-                catch (error) { log("A UDP client (" + info.address + ") is sending invalid JSON data: " + error, 3, 3); return; }
-                // console.log(buf)
-                try {
-                    if (buf.type != "diag") {
-                        if (!(buf.name in state.client)) {
-                            if (buf.type == "register") {
-                                log("client - " + color("purple", buf.name) + " - creating new registration", 3);
-                                state.client[buf.name] = { address: info.address, port: info.port, entities: { subscribe: {}, create: {} } };
-                            } else if (buf.type != "log") {
-                                log("client - " + color("purple", buf.name) + " - is unrecognized - requesting ReRegistrion", 3);
-                                // console.log("buf type: " + buf.type)
-                                state.client[buf.name] = { address: info.address, port: info.port, entities: { subscribe: {}, create: {} } };
-                                client("reRegister", null, port);
+                            })();
+                        }
+
+
+                        if (buf.data.telegram) {
+                            log("client - " + color("purple", buf.name) + " - is registering as telegram agent", 1);
+                            state.client[buf.name].telegram = true;
+                            // state.telegram.port = info.port;
+                        }
+                        client("proceed", null, port);
+                        break;
+                    case "fetch":
+                        log("client - " + color("purple", buf.name) + " - requesting fetch - port: " + port, 3);
+                        // console.log("time now: " + time.epoch + " -  last fetch: " + (time.epoch - state.fetchLast))
+                        if ((time.epoch - state.fetchLast) < 60) fetchReply()
+                        else if (cfg.homeAssistant?.length > 0) {
+                            thread.ha.postMessage({ type: "fetch", name: buf.name, port });
+                            //  state.fetchLast = time.epoch;
+                        } else fetchReply();
+                        function fetchReply() {
+                            for (const name in entity) {
+                                if (buf.name in entity[name].client) {
+                                    if (entity[name].state != null) {
+                                        if (typeof entity[name].state === "string" && entity[name].state.includes("remote_button_")) continue
+                                        if (name.includes("input_button.")) continue
+                                        log("cached entities fetch reply: " + name, 1, 0);
+                                        client("state", { name, state: entity[name].state, owner: entity[name].owner }, port);
+                                    }
+                                }
                             }
-                        } else if (buf.type == "register") {
-                            log("client - " + color("purple", buf.name) + " - is Re-Registring", 3);
-                        } else if (state.client[buf.name].port != info.port) {
-                            log("client - " + color("purple", buf.name) + " - is unrecognized - updating", 3);
-                            state.client[buf.name] = { address: info.address, port: info.port, entities: [] };
+                            log("client - " + color("purple", buf.name) + " - replying with cached fetch - port: " + port, 3);
+                            setTimeout(() => { client("fetchReply", null, port); }, 500);
                         }
-                        if (state.client[buf.name]) state.client[buf.name].update = time.epoch;
-                        if (state.client[buf.name]) state.client[buf.name].stamp = time.stamp;
+                        break;
+                    case "log":         // incoming log messages from UDP clients
+                        log(buf.data.message, buf.data.mod, buf.data.level, port);
+                        break;
+                    case "telegram":
+                        console.log("receiving telegram data: ", buf);
+                        switch (buf.data.class) {
+                            case "send":
+                                bot.sendMessage(buf.data.id, buf.data.text)
+                                    .catch(error => {
+                                        log("telegram sending error");
+                                        console.log(error)
+                                    })
+                                break;
+                        }
+                        break;
+                    default:            // default to heartbeat
+                        break;
+                }
+                function prep() {
+                    try { buf = JSON.parse(data); }
+                    catch (error) { log("A UDP client (" + info.address + ") is sending invalid JSON data: " + error, 3, 3); return; }
+                    // console.log(buf)
+                    try {
+                        if (buf.type != "diag") {
+                            if (!(buf.name in state.client)) {
+                                if (buf.type == "register") {
+                                    log("client - " + color("purple", buf.name) + " - creating new registration", 3);
+                                    state.client[buf.name] = { address: info.address, port: info.port, entities: { subscribe: {}, create: {} } };
+                                } else if (buf.type != "log") {
+                                    log("client - " + color("purple", buf.name) + " - is unrecognized - requesting ReRegistrion", 3);
+                                    // console.log("buf type: " + buf.type)
+                                    state.client[buf.name] = { address: info.address, port: info.port, entities: { subscribe: {}, create: {} } };
+                                    client("reRegister", null, port);
+                                }
+                            } else if (buf.type == "register") {
+                                log("client - " + color("purple", buf.name) + " - is Re-Registring", 3);
+                            } else if (state.client[buf.name].port != info.port) {
+                                log("client - " + color("purple", buf.name) + " - is unrecognized - updating", 3);
+                                state.client[buf.name] = { address: info.address, port: info.port, entities: [] };
+                            }
+                            if (state.client[buf.name]) state.client[buf.name].update = time.epoch;
+                            if (state.client[buf.name]) state.client[buf.name].stamp = time.stamp;
+                        }
+                    } catch (error) { log("A UDP client (" + info.address + ") is sending invalid data: " + error, 3, 3); return; }
+                }
+            },
+            syncGroup: function (entityName, entityState) {
+                ent = entity[entityName];
+                // console.log(ent)
+                // console.log(state.sync)
+
+                if ((time.epochMil - state.sync[ent.syncGroup].update) > 200 || !state.sync[ent.syncGroup].update)
+                    state.sync[ent.syncGroup].members.forEach(element => {
+                        if (element in entity && element != entityName) {
+                            //  console.log("incoming sync entity: ", entityName, "  -  sensing to: ", element)
+                            if (entity[element].owner.type == "TWIT") {
+                                log("entity: " + color("cyan", entityName)
+                                    + " - sending to TWIT - " + color("blue", "Sync Group member: ") + element, 3, 0);
+                                // console.log("sync updating state of TWIT partner")
+                                //   console.log(entity[element])
+                                client("state", { name: element, state: entityState, }, entity[element].owner.port);
+                            }
+                            if (entity[element].owner.type == "ha") {
+                                log("entity: " + color("cyan", entityName)
+                                    + " - sending to HA - " + color("blue", "Sync Group member: ") + element, 3, 0);
+                                // console.log("sync updating state of HA partner")
+                                //   console.log(entity[element])
+                                thread.ha.postMessage({
+                                    type: "state",
+                                    entity: element,
+                                    address: entity[element].owner.name,
+                                    state: entityState
+                                });
+                            }
+                            if (entity[element].owner.type == "esp") {
+                                log("entity: " + color("cyan", entityName)
+                                    + " - sending to ESP - " + color("blue", "Sync Group member: ") + element, 3, 0);
+                                //console.log("sync updating state of ESP partner")
+                                //  console.log(entity[element])
+                                thread.esp[entity[element].owner.thread].postMessage({
+                                    type: "state",
+                                    entity: element,
+                                    address: entity[element].owner.name,
+                                    state: entityState
+                                });
+                            }
+                        }
+                        state.sync[ent.syncGroup].update = time.epochMil
+                    });
+            },
+            watchDog: function () {
+                for (const clientName in state.client) {
+                    if (state.client[clientName].heartbeat && time.epoch - state.client[clientName].update >= 5) {
+                        log("client - " + color("purple", clientName) + " - has crashed!!", 3, cfg.logging.clientCrash ? 3 : 0);
+                        com.deleteReg();
+                        delete state.client[clientName];
+                    } else if (time.epoch - state.client[clientName].update >= 10) {
+                        log("client - " + color("purple", clientName) + " - is a zombie, killing client", 3, cfg.logging.clientCrash ? 3 : 0);
+                        com.deleteReg()
+                        delete state.client[clientName];
                     }
-                } catch (error) { log("A UDP client (" + info.address + ") is sending invalid data: " + error, 3, 3); return; }
+                }
+            },
+            deleteReg: function (clientName) {
+                entity.forIn((entityName, value) => {
+                    if (clientName in value.client) {
+                        if (value.owner?.type == "TWIT" && value.owner.name == clientName) {
+                            log("client - " + color("purple", clientName) + " - TWIT entity: " + entityName
+                                + " - deleting client/port but leaving active on core", 3, 0);
+                            delete value.client[clientName];
+                        } else {
+                            log("client - " + color("purple", clientName) + " - clearing client registration for entity: "
+                                + entityName, 3, 0);
+                            delete value.client[clientName];
+                        }
+                    }
+                })
             }
         },
-        syncGroup: function (entityName, entityState) {
-            ent = entity[entityName];
-            // console.log(ent)
-            // console.log(state.sync)
-
-            if ((time.epochMil - state.sync[ent.syncGroup].update) > 200 || !state.sync[ent.syncGroup].update)
-                state.sync[ent.syncGroup].members.forEach(element => {
-                    if (element in entity && element != entityName) {
-                        //  console.log("incoming sync entity: ", entityName, "  -  sensing to: ", element)
-                        if (entity[element].owner.type == "TWIT") {
-                            log("entity: " + color("cyan", entityName)
-                                + " - sending to TWIT - " + color("blue", "Sync Group member: ") + element, 3, 0);
-                            // console.log("sync updating state of TWIT partner")
-                            //   console.log(entity[element])
-                            client("state", { name: element, state: entityState, }, entity[element].owner.port);
-                        }
-                        if (entity[element].owner.type == "ha") {
-                            log("entity: " + color("cyan", entityName)
-                                + " - sending to HA - " + color("blue", "Sync Group member: ") + element, 3, 0);
-                            // console.log("sync updating state of HA partner")
-                            //   console.log(entity[element])
-                            thread.ha.postMessage({
-                                type: "state",
-                                entity: element,
-                                address: entity[element].owner.name,
-                                state: entityState
-                            });
-                        }
-                        if (entity[element].owner.type == "esp") {
-                            log("entity: " + color("cyan", entityName)
-                                + " - sending to ESP - " + color("blue", "Sync Group member: ") + element, 3, 0);
-                            //console.log("sync updating state of ESP partner")
-                            //  console.log(entity[element])
-                            thread.esp[entity[element].owner.thread].postMessage({
-                                type: "state",
-                                entity: element,
-                                address: entity[element].owner.name,
-                                state: entityState
-                            });
-                        }
-                    }
-                    state.sync[ent.syncGroup].update = time.epochMil
+        services = {
+            telegram: function () {
+                /*
+                (() => {
+                    try {
+                        const Module = require('module');
+                        const originalRequire = Module.prototype.require;
+    
+                        Module.prototype.require = function (id) {
+                            const result = originalRequire.apply(this, arguments);
+                            if (id === 'request-promise-core') {
+                                try {
+                                    const origError = result.RequestError;
+                                    result.RequestError = function (...args) {
+                                        const err = new origError(...args);
+                                        err.silent = true;
+                                        return err;
+                                    };
+                                } catch (e) { }
+                            }
+                            return result;
+                        };
+                    } catch (e) { }
+                })();
+                
+                const rp = require('request-promise-core');
+                const origError = rp.RequestError;
+    
+                rp.RequestError = function (...args) {
+                    const err = new origError(...args);
+                    // prevent auto console.error spam
+                    err.silent = true;
+                    return err;
+                };
+                process.on('unhandledRejection', (reason, promise) => {
+                    const msg = String(reason?.stack || reason);
+                    const firstLine = msg.split('\n')[0];
+                    log("GLOBAL unhandledRejection: " + firstLine, 3);
                 });
-        },
-        watchDog: function () {
-            for (const clientName in state.client) {
-                if (state.client[clientName].heartbeat && time.epoch - state.client[clientName].update >= 5) {
-                    log("client - " + color("purple", clientName) + " - has crashed!!", 3, cfg.logging.clientCrash ? 3 : 0);
-                    com.deleteReg();
-                    delete state.client[clientName];
-                } else if (time.epoch - state.client[clientName].update >= 10) {
-                    log("client - " + color("purple", clientName) + " - is a zombie, killing client", 3, cfg.logging.clientCrash ? 3 : 0);
-                    com.deleteReg()
-                    delete state.client[clientName];
-                }
-            }
-        },
-        deleteReg: function (clientName) {
-            entity.forIn((entityName, value) => {
-                if (clientName in value.client) {
-                    if (value.owner?.type == "TWIT" && value.owner.name == clientName) {
-                        log("client - " + color("purple", clientName) + " - TWIT entity: " + entityName
-                            + " - deleting client/port but leaving active on core", 3, 0);
-                        delete value.client[clientName];
+                */
+                // --- TELEGRAM SETUP ---
+                if (cfg.telegram?.enable) {
+                    const TelegramBot = require('node-telegram-bot-api');
+
+                    if (!cfg.telegram.token || cfg.telegram.token.length < 40) {
+                        log(color("red", "Telegram API Token is invalid"), 3);
                     } else {
-                        log("client - " + color("purple", clientName) + " - clearing client registration for entity: "
-                            + entityName, 3, 0);
-                        delete value.client[clientName];
+                        log("starting Telegram service...");
+
+                        bot = new TelegramBot(cfg.telegram.token, { polling: true });
+
+                        // Catch polling-related errors
+                        bot.on('polling_error', (error) => {
+                            const msg = String(error?.stack || error);
+                            log("Telegram polling_error: " + msg.split('\n')[0], 3);
+                        });
+
+                        // Catch webhook-related errors
+                        bot.on('webhook_error', (error) => {
+                            const msg = String(error?.stack || error);
+                            log("Telegram webhook_error: " + msg.split('\n')[0], 3);
+                        });
+
+                        // Just in case: catch any 'error' event from the underlying stream
+                        bot.on('error', (error) => {
+                            const msg = String(error?.stack || error);
+                            log("Telegram general error: " + msg.split('\n')[0], 3);
+                        });
+
+                        // --- Message Handlers ---
+                        bot.on('message', (msg) => {
+                            log("telegram - incoming message: " + msg.text, 3);
+                            if (logs.tg[logs.tgStep] === undefined) logs.tg.push(msg);
+                            else logs.tg[logs.tgStep] = msg;
+                            logs.tgStep = (logs.tgStep + 1) % 101;
+                            state.client.forIn((name, value) => {
+                                console.log(state.client[name])
+                                if (state.client[name].telegram)
+                                    udp.send(JSON.stringify({ type: "telegram", class: "agent", data: msg }), state.client[name].port);
+                            })
+                        });
+
+                        bot.on('callback_query', (msg) => {
+                            state.client.forIn((name, value) => {
+                                console.log(name)
+                                if (name.telegram)
+                                    udp.send(JSON.stringify({ type: "telegram", class: "callback", data: msg }), state.client[name].port);
+                            })
+                        });
+
+                        state.telegram.started = true;
                     }
                 }
-            })
-        }
-    }
-    let services = {
-        telegram: function () {
-            /*
-            (() => {
-                try {
-                    const Module = require('module');
-                    const originalRequire = Module.prototype.require;
 
-                    Module.prototype.require = function (id) {
-                        const result = originalRequire.apply(this, arguments);
-                        if (id === 'request-promise-core') {
-                            try {
-                                const origError = result.RequestError;
-                                result.RequestError = function (...args) {
-                                    const err = new origError(...args);
-                                    err.silent = true;
-                                    return err;
-                                };
-                            } catch (e) { }
+            },
+            webserver: function () {
+                if (cfg.webDiag) {
+                    // express.get("/log", function (request, response) { response.send(logs.sys); });
+                    // express.get("/tg", function (request, response) { response.send(logs.tg); });
+                    // express.get("/ws", function (request, response) { response.send(logs.ws); });
+                    // express.get("/nv", function (request, response) { response.send(nv); });
+                    // express.get("/state", function (request, response) { response.send(state); });
+                    // express.get("/thread", function (request, response) { response.send(thread); });
+                    // express.get("/cfg", function (request, response) { response.send(cfg); });
+                    // express.get("/perf", function (request, response) { response.send(state.perf); });
+                    // express.get("/udp", function (request, response) { response.send(state.client); });
+                    express.get("/entity", function (request, response) {
+                        let ha = {}, zha = {}, esp = {}, twit = {}, telemetry = {}, unknown = {};
+                        if ((time.epoch - state.fetchLast) < 10) fetchReply();
+                        else if (cfg.homeAssistant?.length > 0) {
+                            thread.ha.postMessage({ type: "fetch" });
+                            setTimeout(() => { fetchReply(); }, 1e3);
                         }
-                        return result;
-                    };
-                } catch (e) { }
-            })();
-            
-            const rp = require('request-promise-core');
-            const origError = rp.RequestError;
+                        function fetchReply() {
+                            entity.forIn((name, value) => {
+                                const baseObj = {
+                                    state: value.state,
+                                    name: value.owner?.name,
+                                    deviceName: value.zha?.deviceName,
+                                    Updated: value.stamp,
+                                    clients: value.client,
+                                    syncGroup: value.syncGroup,
+                                    syncMembers: state.sync[value.syncGroup]?.members,
+                                    owner: value.owner
 
-            rp.RequestError = function (...args) {
-                const err = new origError(...args);
-                // prevent auto console.error spam
-                err.silent = true;
-                return err;
-            };
-            process.on('unhandledRejection', (reason, promise) => {
-                const msg = String(reason?.stack || reason);
-                const firstLine = msg.split('\n')[0];
-                log("GLOBAL unhandledRejection: " + firstLine, 3);
-            });
-            */
-            // --- TELEGRAM SETUP ---
-            if (cfg.telegram?.enable) {
-                const TelegramBot = require('node-telegram-bot-api');
-
-                if (!cfg.telegram.token || cfg.telegram.token.length < 40) {
-                    log(color("red", "Telegram API Token is invalid"), 3);
-                } else {
-                    log("starting Telegram service...");
-
-                    bot = new TelegramBot(cfg.telegram.token, { polling: true });
-
-                    // Catch polling-related errors
-                    bot.on('polling_error', (error) => {
-                        const msg = String(error?.stack || error);
-                        log("Telegram polling_error: " + msg.split('\n')[0], 3);
+                                };
+                                let targetCollection;
+                                let uniqueProperties = {};
+                                switch (value.owner?.type) {
+                                    case "ha_zha": targetCollection = zha; break;
+                                    case "ha": targetCollection = ha; break;
+                                    case "esp": targetCollection = esp; break;
+                                    case "telemetry": targetCollection = telemetry; break;
+                                    case "TWIT": targetCollection = twit; break;
+                                    default: targetCollection = unknown; break;
+                                }
+                                targetCollection[name] = Object.assign(baseObj, uniqueProperties);
+                            });
+                            response.send({ unknown, twit, telemetry, esp, zha, ha });
+                        }
                     });
-
-                    // Catch webhook-related errors
-                    bot.on('webhook_error', (error) => {
-                        const msg = String(error?.stack || error);
-                        log("Telegram webhook_error: " + msg.split('\n')[0], 3);
+                    express.get("/client/:name", async function (request, response) {
+                        const clientName = request.params.name;  // Extract client name from the URL
+                        const client = state.client[clientName] ?? undefined  // Find the client by name
+                        // console.log(state.client[clientName])
+                        if (client == undefined) return response.status(404).send({ error: `Client with name "${clientName}" not found` });
+                        try {
+                            const result = await sendDiagCommand(client, 1000);  // Timeout of 1000ms
+                            if (result.error) return response.status(408).send(result);
+                            response.send(result);
+                        } catch (error) {
+                            response.status(500).send({ error: `Error collecting diagnostic data: ${error.message}` });
+                        }
                     });
+                    function sendDiagCommand(client, timeout = 1000) {
+                        return new Promise((resolve) => {
+                            udp.send(JSON.stringify({ type: "diag" }), client.port);
+                            const timer = setTimeout(() => {
+                                resolve({ name: client.name, ip: client.ip, error: `Timeout for client: ${client.name}` });
+                            }, timeout);
+                            const onDiagResponse = (msg) => {
+                                //  console.log(msg)
+                                let buf = JSON.parse(msg);
+                                // console.log(buf)
+                                clearTimeout(timer); // Clear the timeout if response received
+                                resolve({
+                                    client: buf.clientName,
+                                    syncGroup: buf.syncGroup,
+                                    state: buf.state,
+                                    config: buf.config,
+                                    entityTemp: buf.entityTemp,
+                                    entity: buf.entity,
+                                    owner: buf.owner,
+                                    nv: buf.nv
+                                });
 
-                    // Just in case: catch any 'error' event from the underlying stream
-                    bot.on('error', (error) => {
-                        const msg = String(error?.stack || error);
-                        log("Telegram general error: " + msg.split('\n')[0], 3);
-                    });
-
-                    // --- Message Handlers ---
-                    bot.on('message', (msg) => {
-                        log("telegram - incoming message: " + msg.text, 3);
-                        if (logs.tg[logs.tgStep] === undefined) logs.tg.push(msg);
-                        else logs.tg[logs.tgStep] = msg;
-                        logs.tgStep = (logs.tgStep + 1) % 101;
-                        state.client.forIn((name, value) => {
-                            console.log(state.client[name])
-                            if (state.client[name].telegram)
-                                udp.send(JSON.stringify({ type: "telegram", class: "agent", data: msg }), state.client[name].port);
-                        })
-                    });
-
-                    bot.on('callback_query', (msg) => {
-                        state.client.forIn((name, value) => {
-                            console.log(name)
-                            if (name.telegram)
-                                udp.send(JSON.stringify({ type: "telegram", class: "callback", data: msg }), state.client[name].port);
-                        })
-                    });
-
-                    state.telegram.started = true;
-                }
-            }
-
-        },
-        webserver: function () {
-            if (cfg.webDiag) {
-                // express.get("/log", function (request, response) { response.send(logs.sys); });
-                // express.get("/tg", function (request, response) { response.send(logs.tg); });
-                // express.get("/ws", function (request, response) { response.send(logs.ws); });
-                // express.get("/nv", function (request, response) { response.send(nv); });
-                // express.get("/state", function (request, response) { response.send(state); });
-                // express.get("/thread", function (request, response) { response.send(thread); });
-                // express.get("/cfg", function (request, response) { response.send(cfg); });
-                // express.get("/perf", function (request, response) { response.send(state.perf); });
-                // express.get("/udp", function (request, response) { response.send(state.client); });
-                express.get("/entity", function (request, response) {
-                    let ha = {}, zha = {}, esp = {}, twit = {}, telemetry = {}, unknown = {};
-                    if ((time.epoch - state.fetchLast) < 10) fetchReply();
-                    else if (cfg.homeAssistant?.length > 0) {
-                        thread.ha.postMessage({ type: "fetch" });
-                        setTimeout(() => { fetchReply(); }, 1e3);
-                    }
-                    function fetchReply() {
-                        entity.forIn((name, value) => {
-                            const baseObj = {
-                                state: value.state,
-                                name: value.owner?.name,
-                                deviceName: value.zha?.deviceName,
-                                Updated: value.stamp,
-                                clients: value.client,
-                                syncGroup: value.syncGroup,
-                                syncMembers: state.sync[value.syncGroup]?.members,
-                                owner: value.owner
 
                             };
-                            let targetCollection;
-                            let uniqueProperties = {};
-                            switch (value.owner?.type) {
-                                case "ha_zha": targetCollection = zha; break;
-                                case "ha": targetCollection = ha; break;
-                                case "esp": targetCollection = esp; break;
-                                case "telemetry": targetCollection = telemetry; break;
-                                case "TWIT": targetCollection = twit; break;
-                                default: targetCollection = unknown; break;
-                            }
-                            targetCollection[name] = Object.assign(baseObj, uniqueProperties);
+                            udp.once("message", onDiagResponse); // Use `once` to only listen for one response per client
                         });
-                        response.send({ unknown, twit, telemetry, esp, zha, ha });
                     }
-                });
-                express.get("/client/:name", async function (request, response) {
-                    const clientName = request.params.name;  // Extract client name from the URL
-                    const client = state.client[clientName] ?? undefined  // Find the client by name
-                    // console.log(state.client[clientName])
-                    if (client == undefined) return response.status(404).send({ error: `Client with name "${clientName}" not found` });
-                    try {
-                        const result = await sendDiagCommand(client, 1000);  // Timeout of 1000ms
-                        if (result.error) return response.status(408).send(result);
-                        response.send(result);
-                    } catch (error) {
-                        response.status(500).send({ error: `Error collecting diagnostic data: ${error.message}` });
+                    serverWeb = express.listen(cfg.webDiagPort, function () { log("diag web server starting on port " + cfg.webDiagPort, 0); });
+                }
+            }
+        },
+        workerThreads = {
+            ha: function () {
+                newWorker(true);
+                function newWorker(boot) {
+                    if (boot) log("initializing HA worker thread");
+                    else log("re-initializing crashed HA thread: ");
+                    thread.ha = (new Worker(__filename, { workerData: { class: "ha" } }));
+                    thread.ha.on('message', (data) => ipc(data));
+                    thread.ha.on('error', (error) => {
+                        log("HA worker: crashed", 0, 3);
+                        console.log(error);
+                        //  newWorker();
+                    });
+                    //thread.ha.on('exit', (code) => { log("ESP worker: " + x + " exited", 0, 3); newWorker(x, obj); });
+                    // log("connecting to Home Assistant: " + color("cyan", server.address), 1);
+                    thread.ha.postMessage({ type: "config", cfg: cfg.homeAssistant });
+                }
+            },
+            esp: function () {
+                threadAssignments = {};              // threadAssignments[threadID] = { [name]: cfg, ... }
+                const MAX_PER_THREAD = 10;
+                const WORKER_SCRIPT = __filename;    // assumes worker code (case "esp") lives in same file
+
+                function distributeESPDevices(devicesObj) {
+                    const devices = devicesObj || {};
+                    const deviceNames = Object.keys(devices);
+                    const deviceCount = deviceNames.length;
+                    const threadCount = Math.max(1, Math.ceil(deviceCount / cfg.esp.max_devices_per_thread));
+
+                    // create empty assignment objects and workers
+                    for (let tid = 0; tid < threadCount; tid++) {
+                        threadAssignments[tid] = {}; // <-- now object, not array
+                        newWorkerThread(tid, true);
                     }
-                });
-                function sendDiagCommand(client, timeout = 1000) {
-                    return new Promise((resolve) => {
-                        udp.send(JSON.stringify({ type: "diag" }), client.port);
-                        const timer = setTimeout(() => {
-                            resolve({ name: client.name, ip: client.ip, error: `Timeout for client: ${client.name}` });
-                        }, timeout);
-                        const onDiagResponse = (msg) => {
-                            //  console.log(msg)
-                            let buf = JSON.parse(msg);
-                            // console.log(buf)
-                            clearTimeout(timer); // Clear the timeout if response received
-                            resolve({
-                                client: buf.clientName,
-                                syncGroup: buf.syncGroup,
-                                state: buf.state,
-                                config: buf.config,
-                                entityTemp: buf.entityTemp,
-                                entity: buf.entity,
-                                owner: buf.owner,
-                                nv: buf.nv
-                            });
 
+                    // assign devices to threads and send initial config
+                    deviceNames.forEach((name, idx) => {
+                        const config = devices[name];
+                        if (!cfg) return;
+                        config.name = name;
 
-                        };
-                        udp.once("message", onDiagResponse); // Use `once` to only listen for one response per client
+                        const tid = Math.floor(idx / cfg.esp.max_devices_per_thread);
+                        threadAssignments[tid][name] = config; // store by name key
+
+                        if (!thread.esp[tid]) newWorkerThread(tid, true);
+
+                        thread.esp[tid].postMessage({ type: "config", esp: config, threadID: tid });
                     });
                 }
-                serverWeb = express.listen(cfg.webDiagPort, function () { log("diag web server starting on port " + cfg.webDiagPort, 0); });
-            }
-        }
-    }
+
+                // USAGE:
+                distributeESPDevices(cfg.esp.devices);
+                // console.log(threadAssignments)
+
+                function newWorkerThread(threadID, boot = true) {
+                    if (boot) log("initializing ESP worker thread: " + threadID, 1);
+                    else log("re-initializing crashed ESP worker thread: " + threadID, 0);
+
+                    const w = new Worker(WORKER_SCRIPT, { workerData: { class: "esp", threadID } });
+                    thread.esp[threadID] = w;
+
+                    w.on('message', (data) => {
+                        try { ipc(data); } catch (e) { console.error("ipc error:", e); }
+                    });
+
+                    w.on('error', (err) => {
+                        log("ESP worker thread " + threadID + " error: " + String(err), 3);
+                    });
+
+                    w.on('exit', (code) => {
+                        log("ESP worker thread " + threadID + " exited with code " + code, 2);
+                        setTimeout(() => {
+                            newWorkerThread(threadID, false);
+                            const assigned = threadAssignments[threadID] || {};
+                            for (const name in assigned) {
+                                const cfg = assigned[name];
+                                try {
+                                    if (thread.esp[threadID])
+                                        thread.esp[threadID].postMessage({ type: "config", esp: cfg, threadID });
+                                } catch (e) {
+                                    log(`Failed to re-post config ${name} to restarted thread ${threadID}: ${e}`, 3);
+                                }
+                            }
+                        }, 2000);
+                    });
+
+                    return w;
+                }
+            },
+            espAdd: function (cfg, name) {
+                if (!name) {
+                    log("espAdd: missing device name", 3);
+                    return;
+                }
+
+                const MAX_PER_THREAD = cfg.esp?.max_devices_per_thread || 10;
+                let targetThreadID = null;
+
+                // Find a thread with available space
+                for (const tid in threadAssignments) {
+                    const threadObj = threadAssignments[tid];
+                    if (!threadObj) continue;
+                    const currentCount = Object.keys(threadObj).length;
+                    if (currentCount < MAX_PER_THREAD) {
+                        targetThreadID = Number(tid);
+                        break;
+                    }
+                }
+
+                // If none found, create a new thread
+                if (targetThreadID === null) {
+                    targetThreadID = Object.keys(threadAssignments).length;
+                    threadAssignments[targetThreadID] = {};
+                    newWorkerThread(targetThreadID, true);
+                    log(`espAdd: created new worker thread ${targetThreadID}`, 1);
+                }
+
+                // Assign the device
+                const threadObj = threadAssignments[targetThreadID];
+                cfg.name = name;
+                threadObj[name] = cfg;
+
+                // Ensure the thread exists
+                if (!thread.esp[targetThreadID]) {
+                    newWorkerThread(targetThreadID, true);
+                }
+
+                // Send configuration to worker
+                try {
+                    thread.esp[targetThreadID].postMessage({
+                        type: "config",
+                        esp: cfg,
+                        threadID: targetThreadID
+                    });
+                    log(`espAdd: added '${name}' to thread ${targetThreadID}`, 1);
+                } catch (e) {
+                    log(`espAdd: failed to send config for '${name}' to thread ${targetThreadID}: ${e}`, 3);
+                }
+            },
+            espRemove: function (cfgName) {
+                // find which thread has this device
+                let foundThreadID = null;
+                for (const tid in threadAssignments) {
+                    if (threadAssignments[tid] && threadAssignments[tid][cfgName]) {
+                        foundThreadID = tid;
+                        break;
+                    }
+                }
+
+                if (foundThreadID === null) {
+                    log("espRemove: device not found in any thread: " + cfgName, 2);
+                    return;
+                }
+
+                // tell the worker to close the device
+                if (thread.esp[foundThreadID]) {
+                    thread.esp[foundThreadID].postMessage({
+                        type: "close",
+                        esp: { name: cfgName },
+                        threadID: Number(foundThreadID)
+                    });
+                }
+
+                // remove from threadAssignments
+                delete threadAssignments[foundThreadID][cfgName];
+
+                log(`Removed ESP device '${cfgName}' from thread ${foundThreadID}`, 1);
+            },
+        };
     function ipc(data) {      // Incoming inter process communication 
         // console.log(data.type)
         switch (data.type) {
@@ -775,175 +945,6 @@ if (isMainThread) {
                 //  console.log(data)
                 log(data.msg, data.module, data.level); break;
         }
-    }
-    let workerThreads = {
-        esp: function () {
-            threadAssignments = {};              // threadAssignments[threadID] = { [name]: cfg, ... }
-            const MAX_PER_THREAD = 10;
-            const WORKER_SCRIPT = __filename;    // assumes worker code (case "esp") lives in same file
-
-            function distributeESPDevices(devicesObj) {
-                const devices = devicesObj || {};
-                const deviceNames = Object.keys(devices);
-                const deviceCount = deviceNames.length;
-                const threadCount = Math.max(1, Math.ceil(deviceCount / cfg.esp.max_devices_per_thread));
-
-                // create empty assignment objects and workers
-                for (let tid = 0; tid < threadCount; tid++) {
-                    threadAssignments[tid] = {}; // <-- now object, not array
-                    newWorkerThread(tid, true);
-                }
-
-                // assign devices to threads and send initial config
-                deviceNames.forEach((name, idx) => {
-                    const config = devices[name];
-                    if (!cfg) return;
-                    config.name = name;
-
-                    const tid = Math.floor(idx / cfg.esp.max_devices_per_thread);
-                    threadAssignments[tid][name] = config; // store by name key
-
-                    if (!thread.esp[tid]) newWorkerThread(tid, true);
-
-                    thread.esp[tid].postMessage({ type: "config", esp: config, threadID: tid });
-                });
-            }
-
-            // USAGE:
-            distributeESPDevices(cfg.esp.devices);
-            // console.log(threadAssignments)
-
-            function newWorkerThread(threadID, boot = true) {
-                if (boot) log("initializing ESP worker thread: " + threadID, 1);
-                else log("re-initializing crashed ESP worker thread: " + threadID, 0);
-
-                const w = new Worker(WORKER_SCRIPT, { workerData: { class: "esp", threadID } });
-                thread.esp[threadID] = w;
-
-                w.on('message', (data) => {
-                    try { ipc(data); } catch (e) { console.error("ipc error:", e); }
-                });
-
-                w.on('error', (err) => {
-                    log("ESP worker thread " + threadID + " error: " + String(err), 3);
-                });
-
-                w.on('exit', (code) => {
-                    log("ESP worker thread " + threadID + " exited with code " + code, 2);
-                    setTimeout(() => {
-                        newWorkerThread(threadID, false);
-                        const assigned = threadAssignments[threadID] || {};
-                        for (const name in assigned) {
-                            const cfg = assigned[name];
-                            try {
-                                if (thread.esp[threadID])
-                                    thread.esp[threadID].postMessage({ type: "config", esp: cfg, threadID });
-                            } catch (e) {
-                                log(`Failed to re-post config ${name} to restarted thread ${threadID}: ${e}`, 3);
-                            }
-                        }
-                    }, 2000);
-                });
-
-                return w;
-            }
-        },
-        ha: function () {
-            newWorker(true);
-            function newWorker(boot) {
-                if (boot) log("initializing HA worker thread");
-                else log("re-initializing crashed HA thread: ");
-                thread.ha = (new Worker(__filename, { workerData: { class: "ha" } }));
-                thread.ha.on('message', (data) => ipc(data));
-                thread.ha.on('error', (error) => {
-                    log("HA worker: crashed", 0, 3);
-                    console.log(error);
-                    //  newWorker();
-                });
-                //thread.ha.on('exit', (code) => { log("ESP worker: " + x + " exited", 0, 3); newWorker(x, obj); });
-                // log("connecting to Home Assistant: " + color("cyan", server.address), 1);
-                thread.ha.postMessage({ type: "config", cfg: cfg.homeAssistant });
-            }
-        },
-        espAdd: function (cfg, name) {
-            if (!name) {
-                log("espAdd: missing device name", 3);
-                return;
-            }
-
-            const MAX_PER_THREAD = cfg.esp?.max_devices_per_thread || 10;
-            let targetThreadID = null;
-
-            // Find a thread with available space
-            for (const tid in threadAssignments) {
-                const threadObj = threadAssignments[tid];
-                if (!threadObj) continue;
-                const currentCount = Object.keys(threadObj).length;
-                if (currentCount < MAX_PER_THREAD) {
-                    targetThreadID = Number(tid);
-                    break;
-                }
-            }
-
-            // If none found, create a new thread
-            if (targetThreadID === null) {
-                targetThreadID = Object.keys(threadAssignments).length;
-                threadAssignments[targetThreadID] = {};
-                newWorkerThread(targetThreadID, true);
-                log(`espAdd: created new worker thread ${targetThreadID}`, 1);
-            }
-
-            // Assign the device
-            const threadObj = threadAssignments[targetThreadID];
-            cfg.name = name;
-            threadObj[name] = cfg;
-
-            // Ensure the thread exists
-            if (!thread.esp[targetThreadID]) {
-                newWorkerThread(targetThreadID, true);
-            }
-
-            // Send configuration to worker
-            try {
-                thread.esp[targetThreadID].postMessage({
-                    type: "config",
-                    esp: cfg,
-                    threadID: targetThreadID
-                });
-                log(`espAdd: added '${name}' to thread ${targetThreadID}`, 1);
-            } catch (e) {
-                log(`espAdd: failed to send config for '${name}' to thread ${targetThreadID}: ${e}`, 3);
-            }
-        },
-        espRemove: function (cfgName) {
-            // find which thread has this device
-            let foundThreadID = null;
-            for (const tid in threadAssignments) {
-                if (threadAssignments[tid] && threadAssignments[tid][cfgName]) {
-                    foundThreadID = tid;
-                    break;
-                }
-            }
-
-            if (foundThreadID === null) {
-                log("espRemove: device not found in any thread: " + cfgName, 2);
-                return;
-            }
-
-            // tell the worker to close the device
-            if (thread.esp[foundThreadID]) {
-                thread.esp[foundThreadID].postMessage({
-                    type: "close",
-                    esp: { name: cfgName },
-                    threadID: Number(foundThreadID)
-                });
-            }
-
-            // remove from threadAssignments
-            delete threadAssignments[foundThreadID][cfgName];
-
-            log(`Removed ESP device '${cfgName}' from thread ${foundThreadID}`, 1);
-        },
     }
     function watcher(filePath, reloadCallback) {
         log("creating watcher for: " + filePath);
