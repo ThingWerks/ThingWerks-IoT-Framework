@@ -525,15 +525,15 @@ if (isMainThread) {
         },
         webserver: function () {
             if (cfg.webDiag) {
-                express.get("/log", function (request, response) { response.send(logs.sys); });
-                //  express.get("/tg", function (request, response) { response.send(logs.tg); });
-                //  express.get("/ws", function (request, response) { response.send(logs.ws); });
-                express.get("/nv", function (request, response) { response.send(nv); });
-                express.get("/state", function (request, response) { response.send(state); });
-               // express.get("/thread", function (request, response) { response.send(thread); });
-                //  express.get("/cfg", function (request, response) { response.send(cfg); });
-               // express.get("/perf", function (request, response) { response.send(state.perf); });
-               // express.get("/udp", function (request, response) { response.send(state.client); });
+                // express.get("/log", function (request, response) { response.send(logs.sys); });
+                // express.get("/tg", function (request, response) { response.send(logs.tg); });
+                // express.get("/ws", function (request, response) { response.send(logs.ws); });
+                // express.get("/nv", function (request, response) { response.send(nv); });
+                // express.get("/state", function (request, response) { response.send(state); });
+                // express.get("/thread", function (request, response) { response.send(thread); });
+                // express.get("/cfg", function (request, response) { response.send(cfg); });
+                // express.get("/perf", function (request, response) { response.send(state.perf); });
+                // express.get("/udp", function (request, response) { response.send(state.client); });
                 express.get("/entity", function (request, response) {
                     let ha = {}, zha = {}, esp = {}, twit = {}, telemetry = {}, unknown = {};
                     if ((time.epoch - state.fetchLast) < 10) fetchReply();
@@ -1364,8 +1364,8 @@ if (isMainThread) {
         buf += mbuf + message;
         cbuf += mbuf + message;
         ubuf += mbuf + message;
-        if (logs.sys[logs.step] && level > 0) logs.sys.push(buf); else logs.sys[logs.step] = buf;
-        if (logs.step < 500) logs.step++; else logs.step = 0;
+        //logs.sys[logs.step] = buf;
+        //if (logs.step < 500) logs.step++; else logs.step = 0;
         if (cfg.rocket.enable && level > 1) sendRocket(buf);
         if (cfg.telegram?.enable && state.telegram.started && cfg.telegram.users) {
             if (level >= cfg.telegram.logLevel || level == 0 && cfg.telegram.logDebug == true) {
