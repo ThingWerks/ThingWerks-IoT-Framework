@@ -23,6 +23,7 @@
   - or NodeMon `sudo nodemon /apps/twit/client-myCleitnName.js -w /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/
   twit/config-auto-test.js`
 - everything running as expected? setup TwIT Core and Clients as services
+  - overwriting/updating the `core.js` or `client.js` files will automatically cause a service reload
   - `sudo node core.js --install` or `sudo node core.js --uninstall`
   - `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js --install` or `--uninstall`
 - check service logs
