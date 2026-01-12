@@ -1049,7 +1049,7 @@ let _pointers = (_name) => { // don't touch
         state: global.state[_name] ?? undefined,
         config: global.config[_name] ?? undefined,
         nv: global.nv[_name] ?? undefined,
-        push: global.push[_name] ?? undefined,
+        push: global.push[_name] ||= {},
         log: (m, l) => slog(m, l, _name),
         write: () => file.write.nv(_name),
         send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
