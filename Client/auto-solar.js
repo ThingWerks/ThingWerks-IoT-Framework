@@ -1242,7 +1242,7 @@ module.exports = {
                         timer: { second: null, minute: null, priority: null },
                     };
                     global.nv[_name] ||= {};
-                    global.push[_name] ||= {};
+                    global.push[_name] = {};
                     ({ state, cfg, nv, push } = _pointers(_name));
                     cfg.inverter.forEach(_ => {
                         state.inverter.push({
