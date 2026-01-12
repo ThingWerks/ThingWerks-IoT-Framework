@@ -155,6 +155,8 @@ SolarWerks is a solar power management and automation control system.
  - Auto Transfer Switch control
  - Battery management and charge/discharge over-cycle prevention
  - Control other TWIT Automations based on solar power output
+ - Temp monitoring and electrical room ventilation control 
+ - Solar and battery based System and device automation priority control
 
 ### PumperPro
 
