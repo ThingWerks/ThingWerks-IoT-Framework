@@ -1,85 +1,88 @@
 module.exports = {
     entity: {
         subscribe: [
-            "input_boolean.auto_bubon",
-            "input_number.profile_bubon",
-            "input_number.timer_oneshot_bubon",
-            "input_number.timer_oneshot_irrigation",
-            "Switch Kitchen Pump",
-            "switch.relay_bodega_freezer_fujidenzo",
-            "input_boolean.auto_freezer",
-            "Button Bodega Water Filtered",
-            "input_boolean.auto_irrigatiion",
-            "Button Irrigation Entrance",
-            "Button Water Groogies",
-            "Button Water Irrigation House Back",
-            "Button Water Irrigation Piggary",
-            "Button Water Irrigation Dalom",
-            "input_button.oneshot_irrigation",
-            "input_button.oneshot_bubon",
+            "input_boolean.auto_compressor",
+            "input_boolean.all_systems_timer",
+            "input_boolean.auto_pump_transfer",
+            "input_boolean.auto_pump_pressure",
+            "input_boolean.auto_solar",
+            "input_boolean.auto_pump_pressure_turbo",
+            "input_boolean.auto_fountain",
+            "input_button.pump_uth_one_shot",
+            "input_number.pump_uth_timer",
+            "input_boolean.pump_uth_reserve",
+            "input_number.auto_pump_profile",
 
-            "psi-main",
-            "psi-irrigation",
-            "flow-raw-bubon",
-            "flow-raw-carbon-shop",
-            "flow-raw-carbon-groogies",
-            "shop-relay1-pump",
-            "solar-relay3-pump-bubon",
-            "flow-raw-irrigation"
+            
+            "lth-tank",             
+            "lth-relay1",
+            "uth-tank",
+            "lth-relay2",
+            "uth-relay1",
+            "uth-relay2",
+            "uth-relay3",
+            "uth-relay4",
+            "uth-pump",
+            "flow-lth-submersible", 
+            "flow-uth-pump",        
+            "flow-fountain-pump",   
+            "fountain-relay1",      
         ],
         sync: {
-            house_stairs: ["switch.switch_test", "input_boolean.lights_stairs",],
-            house_patio: ["switch.lights_outside_bedroom", "input_boolean.lights_bedroom_outside"],
-            house_entrance: ["switch.lights_outside_entrance", "input_boolean.lights_house_entrance"],
         },
         heartbeat: {
-            "esp_heartbeat_solar": 3000,
-            "esp_heartbeat_pump": 3000
+            "lth-led": 3000,
         },
     },
     config: {
         Pumper: {
-            pump: {
-                "1.5hp jetpump": {
-                    power: {
-                        entity: "solar-relay3-pump-bubon",
-                    },
-
-                    valve: {
-                        entity: undefined,
-                        startDelay: undefined,
-                        stopDelay: undefined,
-                    },
-                    team: {
-                        type: "assist",     // parallel, changeover, assist, 
-                        priority: 0,
-                        members: [],
-                    },
-                    flow: {
-                        entity: "bubon",
-                        startWarn: 15,
-                        startError: 10,
-                        startCheckTime: 5,
-                        runWarn: 8,
-                        runError: 5,
-                    },
-                    press: {
-                        entity: "bubon",
-                        minRise: 22,
-                        minRiseTime: 20,
-                        minFall: 15
-                    },
-                    vfd: {
-                        entity: undefined,
-                        type: "pwm",            // pwm, modbus, HDI, 4P
-                        startSet: undefined,
-                        rampSpeedUp: 20,
-                        rampSpeedDown: 20,
-                        pwm: [],
-                    },
-                }
-            },
             dd: [       // config for the Demand/Delivery automation function, 1 object for each DD system
+                {                           // DD system example
+                    name: "AirLift",
+                    enable: false,
+                    ha: {
+                        auto: "input_boolean.auto_compressor",                 // home assistant auto toggle ID number (specified above in cfg.ha config)
+                        // solar: "input_boolean.auto_solar_bubon",             // solar automation boolean/toggle
+                        oneShotTimer: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
+                        oneShotExtend: true,                                    // extend OneShot timer after last usage
+                    },
+                    pump: [
+                        {
+                            name: "1.5hp LuckyPro",
+                            entity: "shop-relay1-pump",  // ESP/HA cfg ID number
+                            flow: {
+                                sensor: "irrigation",   // flow sensor number (in cfg.sensor.flow block)
+                                startWarn: 40,          // min start flow before triggering notification (useful for filters)
+                                startError: 10,         // REQUIRED - minimum flow rate pump must reach at start
+                                startWait: 6,           // seconds to wait before checking flow after pump starts
+                                //-----     runWarn: 3,             // optional - flow rate during operation which will cause warning
+                                // runError: 3,         // optional - flow rate during operation which will cause fault
+                                runStop: 5,             // flow rate to gracefully stop pump
+                            },
+                            press: {
+                                input: {
+
+                                }
+                            }
+                        },
+                    ],
+                    press: {
+                        output: {
+                            sensor: "irrigation", // pressure sensor number (in cfg.sensor.press block)
+                            profile: [{ start: 40, stop: 62 }],
+                        },
+                    },
+                    fault: {
+                        retryCount: 0,      // optional - times to try pump restart
+                        retryWait: 10,      // time in seconds to wait for retry
+                        // retryFinal: 2,   // time in minutes to wait for final retry
+                        runLongError: 20,   // max run time in minutes
+                        runLongWarn: 5,     // max run time in minutes
+                        cycleCount: 0,      // max cycle times per cycleTime window
+                        cycleTime: 10,      // max cycleTime time window  (in seconds)
+                        flushWarning: false,
+                    },
+                },
                 {   // DD system example
                     name: "Bubon",       // Demand Delivery system 2d
                     enable: true,
