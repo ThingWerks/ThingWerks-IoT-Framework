@@ -105,7 +105,7 @@ The TWIT Clients load and manage your automations. They create a safety zone bet
 
 - Used to load end-user automation files
 - Automatically detects changes to automation files and config and performs Hot-Reloading, zero downtime
-- Each client supports only 1 automation file but multiple scripts can be in each file
+- Each client supports only 1 automation file but multiple scripts can be in each file. See automation example: [auto.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js)
 
 Related:
 - [TWIT Client File](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client.js)
