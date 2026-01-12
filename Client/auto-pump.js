@@ -760,7 +760,6 @@ module.exports = { // exports added to clean up layout
                 log("initializing pumper config and state")
                 global.state[_name] = { init: true, dd: [], fountain: [], timer: {}, pump: {} };
                 global.nv[_name] ||= {};
-                global.push[_name] = {};
                 ({ st, cfg, nv, push } = _pointers(_name));
                 initNV();
                 cfg.sensor.press.forEach(element => {
@@ -988,7 +987,6 @@ module.exports = { // exports added to clean up layout
                 if (_push === "init") {
                     global.state[_name] = { boot: false, timer: null };
                     global.config[_name] ||= {};
-                    global.push[_name] ||= {};
                     ({ st, cfg, nv, push } = _pointers(_name));
                     log("automation is starting");
                     st.timer = setInterval(() => { timer(); }, 60e3);
@@ -1046,10 +1044,10 @@ module.exports = { // exports added to clean up layout
 };
 let _pointers = (_name) => { // don't touch 
     return {
-        state: global.state[_name] ?? undefined,
-        config: global.config[_name] ?? undefined,
-        nv: global.nv[_name] ?? undefined,
-        push: global.push[_name] ||= {},
+        st: state[_name] ?? undefined,
+        cfg: config[_name] ?? undefined,
+        nv: nv[_name] ?? undefined,
+        push: push[_name] ||= {},
         log: (m, l) => slog(m, l, _name),
         write: () => file.write.nv(_name),
         send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
