@@ -15,8 +15,7 @@ module.exports = {
                         clearInterval(state.timer.minute);
                         clearInterval(state.timer.second);
                         clearInterval(state.timer.priority);
-                        if (push) push.forIn((name, value) => { delete global.push[name]; })
-                        push = {};
+                        if (global.push) push.forIn((name, value) => { delete global.push[name]; })
                     }
                     return;
                 }
