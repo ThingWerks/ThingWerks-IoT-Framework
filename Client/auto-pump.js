@@ -16,8 +16,7 @@ module.exports = { // exports added to clean up layout
                         clearTimeout(element.state.oneShot);
                         clearInterval(element.state.flowTimerInterval);
                     });
-                    if (push) push.forIn((name, value) => { delete push[name]; })
-                    push = {};
+                    if (global.push) push.forIn((name, value) => { delete global.push[name]; })
                 }
                 return;
             }
@@ -635,7 +634,7 @@ module.exports = { // exports added to clean up layout
             }
             let push_constructor = {
                 auto: function (dd, index, config) {
-                    return (state, oneShot) => {
+                    return (state) => {
                         if (state) {
                             if (!config.enable) {
                                 log(config.name + " - system disabled - cannot go online", 2);
@@ -989,6 +988,7 @@ module.exports = { // exports added to clean up layout
                 if (_push === "init") {
                     global.state[_name] = { boot: false, timer: null };
                     global.config[_name] ||= {};
+                    global.push[_name] ||= {};
                     ({ st, cfg, nv, push } = _pointers(_name));
                     log("automation is starting");
                     st.timer = setInterval(() => { timer(); }, 60e3);
@@ -1044,15 +1044,14 @@ module.exports = { // exports added to clean up layout
         },
     }
 };
-let _pointers = (_name) => {
-    push[_name] ||= {}
+let _pointers = (_name) => { // don't touch 
     return {
-        st: state[_name] ?? undefined,
-        cfg: config[_name] ?? undefined,
-        nv: nv[_name] ?? undefined,
-        push: push[_name] ?? undefined,
+        state: global.state[_name] ?? undefined,
+        config: global.config[_name] ?? undefined,
+        nv: global.nv[_name] ?? undefined,
+        push: global.push[_name] ?? undefined,
         log: (m, l) => slog(m, l, _name),
-        write: () => writeNV(_name),
+        write: () => file.write.nv(_name),
         send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
     }
 }
