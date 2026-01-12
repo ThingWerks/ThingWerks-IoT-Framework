@@ -22,6 +22,12 @@
   - or with [external config file](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/config-example.js) `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/twit/config-auto-test.js`
   - or NodeMon `sudo nodemon /apps/twit/client-myCleitnName.js -w /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js -c /apps/
   twit/config-auto-test.js`
+- everything running as expected? setup TwIT Core and Clients as services
+  - `sudo node core.js --install` or `sudo node core.js --uninstall`
+  - `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js --install` or `--uninstall`
+- check service logs
+  - `sudo journalctl -efu twit-core --output=cat`
+  - `sudo journalctl -efu twit-client-testClient --output=cat`. The name of client service will be what was specified in the `-n` ie `-n "testClient"`
 
 ## Want to use TWIT only to sync two Home Assistant Servers? 
 
