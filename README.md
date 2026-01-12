@@ -43,6 +43,8 @@ TWIT is an extremely simple automation framework. It is very reliable, sets up i
 
 Quickly put together an event based automation system with powerful GUI.
 
+TWIT was designed from inception to allow for cross system integration and communication. For example solar power control systems that influence the operation of other systems like pump operations based on power availability. 
+
 TWIT removes all of the foundational and background effort normally required for a complete automation system. 
 
 Logging, system and device communication, notifications, state initialization and management, non-volatile memory and many other fundamental capabilities are ready to go allowing you to just focus on automation logic. 
