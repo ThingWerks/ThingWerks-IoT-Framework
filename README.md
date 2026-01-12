@@ -15,7 +15,7 @@
   - this software is intended to run on Debian/Armbian/Ubuntu or similar linux only
   - for more info: TWIT Core [Setup Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Core.md)
 - download [client.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client.js) and [auto.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js).
-  - for more info: TWOT Client [Setup Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Client.md)
+  - for more info: TWIT Client [Setup Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/Install-TWIT-Client.md)
 - have a brief look are the extremely simple [Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Programming-Guide.md) and [Automation Example](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.js).
 - create your automation scrip and test run it:
   - `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js`
