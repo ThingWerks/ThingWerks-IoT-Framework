@@ -1049,7 +1049,7 @@ let _pointers = (_name) => { // don't touch
         nv: nv[_name] ?? undefined,
         push: push[_name] ||= {},
         log: (m, l) => slog(m, l, _name),
-        write: () => file.write.nv(_name),
+        write: () => writeNV(_name),
         send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
     }
 }
