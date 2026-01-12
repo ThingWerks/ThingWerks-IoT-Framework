@@ -36,8 +36,6 @@ module.exports = {
 
         ],
     },
-    heartbeat: [
-    ],
     config: {
         Solar: {
             grid: { // for blackout detection, needed for inverter ATS switching 
@@ -113,7 +111,7 @@ module.exports = {
                             enable: true,
                             onSun: 3.0,
                             onAmps: 100.0,
-                            offAmps: 40.0,
+                            offAmps: 60.0,
                             offAmpsFloat: -10.0,
                             entities: ["solar-ram-relay1-water"]
                         },
@@ -162,12 +160,12 @@ module.exports = {
                     // blackout: true,              // optional - switch to inverter on blackout if voltage is less than (voltsRun)
                     // blackoutVoltMin: 54.0,       // optional - minimum voltage needed to recover from blackout 
                     // voltsRun: 54.0,              // optional - volts to start inverter - in addition to sunlight/amps if configured
-                    voltsStop: 53.5,                // volts to stop inverter - will stop Independent of sunlight level
-                   // sunRunFloat: 1.8,               // optional - sunlight sensor level to start inverter (while floating) 
-                   // sunRun: 0.7,                    // optional - sunlight sensor level to start inverter (while charging)                                
-                    ampsRun: 45.0,                  // optional - charger amp level to transfer load to inverter - (must use espgridWatt if not)
-                   // ampsStop: -5.0,                 // optional - discharge amp level to transfer load to grid 
-                   // ampsStopFloat: -10.0,           // optional - discharge amp level to transfer load to grid when floating
+                    voltsStop: 53.0,                // volts to stop inverter - will stop Independent of sunlight level
+                    // sunRunFloat: 1.8,            // optional - sunlight sensor level to start inverter (while floating) 
+                    // sunRun: 0.7,                 // optional - sunlight sensor level to start inverter (while charging)                                
+                    ampsRun: 45.0,                  // optional - charger amp level to transfer load to inverter - (must use gridWatt if this isn't used)
+                    // ampsStop: -5.0,              // optional - discharge amp level to transfer load to grid 
+                    // ampsStopFloat: -10.0,        // optional - discharge amp level to transfer load to grid when floating
                     // ampsStopVoltsMin: 52.5,      // optional - minimum voltage needed to enable amp stop switching 
                     battery: "main",                // optional - battery bank assigned to this inverter - required to use ampsStopFloat
                     floatRetryInterval: undefined,
@@ -317,7 +315,7 @@ module.exports = {
                     sensorWatt: "battery_power",    // used for recorder
                     sensorAmp: "battery_current_rs485",
                     sensorVolt: "battery_volts_twit",
-                    voltsFullCharge: 58.1,
+                    voltsFullCharge: 58.6,
                     voltsFloatStop: 56.0,
                     ampsResetDischarge: 50.0,
                     socTable: 1,
