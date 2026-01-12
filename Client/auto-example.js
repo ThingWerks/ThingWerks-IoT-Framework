@@ -44,21 +44,23 @@ module.exports = {
 
                     */
                     //clear event timers clearInterval(state.timer.second);
-                    if (push) push.forIn(name => { delete push[name]; })
-                    push = {}; // clean up push initialization 
+                    if (global.push) push.forIn(name => { delete global.push[name]; })
                 } else ({ state, config, nv } = _pointers(_name));
                 return;
             }
 
 
 
-            /*  common functions (initialization and event) go here 
+            /*  common functions and those called by push events or the init function need to go in this area. 
+            ie. before   if (_push === "init"){}
  
             generally automation functions need to be declared before initialization sequences 
  
  
             */
 
+
+            // example functions showing standard methods
             function myFunction(newState, name) {
                 // logging  log("message", severityNumber)  0 - debug, 1 - notification (assumed), 2 - warning, 3 - error 
                 log("thing 2 entity " + name + ": is setting state to: " + newState);
@@ -164,6 +166,7 @@ module.exports = {
             } else push[_push.name]?.(_push.state, _push.name);
 
 
+            // example check timer function
             function timer() { // called once per minute   
                 if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
                     log("turning on outside lights", 1);
@@ -212,12 +215,11 @@ module.exports = {
 
 }
 let _pointers = (_name) => { // don't touch 
-    push[_name] ||= {}
     return {
-        state: state[_name] ?? undefined,
-        config: config[_name] ?? undefined,
-        nv: nv[_name] ?? undefined,
-        push: push[_name] ?? undefined,
+        state: global.state[_name] ?? undefined,
+        config: global.config[_name] ?? undefined,
+        nv: global.nv[_name] ?? undefined,
+        push: global.push[_name] ||= {},
         log: (m, l) => slog(m, l, _name),
         write: () => file.write.nv(_name),
         send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
