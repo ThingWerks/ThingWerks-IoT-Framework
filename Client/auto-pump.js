@@ -619,8 +619,14 @@ module.exports = { // exports added to clean up layout
                 shared: function (x) {  // discovers if other systems are currently using this same pump
                     let dd = st.dd[x];
                     dd.sharedPump = { shared: null, run: false, num: null };
-                    for (let y = 0; y < cfg.dd[x].pump.length; y++)
-                        dd.pump[y].state = entity[cfg.dd[x].pump[y].entity].state;
+                    for (let y = 0; y < cfg.dd[x].pump.length; y++) {
+                        try { dd.pump[y].state = entity[cfg.dd[x].pump[y].entity].state; }
+                        catch (error) {
+                            console.trace("shared pump lookup error: ", error);
+                            console.log("pump: ", dd.pump[y]);
+                            console.log("entity: " + cfg.dd[x].pump[y].entity, entity[cfg.dd[x].pump[y].entity]);
+                        }
+                    }
                     for (let y = 0; y < cfg.dd.length; y++) {
                         if (y != x && dd.pump[dd.state.pump].cfg.entity == cfg.dd[y].pump[st.dd[y].state.pump].entity) {
                             if (st.dd[y].state.run == true) dd.sharedPump.run = true;
