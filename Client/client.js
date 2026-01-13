@@ -30,7 +30,8 @@ core = function (type, data, auto) {
         entity[data.name].stamp = time.stamp;
         automation.forIn(name => {
             if (auto != name) try {
-                automation[name](name, { name: data.name, state: data.state });
+                if (data.owner.type == "TWIT")
+                    automation[name](name, { name: data.name, state: data.state });
             } catch { }
         })
     }
@@ -46,6 +47,7 @@ com = function () {
                 // if (buf.data?.name?.includes("input_button.")) console.log(buf.data)
                 // console.log(buf.data)
                 entity[buf.data.name] ||= {};
+                entity[buf.data.name].owner = buf.data?.owner;
                 entity[buf.data.name].update = time.epochMil;
                 entity[buf.data.name].stamp = time.stamp;
                 if (!(typeof buf.data?.state === "string" && buf.data.state.includes("remote_button_"))
@@ -91,13 +93,13 @@ com = function () {
                 //core(JSON.stringify({ type: "diag", obj: { state, nv: nv, config } }), 65432, '127.0.0.1');
                 break;
             case "telegram":
-                // console.log("receiving telegram message: " + buf.data);
-                switch (buf.data.class) {
+                switch (buf.class) {
                     case "agent":
-                        user.telegram.agent(buf.data.data);
+                        slog("receiving telegram message: " + buf.data.text, 0);
+                        user.telegram.agent(buf.data);
                         break;
                     case "callback":
-                        user.telegram.callback(buf.data.data);
+                        user.telegram.callback(buf.data);
                         break;
                 }
                 break;
@@ -114,10 +116,11 @@ register = function (update) {/////no update?
             create: entityCreate ?? undefined,
             sync: entitySync ?? undefined,
         },
-        telegram: config.telegram ? true : false
+        telegram: user?.telegram?.agent ? true : false
     };
     core((update ? "registerUpdate" : "register"), obj);
-    if (config.telegram) {
+    if (user?.telegram?.agent) {
+        slog("registering client as Telegram agent");
         if (!nv.telegram) nv.telegram ||= [];
         else for (let x = 0; x < nv.telegram.length; x++)
             core("telegram", { class: "sub", id: nv.telegram[x].id });
@@ -262,7 +265,7 @@ auto = {
         //    console.log(configData)
         config.heartbeat ||= {};
         configData.heartbeat ||= {};
-        configData?.heartbeat?.forIn((name, value) => {
+        configData?.entity?.heartbeat?.forIn((name, value) => {
             if (name in config?.heartbeat) {
                 if (config.heartbeat[name]?.internal != value) {
                     console.log("heartbeat - changed - updating timer for: " + name);
@@ -274,7 +277,7 @@ auto = {
             }
         })
         config.heartbeat?.forIn((name, value) => {
-            if (!(name in configData.heartbeat)) {
+            if (!(name in configData.entity.heartbeat)) {
                 console.log("heartbeat - orphaned - removing: " + name);
                 clearInterval(config.heartbeat[name]?.timer);
                 delete config.heartbeat[name];
@@ -457,11 +460,12 @@ user = {        // user configurable block - Telegram
     telegram: { // enter a case matching your desirable input 
         agent: function (msg) {
             //  log("incoming telegram message: " + msg,  0);
-            //  console.log("incoming telegram message: ", msg);
+            console.log("incoming telegram message: ", msg);
+            nv.telegram || {};
             if (telegram.auth(msg)) {
                 switch (msg.text) {
                     case "?": console.log("test help menu"); break;
-                    case "/start": bot(msg.chat.id, "you are already registered"); break;
+                    case "/start": bot("you are already registered"); break;
                     case "R":   // to include uppercase letter in case match, we put no break between upper and lower cases
                     case "r":
                         bot(msg.from.id, "Test Menu:");
@@ -477,10 +481,10 @@ user = {        // user configurable block - Telegram
                         break;
                 }
             }
-            else if (msg.text == config.telegram.password) telegram.sub(msg);
-            else if (msg.text == "/start") bot(msg.chat.id, "give me the passcode");
-            else bot(msg.chat.id, "i don't know you, go away");
-
+            else if (msg.text == nv.telegram.password) telegram.sub(msg);
+            else if (msg.text == "/start") bot("give me the passcode");
+            else bot("i don't know you, go away");
+            function bot(text) { core("telegram", { class: "send", id: msg.from.id, text }); }
         },
         callback: function (msg) {  // enter a two character code to identify your callback "case" 
             let code = msg.data.slice(0, 2);
@@ -505,6 +509,7 @@ user = {        // user configurable block - Telegram
     },
 }
 telegram = {
+    bot: function bot(text) { core("telegram", { class: "send", id: msg.from.id, text }); },
     sub: function (msg) {
         let buf = { user: msg.from.first_name + " " + msg.from.last_name, id: msg.from.id }
         if (!telegram.auth(msg)) {
