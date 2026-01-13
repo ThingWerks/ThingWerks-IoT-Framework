@@ -685,19 +685,20 @@ if (isMainThread) {
 
                     w.on('exit', (code) => {
                         log("ESP worker thread " + threadID + " exited with code " + code, 2);
-                        setTimeout(() => {
-                            newWorkerThread(threadID, false);
-                            const assigned = threadAssignments[threadID] || {};
-                            for (const name in assigned) {
-                                const cfg = assigned[name];
-                                try {
-                                    if (thread.esp[threadID])
-                                        thread.esp[threadID].postMessage({ type: "config", esp: cfg, threadID });
-                                } catch (e) {
-                                    log(`Failed to re-post config ${name} to restarted thread ${threadID}: ${e}`, 3);
+                        if (cfg.esp?.enable && !thread.esp[threadID].restart)
+                            setTimeout(() => {
+                                newWorkerThread(threadID, false);
+                                const assigned = threadAssignments[threadID] || {};
+                                for (const name in assigned) {
+                                    const cfg = assigned[name];
+                                    try {
+                                        if (thread.esp[threadID])
+                                            thread.esp[threadID].postMessage({ type: "config", esp: cfg, threadID });
+                                    } catch (e) {
+                                        log(`Failed to re-post config ${name} to restarted thread ${threadID}: ${e}`, 3);
+                                    }
                                 }
-                            }
-                        }, 2000);
+                            }, 2000);
                     });
 
                     return w;
@@ -836,7 +837,10 @@ if (isMainThread) {
                             for (const name in entity[data.obj.name].client) {
                                 // console.log("sending esp state update to client: ", name);
                                 if (entity[data.obj.name].client[name].port)
-                                    client("state", { name: data.obj.name, state: data.obj.state }, entity[data.obj.name].client[name].port);
+                                    client("state", {
+                                        name: data.obj.name, state: data.obj.state,
+                                        owner: entity[data.obj.name].owner
+                                    }, entity[data.obj.name].client[name].port);
                             }
                             //   console.log(entity[data.obj.name]);
                         } catch (e) {
@@ -872,7 +876,11 @@ if (isMainThread) {
                                     entity[data.name].update = time.epochMil;
                                     entity[data.name].stamp = time.stamp;
                                     // console.log("entity: ", data.name, entity[data.name])
-                                    client("state", { name: data.name, state: entity[data.name].state }, state.client[name].port);
+                                    client("state", {
+                                        name: data.name,
+                                        state: entity[data.name].state,
+                                        owner: entity[data.name].owner
+                                    }, state.client[name].port);
                                 }
                             } catch (error) { console.log("error sending HA State update to client: ", error) }
                         } else if (!data.name.includes("sensor")) {
@@ -919,17 +927,20 @@ if (isMainThread) {
                         for (const name in entity) {
                             //  console.log(entity[name])
                             try {
-                                if (entity[name].state != null && data.name in entity[name].client) {
+                                if (entity[name]?.state != null && data.name in entity[name].client) {
                                     if (typeof entity[name]?.state === "string" && entity[name].state.includes("remote_button_")) continue;
                                     if (name.includes("input_button.")) continue;
-                                    log(
-                                        "Websocket (" + color("cyan", data.address) + ") - fetch reply to client: "
+
+                                    log("Websocket (" + color("cyan", data.address) + ") - fetch reply to client: "
                                         + color("purple", data.name) + " - entity: " + name + " - state: "
                                         + entity[name]?.state, 1, 0);
 
-                                    client("state", { name, state: entity[name].state }, data.port);
+                                    client("state", {
+                                        name, state: entity[name].state,
+                                        owner: entity[name].owner
+                                    }, data.port);
                                 }
-                            } catch (error) { console.trace("fetch crash: ", entity[name]) }
+                            } catch (error) { console.trace("fetch crash - entity: " + name, "\n", entity[name], "\n error: ", error); }
                         }
                         client("fetchReply", null, data.port);
                         break;
@@ -974,24 +985,44 @@ if (isMainThread) {
                 const cfgTemp = JSON.parse(data);
                 cfg.logging = cfgTemp.logging;
                 if (JSON.stringify(cfg.esp) !== JSON.stringify(cfgTemp.esp)) {
-                    cfgTemp.esp.devices.forIn((name, value) => {
+                    cfgTemp.esp?.devices?.forIn((name, value) => {
                         if (!(name in cfg.esp.devices)) {
                             log("found new ESP: " + name);
                             workerThreads.espAdd(value, name)
-                        } else if (value.ip !== cfg.esp.devices[name].ip ||
-                            value.key !== cfg.esp.devices[name].key) {
+                        } else if (value.ip !== cfg.esp.devices[name].ip
+                            || value.key !== cfg.esp.devices[name].key
+                            || value.logDisconnect !== cfg.esp.devices[name].logDisconnect) {
                             cfg.esp.devices[name] = value;
-                            workerThreads.espRemove(name)
-                            workerThreads.espAdd(value, name)
+                            workerThreads.espRemove(name);
+                            workerThreads.espAdd(value, name);
                             log("found updated config for ESP: " + name);
                         }
                     })
                     cfg.esp.devices.forIn((name, value) => {
                         if (!(name in cfgTemp.esp.devices)) {
                             log("found orphaned ESP: " + name);
-                            workerThreads.espRemove(name)
+                            workerThreads.espRemove(name);
                         }
                     })
+
+                    if (cfg.esp.max_devices_per_thread !== cfgTemp.esp.max_devices_per_thread && cfgTemp.esp.enable) {
+                        log("max devices per thread change - Restarting ESP");
+                        cfg.esp.devices.forIn((name) => { workerThreads.espRemove(name) });
+                        cfg.esp = cfgTemp.esp;
+                        setTimeout(() => { workerThreads.esp(); }, 1e3);
+                    }
+
+                    if (cfg.esp.enable && !cfgTemp.esp.enable) {
+                        log("disabling ESP - killing all workers");
+                        cfg.esp.devices.forIn((name) => { workerThreads.espRemove(name) });
+                    }
+                    if (!cfg.esp.enable && cfgTemp.esp.enable) {
+                        if (cfg.esp?.devices && Object.keys(cfg.esp?.devices).length > 0) {
+                            log("enabling ESP - starting workers");
+                            cfg.esp = cfgTemp.esp;
+                            workerThreads.esp();
+                        }
+                    }
                     cfg.esp = cfgTemp.esp;
                     log("ESP config was changed");
                 }
@@ -1002,7 +1033,7 @@ if (isMainThread) {
                     setTimeout(() => {
                         if (cfg.homeAssistant) {
                             log("reloading Home Assistant thread");
-                            workerThreads.ha()
+                            workerThreads.ha();
                         }
                     }, 300);
                 }
@@ -1164,7 +1195,7 @@ if (isMainThread) {
                 break;
             case 2: services.telegram(); services.webserver(); boot(3); break;
             case 3:     // connect to ESP and Home Assistant
-                if (Object.keys(cfg.esp?.devices).length > 0) { workerThreads.esp() }
+                if (cfg.esp?.enable && cfg.esp?.devices && Object.keys(cfg.esp?.devices).length > 0) { workerThreads.esp() }
                 if (cfg.homeAssistant) { workerThreads.ha() }
                 setTimeout(() => { boot(4); }, 2e3);
                 break;
@@ -1367,7 +1398,7 @@ if (isMainThread) {
         ubuf += mbuf + message;
         //logs.sys[logs.step] = buf;
         //if (logs.step < 500) logs.step++; else logs.step = 0;
-        if (cfg.rocket.enable && level > 1) sendRocket(buf);
+        if (cfg.rocket?.enable && level > 1) sendRocket(buf);
         if (cfg.telegram?.enable && state.telegram.started && cfg.telegram.users) {
             if (level >= cfg.telegram.logLevel || level == 0 && cfg.telegram.logDebug == true) {
                 try {
@@ -1598,8 +1629,8 @@ if (isMainThread) {
 
                         // 🟨 Step 2: Delegate reconnect logic to reset()
                         try {
-                            log("ESP Home - " + color("cyan", name) + " - disconnected: " + color("cyan", cfg.ip) +
-                                (cfg.logDisconnect ? 20 : (cfg.logDisconnect === false) ? 0 : 2));
+                            log("ESP Home - " + color("cyan", name) + " - disconnected: " + color("cyan", cfg.ip)
+                                , (cfg.logDisconnect ? 20 : (cfg.logDisconnect === false) ? 0 : 2));
                             reset(true);  // This is your reconnect scheduler
                         } catch (e) {
                             log("ESP Home - " + color("cyan", name) +
