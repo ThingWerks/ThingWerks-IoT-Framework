@@ -50,12 +50,12 @@ com = function () {
                 entity[buf.data.name].owner = buf.data?.owner;
                 entity[buf.data.name].update = time.epochMil;
                 entity[buf.data.name].stamp = time.stamp;
-                if (!(typeof buf.data?.state === "string" && buf.data.state.includes("remote_button_"))
+                if (!(typeof buf.data?.state === "string" && buf.data.state.includes("remote_button_")) // do not locally store entity states for ZHA and HA buttons
                     && !buf.data.name?.includes("input_button.")) { entity[buf.data.name].state = buf.data.state; }
-                if (online == true && buf.data.state !== null && buf.data.state !== undefined) {
-                    automation.forIn((name, value) => {
+                if (online == true && buf.data.state != null) {
+                    automation.forIn(name => {
                         try { automation[name](name, { name: buf.data.name, state: buf.data.state }); }
-                        catch (e) { console.trace(e); }
+                        catch (error) { console.trace("automation state push failed: ", error); }
                     })
                 }// else console.log(buf.data)
                 break;
@@ -629,8 +629,9 @@ sys = {         // ______________________system area, don't need to touch anythi
         Object.defineProperty(Object.prototype, "forIn", {
             value: function (callback) {
                 for (const key in this) {
-                    //    if (Object.prototype.hasOwnProperty.call(this, key))
-                    callback(key, this[key], this);
+                    if (Object.prototype.hasOwnProperty.call(this, key)) { // ignore inheritance 
+                        callback(key, this[key], this);
+                    }
                 }
             },
             enumerable: false // so it won't show up in loops
