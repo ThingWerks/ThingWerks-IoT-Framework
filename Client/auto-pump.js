@@ -251,7 +251,7 @@ module.exports = { // exports added to clean up layout
                                             return;
                                         }
                                     } else if (dd.state.profile != null) {
-                                        if (dd.cfg.pump[dd.state.pump].flow?.runStop != undefined) return;
+                                        // if (dd.cfg.pump[dd.state.pump].flow?.runStop != undefined) return; // ether dont specify stop pressure or set it high
                                         if (dd.press.out.state.psi >= dd.cfg.press.output.profile[dd.state.profile].stop) {
                                             log(dd.cfg.name + " - " + dd.press.out.cfg.name + " pump profile: " + dd.state.profile + " pressure reached: "
                                                 + dd.press.out.state.psi.toFixed(0) + " psi - pump is stopping");
@@ -470,6 +470,7 @@ module.exports = { // exports added to clean up layout
                     }
 
                     if (dd.flow != undefined) {
+                        dd.state.flowCheck = false; 
                         clearInterval(dd.state.flowTimerInterval);
                         let tFlow = nv.flow[dd.cfg.pump[dd.state.pump].flow.sensor].total
                             - dd.flow[dd.state.pump].batch;
@@ -504,9 +505,10 @@ module.exports = { // exports added to clean up layout
                                     dd.fault.flow = true;
                                     if (dd.cfg.fault.retryCount && dd.cfg.fault.retryCount > 0) {
                                         if (dd.fault.flowRestarts < dd.cfg.fault.retryCount) {
-                                            log(dd.cfg.name + " - flow check FAILED!! (" + flow.toFixed(1) + "lm) - ", press, " psi - HA Pump State: "
+                                            log(dd.cfg.name + " - flow check FAILED!! (" + flow.toFixed(1) + "lm) - " + press + " psi - HA Pump State: "
                                                 + dd.pump[dd.state.pump].state + " - waiting for retry " + (dd.fault.flowRestarts + 1), 2);
                                             dd.fault.flowRestarts++;
+                                            clearTimeout(dd.state.flowTimerRestart);
                                             dd.state.flowTimerRestart = setTimeout(() => {
                                                 log(dd.cfg.name + " - no flow retry wait complete, pump reenabled");
                                                 dd.fault.flow = false;
@@ -515,6 +517,7 @@ module.exports = { // exports added to clean up layout
                                             log(dd.cfg.name + " - low flow (" + flow.toFixed(1) + "lm) HA State: "
                                                 + dd.pump[dd.state.pump].state + " - retries exceeded - going offline for " + dd.cfg.fault.retryFinal + "m", 3);
                                             dd.fault.flowRestarts++;
+                                            clearTimeout(dd.state.flowTimerRestart);
                                             dd.state.flowTimerRestart = setTimeout(() => {
                                                 log(dd.cfg.name + " - no flow retry extended wait complete, pump reenabled", 2);
                                                 dd.fault.flow = false;
@@ -532,6 +535,10 @@ module.exports = { // exports added to clean up layout
                                         send(dd.auto.name, false);
                                         dd.auto.state = false;
                                     }
+                                    // theres an issues here. when delivery.stop os called, it should clear the flock check interval instantly but after 1 second
+                                    // if dd.state.flowCheck = false;  isnt set, interval still calls flock check function throwing multiple retry/errors. why?
+                                    // even if setting/clearing global.stat[_name].dd[x].state.flowTimerInterval doesnt not take effect. 
+                                    // dd.state.flowCheck = false;   // moving this to delivery.stop
                                     delivery.stop(x, true);
                                 } else if (flow < pumpConfig.startWarn && dd.warn.flowDaily == false) {
                                     log(dd.cfg.name + " - pump flow is lower than optimal (" + flow.toFixed(1) + "lm) - clean filter", 2);
@@ -544,7 +551,9 @@ module.exports = { // exports added to clean up layout
                                     dd.fault.flowRestarts = 0;
                                 }
                             } else {
-                                // console.log("flow check passed")
+
+                                // this should not be a run else chain, make runWarn 
+
                                 if (pumpConfig.runStop != undefined) {
                                     if (flow <= pumpConfig.runStop) {
                                         trigger((" - RUN flow stop (" + flow.toFixed(1) + "lm) - pump stopping - " + press + " psi"), false);
@@ -560,6 +569,9 @@ module.exports = { // exports added to clean up layout
                                             + dd.pump[dd.state.pump].state + " - going OFFLINE permanently"), true);
                                     } else dd.state.flowCheckRunDelay = false;
                                 }
+
+
+
                                 function trigger(msg, error) {
                                     if (dd.state.flowCheckRunDelay == false) {
                                         dd.state.timerFlow = time.epoch;
@@ -620,7 +632,7 @@ module.exports = { // exports added to clean up layout
                     let dd = st.dd[x];
                     dd.sharedPump = { shared: null, run: false, num: null };
                     for (let y = 0; y < cfg.dd[x].pump.length; y++) {
-                        try { dd.pump[y].state = entity[cfg.dd[x].pump[y].entity].state; }
+                        try { dd.pump[y].state = entity[cfg.dd[x].pump[y].entity]?.state; }
                         catch (error) {
                             console.trace("shared pump lookup error: ", error);
                             console.log("pump: ", dd.pump[y]);
