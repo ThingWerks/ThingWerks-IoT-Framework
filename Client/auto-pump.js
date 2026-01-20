@@ -401,7 +401,7 @@ module.exports = { // exports added to clean up layout
                         dd.flow[dd.state.pump].batch = nv.flow[dd.cfg.pump[dd.state.pump].flow.sensor].total;
 
 
-                    if (dd.cfg.ha.oneShotExtend && dd.state.oneShot !== false) {
+                    if (dd.cfg.oneShot.extend && dd.state.oneShot !== false) {
                         log(dd.cfg.name + " - pausing OneShot timer");
                         clearTimeout(dd.state.oneShot);
                     }
@@ -470,7 +470,7 @@ module.exports = { // exports added to clean up layout
                     }
 
                     if (dd.flow != undefined) {
-                        dd.state.flowCheck = false; 
+                        dd.state.flowCheck = false;
                         clearInterval(dd.state.flowTimerInterval);
                         let tFlow = nv.flow[dd.cfg.pump[dd.state.pump].flow.sensor].total
                             - dd.flow[dd.state.pump].batch;
@@ -485,10 +485,10 @@ module.exports = { // exports added to clean up layout
                     dd.state.run = false;
                     dd.pump[dd.state.pump].state = false;
 
-                    if (dd.state.oneShot !== false && dd.cfg.ha.oneShotExtend) {
+                    if (dd.state.oneShot !== false && dd.cfg.oneShot.extend) {
                         log(dd.cfg.name + " - extending OneShot timer", 1);
                         clearTimeout(dd.state.oneShot);
-                        let duration = Math.trunc(entity[dd.cfg.ha.oneShotTimer].state);
+                        let duration = Math.trunc(entity[dd.cfg.oneShot.timer].state);
                         dd.state.oneShot = setTimeout(() => {
                             log(dd.cfg.name + " - stopping one shot operation after " + duration + " minutes (from last use)");
                             send(dd.cfg.ha.auto, false);
@@ -552,7 +552,24 @@ module.exports = { // exports added to clean up layout
                                 }
                             } else {
 
+
+
+
+
+
+
+
                                 // this should not be a run else chain, make runWarn 
+
+
+
+
+
+
+
+
+
+
 
                                 if (pumpConfig.runStop != undefined) {
                                     if (flow <= pumpConfig.runStop) {
@@ -577,7 +594,7 @@ module.exports = { // exports added to clean up layout
                                         dd.state.timerFlow = time.epoch;
                                         dd.state.flowCheckRunDelay = true;
                                         return;
-                                    } else if (time.epoch - dd.state.timerFlow >= 10) {
+                                    } else if (time.epoch - dd.state.timerFlow >= 3) {
                                         if (error) {
                                             log(dd.cfg.name + msg, 3);
                                             send(dd.auto.name, false);
@@ -650,6 +667,63 @@ module.exports = { // exports added to clean up layout
                     }
                 },
             }
+            let fountain = {
+                /*
+fountain advanced time window - coordinate with solar power profile - fault run time 
+solar fountain controls auto, when low sun, auto fountain resumes with pump stopped (fail safe)
+*/
+                auto: function fountain(x) {
+                    let fount = { st: st.fountain[x], cfg: cfg.fountain[x] }
+                    if (entity[fount.cfg.haAuto].state == true) {
+                        if (fount.state.step == null) pumpFountain(x, true);
+                        if (entity[fount.cfg.pump] == true) {
+                            if (time.epochMin - fount.state.step >= fount.cfg.intervalOn) pumpFountain(x, false);
+                        } else {
+                            if (time.epochMin - fount.state.step >= fount.cfg.intervalOff) pumpFountain(x, true);
+                        }
+                    }
+                    if (fount.state.flowCheck) {
+                        let flow = (entity[cfg.sensor.flow[fount.cfg.sensor.flow.entity].entity].state / 60).toFixed(0);
+                        if (flow <= fount.cfg.sensor.flow.startError) {
+                            log(fount.cfg.name + " - flow check FAILED: " + flow + "lpm - auto will shut down", 3);
+                            send(fount.cfg.haAuto, false);
+                            pumpFountain(x, false);
+                            return;
+                        }
+                    }
+                },
+                pump: function (x, power) {
+                    let fount = { st: st.fountain[x], cfg: cfg.fountain[x] }
+                    fount.state.step = time.epochMin;
+                    if (power) {
+                        log(fount.cfg.name + " - is turning on");
+                        send(cfg.esp[fount.cfg.pump], true);
+                        if (fount.cfg.flow != undefined && fount.cfg.flow.entity != undefined) {
+                            fount.state.timerFlow = setTimeout(() => {
+                                let flow = (entity[cfg.flow[fount.cfg.flow.entity].entity].state / 60).toFixed(0);
+                                log(fount.cfg.name + " - checking flow");
+                                if (flow < fount.cfg.flow.startError) {
+                                    log(fount.cfg.name + " - flow check FAILED: " + flow + "lpm - auto will shut down", 3);
+                                    send(fount.cfg.haAuto, false);
+                                    pumpFountain(x, false);
+                                    return;
+                                } else if (flow < fount.cfg.flow.startWarn) {
+                                    log(fount.cfg.name + " - starting flow less than normal: " + flow + "lpm", 2);
+                                    send(fount.cfg.haAuto, false);
+                                } else {
+                                    log(fount.cfg.name + " - flow check PASSED: " + flow + "lpm");
+                                    fount.state.flowCheck = true;
+                                }
+                            }, (fount.cfg.flow.startWait * 1e3));
+                        }
+                    } else {
+                        log(fount.cfg.name + " - is turning off");
+                        send(cfg.esp[fount.cfg.pump], false);
+                        clearTimeout(fount.state.timerFlow);
+                        fount.state.flowCheck = false;
+                    }
+                }
+            }
             let push_constructor = {
                 auto: function (dd, index, config) {
                     return (state) => {
@@ -674,6 +748,7 @@ module.exports = { // exports added to clean up layout
                             clearTimeout(dd.state.flowTimerRestart);
                             clearTimeout(dd.state.flowTimerCheck);
                             clearTimeout(dd.state.oneShot);
+                            clearInterval(dd.state.flowTimerInterval);
                             dd.auto.state = false;
                             dd.state.oneShot = false;
                             delivery.stop(index);
@@ -693,7 +768,7 @@ module.exports = { // exports added to clean up layout
                                     log(config.name + " - auto already online - ignoring one-shot request - trigger: " + name, 2);
                                     return;
                                 }
-                                let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
+                                let duration = Math.trunc(entity[config.oneShot.timer].state);
                                 log(config.name + " - starting one shot operation - " + "trigger: "
                                     + name + " - stopping in " + duration + " min");
                                 send(config.ha.auto, true);
@@ -722,7 +797,7 @@ module.exports = { // exports added to clean up layout
                                 log(config.name + " - auto already online - ignoring one-shot request - trigger: " + name, 2);
                                 return;
                             }
-                            let duration = Math.trunc(entity[config.ha.oneShotTimer].state);
+                            let duration = Math.trunc(entity[config.oneShot.timer].state);
                             log(config.name + " - starting one shot operation - " + "triggered by: "
                                 + name + " - stopping in " + duration + " min");
                             send(config.ha.auto, true);
@@ -779,7 +854,27 @@ module.exports = { // exports added to clean up layout
                 global.state[_name] = { init: true, dd: [], fountain: [], timer: {}, pump: {} };
                 global.nv[_name] ||= {};
                 ({ st, cfg, nv, push } = _pointers(_name));
-                initNV();
+                if (cfg.sensor.flow) { // initialize NV data
+                    nv.flow ||= {};
+                    let found = false;
+                    for (let x = 0; x < cfg.sensor.flow.length; x++) {
+                        let flowName = cfg.sensor.flow[x].name;
+                        if (!nv.flow[flowName]) {
+                            log("initializing NV data for flowmeter: " + flowName);
+                            nv.flow[flowName] = {
+                                total: 0, today: 0,
+                                min: new Array(60).fill(0),
+                                hour: new Array(24).fill(0),
+                                day: new Array(30).fill(0)
+                            }
+                            found = true;
+                        }
+                    }
+                    if (found) {
+                        log("writing NV data to disk...");
+                        write();
+                    }
+                }
                 cfg.sensor.press.forEach(element => {
                     entity[("press_" + element.name)] ||= { average: [], step: 0, meters: null, psi: null, percent: null, volts: null, };
                 });
@@ -875,11 +970,10 @@ module.exports = { // exports added to clean up layout
                     sensor.ha_push(state);
                     for (let x = 0; x < cfg.dd.length; x++) if (cfg.dd[x].enable) delivery.auto(x);
                 }, 1e3);
-                st.timer.minute = setInterval(() => {
-                    timer();
-                    sensor.flow.meter();
-                    write();
-                }, 60e3);
+                setTimeout(() => {  // start minute timer aligned with system minute
+                    timer(); sensor.flow.meter(); write();
+                    st.timer.minute = setInterval(() => { timer(); sensor.flow.meter(); write(); }, 60e3);
+                }, (60e3 - ((time.sec * 1e3) + time.mil)));
                 st.timer.hour = setInterval(() => {     // called every hour  -  reset hourly notifications
                     for (let x = 0; x < cfg.dd.length; x++) {
                         st.dd[x].fault.flowOver = false;
@@ -887,14 +981,19 @@ module.exports = { // exports added to clean up layout
                     }
                 }, 3600e3);
                 log("loading constructors");
+                push["clear-oneShot"] = (number) => {
+                    log(cfg.dd[number].name + " - clearing oneShot");
+                    clearTimeout(st.dd[number].oneShot);
+                    st.dd[number].oneShot = false;
+                }
                 for (let x = 0; x < cfg.dd.length; x++) {
                     const dd = st.dd[x];
                     const config = cfg.dd[x];
                     push[dd.auto.name] = push_constructor.auto(dd, x, config);
                     push[config.ha.turbo] = push_constructor.turbo(dd, x, config);
                     push[config.ha.profile] = push_constructor.profile(dd, x, config);
-                    if (config.ha.oneShot) {
-                        for (const key of config.ha.oneShot) {
+                    if (config.oneShot?.buttons) {
+                        for (const key of config.oneShot.buttons) {
                             // log("loading constructor for oneshot entity: " + key)
                             push[key] = push_constructor.oneShot(dd, x, config);
                         }
@@ -913,150 +1012,6 @@ module.exports = { // exports added to clean up layout
                     for (const name in nv.flow) { nv.flow[name].today = 0; }  // reset daily low meters
                 }
             }
-            function initNV() {
-                if (cfg.sensor.flow) {
-                    nv.flow ||= {};
-                    let found = false;
-                    for (let x = 0; x < cfg.sensor.flow.length; x++) {
-                        let flowName = cfg.sensor.flow[x].name;
-                        if (!nv.flow[flowName]) {
-                            log("initializing NV data for flowmeter: " + flowName);
-                            nv.flow[flowName] = {
-                                total: 0, today: 0,
-                                min: new Array(60).fill(0),
-                                hour: new Array(24).fill(0),
-                                day: new Array(30).fill(0)
-                            }
-                            found = true;
-                        }
-                    }
-                    if (found) {
-                        log("writing NV data to disk...");
-                        write();
-                    }
-                }
-            }
-            function fountain(x) {
-                let fount = { st: st.fountain[x], cfg: cfg.fountain[x] }
-                if (entity[fount.cfg.haAuto].state == true) {
-                    if (fount.state.step == null) pumpFountain(x, true);
-                    if (entity[fount.cfg.pump] == true) {
-                        if (time.epochMin - fount.state.step >= fount.cfg.intervalOn) pumpFountain(x, false);
-                    } else {
-                        if (time.epochMin - fount.state.step >= fount.cfg.intervalOff) pumpFountain(x, true);
-                    }
-                }
-                if (fount.state.flowCheck) {
-                    let flow = (entity[cfg.sensor.flow[fount.cfg.sensor.flow.entity].entity].state / 60).toFixed(0);
-                    if (flow <= fount.cfg.sensor.flow.startError) {
-                        log(fount.cfg.name + " - flow check FAILED: " + flow + "lpm - auto will shut down", 3);
-                        send(fount.cfg.haAuto, false);
-                        pumpFountain(x, false);
-                        return;
-                    }
-                }
-            }
-            function pumpFountain(x, power) {
-                let fount = { st: st.fountain[x], cfg: cfg.fountain[x] }
-                fount.state.step = time.epochMin;
-                if (power) {
-                    log(fount.cfg.name + " - is turning on");
-                    send(cfg.esp[fount.cfg.pump], true);
-                    if (fount.cfg.flow != undefined && fount.cfg.flow.entity != undefined) {
-                        fount.state.timerFlow = setTimeout(() => {
-                            let flow = (entity[cfg.flow[fount.cfg.flow.entity].entity].state / 60).toFixed(0);
-                            log(fount.cfg.name + " - checking flow");
-                            if (flow < fount.cfg.flow.startError) {
-                                log(fount.cfg.name + " - flow check FAILED: " + flow + "lpm - auto will shut down", 3);
-                                send(fount.cfg.haAuto, false);
-                                pumpFountain(x, false);
-                                return;
-                            } else if (flow < fount.cfg.flow.startWarn) {
-                                log(fount.cfg.name + " - starting flow less than normal: " + flow + "lpm", 2);
-                                send(fount.cfg.haAuto, false);
-                            } else {
-                                log(fount.cfg.name + " - flow check PASSED: " + flow + "lpm");
-                                fount.state.flowCheck = true;
-                            }
-                        }, (fount.cfg.flow.startWait * 1e3));
-                    }
-                } else {
-                    log(fount.cfg.name + " - is turning off");
-                    send(cfg.esp[fount.cfg.pump], false);
-                    clearTimeout(fount.state.timerFlow);
-                    fount.state.flowCheck = false;
-                }
-            }
-            /*
-            fountain advanced time window - coordinate with solar power profile - fault run time 
-            solar fountain controls auto, when low sun, auto fountain resumes with pump stopped (fail safe)
-            */
-        },
-        Compound: function (_name, _push, _reload) {
-            try {
-                let { st, cfg, nv, log, write, send, push } = _pointers(_name);
-                if (_reload) {
-                    if (_reload != "config") {
-                        log("hot reload initiated");
-                        clearTimeout(st.timer);
-                    } else ({ st, cfg, nv } = _pointers(_name));
-                    return;
-                }
-                if (_push === "init") {
-                    global.state[_name] = { boot: false, timer: null };
-                    global.config[_name] ||= {};
-                    ({ st, cfg, nv, push } = _pointers(_name));
-                    log("automation is starting");
-                    st.timer = setInterval(() => { timer(); }, 60e3);
-                    return;
-                } else { }
-                function timer() {
-                    if (time.hour == 0 && time.min == 0) {
-                        log("Lights - Outside Lights - Turning OFF");
-                        send("input_boolean.lights_stairs", false);
-                        send("switch.lights_bodega_front_1", false);
-                    }
-                    if (time.hour == 2 && time.min == 0) {
-                        // send("switch.relay_bodega_freezer_fujidenzo", false);
-                    }
-                    if (time.hour == 4 && time.min == 0) {
-                        log("Lights - Outside Lights (bodega front 2) - Turning OFF");
-                        send("switch.lights_bodega_front_2", false);
-                        send("switch.lights_outside_entrance", false);
-                    }
-                    if (time.hour == 6 && time.min == 0) {
-                        log("Auto Bubon - Turning ON");
-                        clearTimeout(global.state["Pumper"].dd[0].oneShot);
-                        global.state["Pumper"].dd[0].oneShot = false;
-                        send("input_boolean.auto_bubon", true);
-                        // send("switch.relay_bodega_freezer_fujidenzo", true);
-                    }
-                    if (time.hour == 6 && time.min == 30) {
-
-                    }
-                    if (time.hour == 17 && time.min == 30) {
-                        send("switch.lights_bodega_front_1", true);
-                    }
-                    if (time.hour == 17 && time.min == 30) {
-                        log("Lights - Outside Lights - Turning ON");
-                        send("input_boolean.lights_stairs", true);
-                        send("switch.lights_bodega_front_2", true);
-                        send("switch.lights_outside_bedroom", true);
-                        send("switch.lights_outside_entrance", true);
-                    }
-                    if (time.hour == 18 && time.min == 0) {
-                        send("input_boolean.auto_bubon", false);
-                        send("switch.lights_bodega_front_1", true);
-                        // send("switch.relay_bodega_freezer_fujidenzo", false);
-                    }
-                    if (time.hour == 21 && time.min == 0) {
-                        // send("switch.relay_bodega_freezer_fujidenzo", true);
-                    }
-                    if (time.hour == 22 && time.min == 0) {
-                        send("switch.lights_outside_bedroom", false);
-                    }
-                }
-            } catch (error) { console.trace(error) }
         },
     }
 };
