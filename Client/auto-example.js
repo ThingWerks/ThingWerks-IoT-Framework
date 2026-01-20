@@ -154,10 +154,11 @@ module.exports = {
                 // run my automation in some interval:
                 state.timer.myAuto = setInterval(() => { myAuto(); }, 1e3);
 
-                // run the timer function once per minute
-                state.timer.minute = setInterval(() => { timer(); }, 60e3);
 
-
+                setTimeout(() => {  // start minute timer aligned with system minute
+                    timer();
+                    st.timer.minute = setInterval(() => { timer(); }, 60e3);
+                }, (60e3 - ((time.sec * 1e3) + time.mil)));
 
                 // any other initialization sequence here
 
