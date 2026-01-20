@@ -1,88 +1,84 @@
 module.exports = {
     entity: {
         subscribe: [
-            "input_boolean.auto_compressor",
-            "input_boolean.all_systems_timer",
-            "input_boolean.auto_pump_transfer",
-            "input_boolean.auto_pump_pressure",
-            "input_boolean.auto_solar",
-            "input_boolean.auto_pump_pressure_turbo",
-            "input_boolean.auto_fountain",
-            "input_button.pump_uth_one_shot",
-            "input_number.pump_uth_timer",
-            "input_boolean.pump_uth_reserve",
-            "input_number.auto_pump_profile",
+            "input_boolean.auto_bubon",
+            "input_number.profile_bubon",
+            "input_number.timer_oneshot_bubon",
+            "input_number.timer_oneshot_irrigation",
+            "Switch Kitchen Pump",
+            "switch.relay_bodega_freezer_fujidenzo",
+            "input_boolean.auto_freezer",
+            "Button Bodega Water Filtered",
+            "input_boolean.auto_irrigatiion",
+            "Button Irrigation Entrance",
+            "Button Water Groogies",
+            "Button Water Irrigation House Back",
+            "Button Water Irrigation Piggary",
+            "Button Water Irrigation Dalom",
+            "input_button.oneshot_irrigation",
+            "input_button.oneshot_bubon",
 
-            
-            "lth-tank",             
-            "lth-relay1",
-            "uth-tank",
-            "lth-relay2",
-            "uth-relay1",
-            "uth-relay2",
-            "uth-relay3",
-            "uth-relay4",
-            "uth-pump",
-            "flow-lth-submersible", 
-            "flow-uth-pump",        
-            "flow-fountain-pump",   
-            "fountain-relay1",      
+            "psi-main",
+            "psi-irrigation",
+            "flow-raw-bubon",
+            "flow-raw-carbon-shop",
+            "flow-raw-carbon-groogies",
+            "shop-relay1-pump",
+            "solar-relay3-pump-bubon",
+            "flow-raw-irrigation"
         ],
-        sync: {
-        },
+        sync: {},
         heartbeat: {
-            "lth-led": 3000,
+            "esp_heartbeat_solar": 3000,
+            "esp_heartbeat_pump": 3000
         },
+        create: [
+            "clear-oneShot"
+        ]
     },
     config: {
         Pumper: {
-            dd: [       // config for the Demand/Delivery automation function, 1 object for each DD system
-                {                           // DD system example
-                    name: "AirLift",
-                    enable: false,
-                    ha: {
-                        auto: "input_boolean.auto_compressor",                 // home assistant auto toggle ID number (specified above in cfg.ha config)
-                        // solar: "input_boolean.auto_solar_bubon",             // solar automation boolean/toggle
-                        oneShotTimer: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
-                        oneShotExtend: true,                                    // extend OneShot timer after last usage
+            pump: {
+                "1.5hp jetpump": {
+                    power: {
+                        entity: "solar-relay3-pump-bubon",
                     },
-                    pump: [
-                        {
-                            name: "1.5hp LuckyPro",
-                            entity: "shop-relay1-pump",  // ESP/HA cfg ID number
-                            flow: {
-                                sensor: "irrigation",   // flow sensor number (in cfg.sensor.flow block)
-                                startWarn: 40,          // min start flow before triggering notification (useful for filters)
-                                startError: 10,         // REQUIRED - minimum flow rate pump must reach at start
-                                startWait: 6,           // seconds to wait before checking flow after pump starts
-                                //-----     runWarn: 3,             // optional - flow rate during operation which will cause warning
-                                // runError: 3,         // optional - flow rate during operation which will cause fault
-                                runStop: 5,             // flow rate to gracefully stop pump
-                            },
-                            press: {
-                                input: {
 
-                                }
-                            }
-                        },
-                    ],
+                    valve: {
+                        entity: undefined,
+                        startDelay: undefined,
+                        stopDelay: undefined,
+                    },
+                    team: {
+                        type: "assist",     // parallel, changeover, assist, 
+                        priority: 0,
+                        members: [],
+                    },
+                    flow: {
+                        entity: "bubon",
+                        startWarn: 15,
+                        startError: 10,
+                        startCheckTime: 5,
+                        runWarn: 8,
+                        runError: 5,
+                    },
                     press: {
-                        output: {
-                            sensor: "irrigation", // pressure sensor number (in cfg.sensor.press block)
-                            profile: [{ start: 40, stop: 62 }],
-                        },
+                        entity: "bubon",
+                        minRise: 22,
+                        minRiseTime: 20,
+                        minFall: 15
                     },
-                    fault: {
-                        retryCount: 0,      // optional - times to try pump restart
-                        retryWait: 10,      // time in seconds to wait for retry
-                        // retryFinal: 2,   // time in minutes to wait for final retry
-                        runLongError: 20,   // max run time in minutes
-                        runLongWarn: 5,     // max run time in minutes
-                        cycleCount: 0,      // max cycle times per cycleTime window
-                        cycleTime: 10,      // max cycleTime time window  (in seconds)
-                        flushWarning: false,
+                    vfd: {
+                        entity: undefined,
+                        type: "pwm",            // pwm, modbus, HDI, 4P
+                        startSet: undefined,
+                        rampSpeedUp: 20,
+                        rampSpeedDown: 20,
+                        pwm: [],
                     },
-                },
+                }
+            },
+            dd: [       // config for the Demand/Delivery automation function, 1 object for each DD system
                 {   // DD system example
                     name: "Bubon",       // Demand Delivery system 2d
                     enable: true,
@@ -92,9 +88,17 @@ module.exports = {
                         // turbo: 5,                                // secondary high stop pressure point
                         profile: "input_number.profile_bubon",      // pressure profile
                         // reserve: 9,                              // ha entity for reserve tank/pump
-                        oneShot: ["Switch Kitchen Pump", "Button Bodega Water Filtered", "Button Water Groogies", "input_button.oneshot_bubon"],   // single shot pump automation run button, must be array 
-                        oneShotTimer: "input_number.timer_oneshot_bubon", // single shot pump run time length
-                        oneShotExtend: true,
+                    },
+                    oneShot: {
+                        buttons: [ // single shot pump automation run button, must be array 
+                            "Switch Kitchen Pump",
+                            "Button Bodega Water Filtered",
+                            "Button Water Groogies",
+                            "input_button.oneshot_bubon"
+                        ],
+                        timer: "input_number.timer_oneshot_bubon",  // REQUIRED - single shot pump run time length
+                        extend: true,                                    // extend OneShot timer after last usage
+                        // duration: 10, // duration of oneShot in minutes
                     },
                     pump: [
                         {
@@ -106,7 +110,7 @@ module.exports = {
                                 startError: 9,     // minimum flow rate pump must reach at start
                                 startWait: 6,       // seconds to wait before checking flow after pump starts
                                 runError: 5,        // flow rate to fault 
-                                runStop: 12         // flow rate to stop 
+                                runStop: 10         // flow rate to stop 
                             },
                             press: {
                                 input: {
@@ -122,13 +126,14 @@ module.exports = {
                     press: {
                         output: {
                             sensor: "bubon", // pressure sensor number (in cfg.sensor.press block)
-                            profile: [{ start: 22, stop: 35 }, { start: 45, stop: 59 }, { start: 50, stop: 62 }],
+                            profile: [{ start: 22 }, { start: 45 }, { start: 50 }],
+                            // profile: [{ start: 22, stop: 35 }, { start: 45, stop: 59 }, { start: 50, stop: 62 }],
                         },
                     },
                     fault: {
                         retryCount: 2,      // times to try pump restart
                         retryWait: 10,      // time in seconds to wait for retry
-                        retryFinal: 2,      // time in minutes to wait for final retry
+                        retryFinal: 1,      // time in minutes to wait for final retry
                         runLongError: 10,   // max run time in minutes
                         runLongWarn: 5,     // max run time in minutes
                         // cycleCount: 0,   // max cycle times per cycleTime window
@@ -138,17 +143,31 @@ module.exports = {
                 },
                 {                           // DD system example
                     name: "Irrigation",
-                    enable: false,
+                    enable: true,
                     ha: {
                         auto: "input_boolean.auto_irrigatiion",                 // home assistant auto toggle ID number (specified above in cfg.ha config)
                         // solar: "input_boolean.auto_solar_bubon",             // solar automation boolean/toggle
                         // turbo: 5,                                            // secondary high stop pressure point
                         //   profile: "input_number.profile_bubon",             // pressure profile
                         // reserve: 9,                                          // ha entity for reserve tank/pump
-                        oneShot: ["Button Irrigation Entrance", "Button Water Irrigation House Back", //"Button Water Irrigation Piggary"
-                            , "Button Water Irrigation Dalom", "input_button.oneshot_irrigation", "Button Water Irrigation Piggary"],  // single shot pump automation run button, must be array 
-                        oneShotTimer: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
-                        oneShotExtend: true,                                    // extend OneShot timer after last usage
+
+                    },
+                    oneShot: {
+                        buttons: [ // single shot pump automation run button, must be array 
+                            "Button Irrigation Entrance",
+                            "Button Water Irrigation House Back",
+                            "Button Water Irrigation Dalom",
+                            "input_button.oneshot_irrigation",
+                            "Button Water Irrigation Piggary",
+                            //  { entity: "Button Irrigation Entrance" },
+                            //  { entity: "Button Water Irrigation House Back" },
+                            //  { entity: "Button Water Irrigation Dalom" },
+                            //  { entity: "input_button.oneshot_irrigation" },
+                            //  { entity: "Button Water Irrigation Piggary" },
+                        ],
+                        timer: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
+                        extend: true,                                    // extend OneShot timer after last usage
+                        // duration: 10, // duration of oneShot in minutes
                     },
                     pump: [
                         {
@@ -159,7 +178,7 @@ module.exports = {
                                 startWarn: 40,          // min start flow before triggering notification (useful for filters)
                                 startError: 10,         // REQUIRED - minimum flow rate pump must reach at start
                                 startWait: 6,           // seconds to wait before checking flow after pump starts
-                                //-----     runWarn: 3,             // optional - flow rate during operation which will cause warning
+                                // runWarn: 3,          // optional - flow rate during operation which will cause warning
                                 // runError: 3,         // optional - flow rate during operation which will cause fault
                                 runStop: 5,             // flow rate to gracefully stop pump
                             },
@@ -173,17 +192,18 @@ module.exports = {
                     press: {
                         output: {
                             sensor: "irrigation", // pressure sensor number (in cfg.sensor.press block)
-                            profile: [{ start: 40, stop: 62 }],
+                            profile: [{ start: 50 }],
                         },
                     },
                     fault: {
                         retryCount: 0,      // optional - times to try pump restart
                         retryWait: 10,      // time in seconds to wait for retry
                         // retryFinal: 2,   // time in minutes to wait for final retry
-                        runLongError: 20,   // max run time in minutes
+                        runLongError: 40,   // max run time in minutes
                         runLongWarn: 5,     // max run time in minutes
                         cycleCount: 0,      // max cycle times per cycleTime window
                         cycleTime: 10,      // max cycleTime time window  (in seconds)
+                        cycleMinFlow: 30,   // min water pumped per cycle
                         flushWarning: false,
                     },
                 }
