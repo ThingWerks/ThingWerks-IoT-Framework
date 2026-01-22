@@ -8,7 +8,7 @@ Follow the [auto-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framew
 - dont forget to call your automation in an interval if needed
 
 ### Objects for each Automation 
-- `state` - object for all volatile memory local pointer to global.state["nameOfAuto"]. Access other automation states via global.state["nameOfAuto"]. 
+- `state` - object for all volatile memory. This is a local pointer to global.state["nameOfAuto"]. Access other automation states via global.state["nameOfAuto"]. 
 - `config` - object for configurational data
   - can be stored in automation config file
 - `nv` - object for all non-volatile memory, 
