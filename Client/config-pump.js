@@ -498,8 +498,8 @@ module.exports = { // exports added to clean up layout
                             if ((tFlow * 1000) < dd.cfg.oneShot.extendLiterMin) {
                                 if (dd.cfg.oneShot.extendRetry) {
                                     if (dd.state.oneShotCount < dd.cfg.oneShot.extendRetry) {
-                                        log(dd.cfg.name + " - OneShot minimum (" + dd.cfg.oneShot.extendRetry
-                                            + "L) batch flow: " + (tFlow * 1000).toFixed(0) + " not reached - attempt: " + dd.state.oneShotCount, 1);
+                                        log(dd.cfg.name + " - OneShot minimum (" + dd.cfg.oneShot.extendLiterMin
+                                            + "L) batch flow: " + ~~(tFlow * 1000) + " not reached - attempt: " + dd.state.oneShotCount, 1);
                                         clearTimeout(dd.state.oneShot);
                                     } else {
                                         log(dd.cfg.name + " - OneShot minimum batch flow retries exceeded ("
