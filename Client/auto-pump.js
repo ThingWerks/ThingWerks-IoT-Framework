@@ -503,7 +503,8 @@ module.exports = { // exports added to clean up layout
                                         clearTimeout(dd.state.oneShot);
                                     } else {
                                         log(dd.cfg.name + " - OneShot minimum batch flow retries exceeded ("
-                                            + dd.state.oneShotCount + ") - terminating OneShot", 1);
+                                            + dd.state.oneShotCount + ") - terminating OneShot and auto shutdown", 1);
+                                        send(dd.cfg.ha.auto, false);
                                         clearTimeout(dd.state.oneShot);
                                         return;
                                     }
@@ -709,9 +710,9 @@ module.exports = { // exports added to clean up layout
             }
             let fountain = {
                 /*
-fountain advanced time window - coordinate with solar power profile - fault run time 
-solar fountain controls auto, when low sun, auto fountain resumes with pump stopped (fail safe)
-*/
+                    fountain advanced time window - coordinate with solar power profile - fault run time 
+                    solar fountain controls auto, when low sun, auto fountain resumes with pump stopped (fail safe)
+                */
                 auto: function fountain(x) {
                     let fount = { st: st.fountain[x], cfg: cfg.fountain[x] }
                     if (entity[fount.cfg.haAuto].state == true) {
@@ -823,6 +824,7 @@ solar fountain controls auto, when low sun, auto fountain resumes with pump stop
                                     + name + " - stopping in " + duration + " min");
                                 timeout();
                                 send(config.ha.auto, true);
+                                if (config.oneShot.pumpUp) delivery.start(dd, index);
                             } else if (state?.includes("remote_button_double_press")) {
                                 if (!config.enable) {
                                     log(config.name + " - system disabled - cannot start system", 2);
@@ -930,39 +932,55 @@ solar fountain controls auto, when low sun, auto fountain resumes with pump stop
                         write();
                     }
                 }
+
                 cfg.sensor.press.forEach(element => {
                     entity[("press_" + element.name)] ||= { average: [], step: 0, meters: null, psi: null, percent: null, volts: null, };
                 });
                 cfg.sensor.flow.forEach(element => {
                     entity[("flow_" + element.name)] ||= { lm: 0, temp: undefined, hour: 0, day: 0, batch: 0 };
                 });
-                for (let x = 0; x < cfg.fountain.length; x++) {
+                cfg.fountain.forEach(element => {
                     st.fountain.push({ step: null, timerFlow: null, flowCheck: false, })
-                }
-                for (let x = 0; x < cfg.dd.length; x++) {
-                    if (!cfg.dd[x].enable) log(cfg.dd[x].name + " - initializing - " + color("yellow", "DISABLED"));
-                    else log(cfg.dd[x].name + " - initializing");
+                });
+                cfg.dd.forEach((config, x) => {
+                    if (!config.enable) log(config.name + " - initializing - " + color("yellow", "DISABLED"));
+                    else log(config.name + " - initializing");
                     st.dd.push({     // initialize volatile memory for each Demand Delivery system
-                        cfg: cfg.dd[x],
+                        cfg: config,
                         state: {
                             run: false,
                             oneShot: false,
                             turbo: false,
                             profile: null,
                             pump: 0,
+                            flow: {
+                                check: false,
+                                checkPassed: false,
+                                checkRunDelay: false,
+                                timerCheck: null,
+                                timerRestart: null,
+                                timerInterval: null,
+                            },
                             flowCheck: false,
                             flowCheckPassed: false,
                             flowCheckRunDelay: false,
                             flowTimerCheck: null,
                             flowTimerRestart: null,
                             flowTimerInterval: null,
+                            timer: {
+                                timeoutOff: true,
+                                timeoutOn: false,
+                                timerFlow: null, // for run flow fault delay
+                                timerRun: null,
+                                timerRise: null,
+                            },
                             timeoutOff: true,
                             timeoutOn: false,
                             timerFlow: null, // for run flow fault delay
-                            cycleCount: 0,
                             timerRun: null,
-                            pressStart: null,
                             timerRise: null,
+                            cycleCount: 0,
+                            pressStart: null,
                             heartbeat: false,
                         },
                         fault: {
@@ -979,47 +997,50 @@ solar fountain controls auto, when low sun, auto fountain resumes with pump stop
                             tankLow: false,
                             inputLevel: false,
                         },
-                        auto: { get state() { return entity[cfg.dd[x].ha.auto]?.state }, name: cfg.dd[x].ha.auto },
+                        auto: { get state() { return entity[config.ha.auto]?.state }, name: config.ha.auto },
                         press: {
-                            in: (cfg.dd[x].press.input != undefined && cfg.dd[x].press.input.sensor) ? {
-                                cfg: cfg.sensor.press.find(obj => obj.name === cfg.dd[x].press.input.sensor),
-                                get state() { return entity[("press_" + cfg.dd[x].press.input.sensor)] }
+                            in: (config.press.input != undefined && config.press.input.sensor) ? {
+                                cfg: cfg.sensor.press.find(obj => obj.name === config.press.input.sensor),
+                                get state() { return entity[("press_" + config.press.input.sensor)] }
                             } : undefined,
-                            out: (cfg.dd[x].press.output != undefined && cfg.dd[x].press.output.sensor) ? {
-                                cfg: cfg.sensor.press.find(obj => obj.name === cfg.dd[x].press.output.sensor),
-                                get state() { return entity[("press_" + cfg.dd[x].press.output.sensor)] },
+                            out: (config.press.output != undefined && config.press.output.sensor) ? {
+                                cfg: cfg.sensor.press.find(obj => obj.name === config.press.output.sensor),
+                                get state() { return entity[("press_" + config.press.output.sensor)] },
                             } : undefined,
                         },
                         pump: [],
                     })
-                    for (let y = 0; y < cfg.dd[x].pump.length; y++) {
-                        st.dd[x].pump.push({
-                            cfg: cfg.dd[x].pump[y],
-                            get state() { return entity[cfg.dd[x].pump[y].entity]?.state; },
-                            name: cfg.dd[x].pump[y].entity
+                    let dd = st.dd[x];
+                    for (let y = 0; y < config.pump.length; y++) {
+                        dd.pump.push({
+                            cfg: config.pump[y],
+                            get state() { return entity[config.pump[y].entity]?.state; },
+                            name: config.pump[y].entity
                         });
-                        if (cfg.dd[x].pump[y].flow != undefined & cfg.dd[x].pump[y].flow.sensor != undefined) {
-                            st.dd[x].flow ||= [];
-                            st.dd[x].flow.push(entity[("flow_" + cfg.dd[x].pump[y].flow.sensor)])
+                        if (config.pump[y].flow != undefined & config.pump[y].flow.sensor != undefined) {
+                            dd.flow ||= [];
+                            dd.flow.push(entity[("flow_" + config.pump[y].flow.sensor)])
                         }
                     }
-                    if (cfg.dd[x].press != undefined && cfg.dd[x].press.output != undefined
-                        && cfg.dd[x].press.output.profile != undefined) {
-                        if (cfg.dd[x].ha.profile != undefined && cfg.dd[x].press.output.profile.length > 0) {
-                            log(cfg.dd[x].name + " - profile selector enabled");
-                            st.dd[x].state.profile = parseInt(entity[cfg.dd[x].ha.profile]?.state);
+                    if (config.press != undefined && config.press.output != undefined
+                        && config.press.output.profile != undefined) {
+                        if (config.ha.profile != undefined && config.press.output.profile.length > 0) {
+                            log(config.name + " - profile selector enabled");
+                            dd.state.profile = parseInt(entity[config.ha.profile]?.state);
                         } else {
-                            log(cfg.dd[x].name + " - no profile entity - selecting profile 0");
-                            st.dd[x].state.profile = 0;
+                            log(config.name + " - no profile entity - selecting profile 0");
+                            dd.state.profile = 0;
                         }
                     }
-                    if (cfg.dd[x].ha.turbo != undefined) {
-                        st.dd[x].state.turbo = entity[cfg.dd[x].ha.turbo].state;
+                    if (config.ha.turbo != undefined) {
+                        dd.state.turbo = entity[config.ha.turbo].state;
                     }
-                }
+                });
+
                 sensor.flow.calc();
                 sensor.flow.meter();
                 sensor.ha_push();
+
                 st.timer.second = setInterval(() => {     // called every second  -  rerun this automation every second
                     sensor.flow.calc();
                     sensor.ha_push(state);
@@ -1030,20 +1051,21 @@ solar fountain controls auto, when low sun, auto fountain resumes with pump stop
                     st.timer.minute = setInterval(() => { timer(); sensor.flow.meter(); write(); }, 60e3);
                 }, (60e3 - ((time.sec * 1e3) + time.mil)));
                 st.timer.hour = setInterval(() => {     // called every hour  -  reset hourly notifications
-                    for (let x = 0; x < cfg.dd.length; x++) {
-                        st.dd[x].fault.flowOver = false;
-                        st.dd[x].warn.tankLow = false;
-                    }
+                    cfg.dd.forEach((_, x) => {
+                        let dd = st.dd[x];
+                        dd.fault.flowOver = false;
+                        dd.warn.tankLow = false;
+                    });
                 }, 3600e3);
+
                 log("loading constructors");
                 push["clear-oneShot"] = (number) => {
                     log(cfg.dd[number].name + " - clearing oneShot");
                     clearTimeout(st.dd[number].oneShot);
                     st.dd[number].oneShot = false;
                 }
-                for (let x = 0; x < cfg.dd.length; x++) {
-                    const dd = st.dd[x];
-                    const config = cfg.dd[x];
+                cfg.dd.forEach((config, x) => {
+                    let dd = st.dd[x];
                     push[dd.auto.name] = push_constructor.auto(dd, x, config);
                     push[config.ha.turbo] = push_constructor.turbo(dd, x, config);
                     push[config.ha.profile] = push_constructor.profile(dd, x, config);
@@ -1053,9 +1075,11 @@ solar fountain controls auto, when low sun, auto fountain resumes with pump stop
                             push[key] = push_constructor.oneShot(dd, x, config);
                         }
                     }
-                }
-                for (let x = 0; x < cfg.fountain.length; x++)
-                    push[cfg.fountain[x].haAuto] = push_constructor.fountain();
+                });
+                cfg.fountain.forEach(config => {
+                    push[config.haAuto] = push_constructor.fountain();
+                });
+
             } else push[_push.name]?.(_push.state, _push.name);
             function timer() {    // called every minute
                 for (let x = 0; x < cfg.dd.length; x++) { st.dd[x].warn.flowFlush = false; }
