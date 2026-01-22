@@ -18,9 +18,10 @@ module.exports = {
                 if (_reload) {   // called after modification/reload of this automation file
                     if (_reload != "config") {
                         log("hot reload initiated");
+
                         //clear event timers clearInterval(state.timer.second);
-                        if (push) push.forIn(name => { delete push[name]; })
-                        push = {}; // clean up push initialization 
+
+                        if (global.push) push.forIn((name, value) => { delete global.push[name]; }) // destroy all push calls 
                     } else ({ state, config, nv } = _pointers(_name));
                     return;
                 }
@@ -55,14 +56,13 @@ module.exports = {
     },
 }
 let _pointers = (_name) => {
-    push[_name] ||= {}
     return {
         state: state[_name] ?? undefined,
         config: config[_name] ?? undefined,
         nv: nv[_name] ?? undefined,
-        push: push[_name] ?? undefined,
+        push: push[_name] ||= {},
         log: (m, l) => slog(m, l, _name),
-        save: () => writeNV(_name),
+        write: () => writeNV(_name),
         send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
     }
 }
