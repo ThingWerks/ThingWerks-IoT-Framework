@@ -7,7 +7,7 @@ Follow the [auto-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framew
 - make constructors for incoming "push" state updates
 - dont forget to call your automation in an interval if needed
 
-### Unique Automation Objects
+### Objects for each Automation 
 - `automation` - object holds each automation script
 - `state` - object for all volatile memory
 - `config` - object for configurational data
