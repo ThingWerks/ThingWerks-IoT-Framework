@@ -190,15 +190,19 @@ module.exports = {
         "---another automation name here----": function (_name, _push, _reload) {
             try {
                 let { state, config, nv, log, save, send, push } = _pointers(_name);
+                
                 if (_reload) {   // called after modification/reload of this automation file
                     if (_reload != "config") {
                         log("hot reload initiated");
-                        //clear event timers clearInterval(state.timer.second);
-                        if (push) push.forIn(name => { delete push[name]; })
-                        push = {}; // clean up push initialization 
+
+                        //clear you event timers here.  ie. clearInterval(state.timer.second);
+
+                        if (global.push) push.forIn((name, value) => { delete global.push[name]; }) // destroy all push calls 
                     } else ({ state, config, nv } = _pointers(_name));
                     return;
                 }
+
+
                 if (_push === "init") { // ran only once - your initialization procedure
                     global.config[_name] = {};  // initialize automation's configurations or from -c config File or from config object above
                     global.state[_name] = {};   // initialize automation's volatile memory
@@ -208,6 +212,8 @@ module.exports = {
                     return;
                 } else push[_push.name]?.(_push.state, _push.name);    // called with every incoming push event
             } catch (error) { console.trace(error) }
+
+
 
         },
     },
