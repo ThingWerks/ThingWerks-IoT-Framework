@@ -8,14 +8,13 @@ Follow the [auto-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framew
 - dont forget to call your automation in an interval if needed
 
 ### Objects for each Automation 
-- `automation` - object holds each automation script
-- `state` - object for all volatile memory
+- `state` - object for all volatile memory local pointer to global.state["nameOfAuto"]. Access other automation states via global.state["nameOfAuto"]. 
 - `config` - object for configurational data
   - can be stored in automation config file
 - `nv` - object for all non-volatile memory, 
   - file is saved relative path of `client.js` file 
   - filename appended with name used in `config.js -n` flag
-- `push[]` - object holds each automations push logic
+- `push[]` - object holds each automations event logic and methods
   - each entity that causes a logical process needs to be constructed 
   - must be a member function call, has two parameters 
   - `push[]` object members names must match entity names
