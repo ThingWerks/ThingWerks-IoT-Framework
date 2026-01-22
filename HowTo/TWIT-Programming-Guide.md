@@ -1,7 +1,7 @@
 ## Automation Template Recap
 Follow the [auto-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.jsc) guidelines. Its extremely straight forward and it gives very basic instruction on where to put to code
 
-- consult the auto-example file for general layout and use, compare with [auto.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js) 
+- consult the auto-example file for general layout and use, compare with [auto.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js) so you can the difference between example code and the bare minimum template
 - specify entity subscriptions, sync groups, heartbeat or locally created ones in auto file or externally (stating client with -a and -c flag together)
 - write your "init" logic for state, nv and push 
 - make constructors for incoming "push" state updates
@@ -42,7 +42,7 @@ Follow the [auto-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framew
 ### Command Reference
 - `write()`         - write NV data to hard disk
   - this has automatic flood control, just call it when you need it
-- `send()`          - set any entity state any entity
+- `send()`          - set any entity state
   - `send(entityName, value, unit, haIpAddress)`  
   - normal TWIT, HA, ESP: `send("testLED", true)` or `send("testLED", 122,12)`
   - HA Sensor (uses REST API): `send("input_number.test", 20, "psi", "10.10.0.1")`
