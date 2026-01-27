@@ -2042,7 +2042,6 @@ if (isMainThread) {
                                 if (timeResult > 500)
                                     log("websocket (" + color("cyan", address) + ") ping lag: " + timeResult + "ms", 2);
                                 break;
-
                             case "result":
                                 // console.log(buf)
                                 let count = 0;
@@ -2112,21 +2111,30 @@ if (isMainThread) {
                                         log("Websocket (" + color("cyan", address)
                                             + ") - received ZHA device list, items: " + buf.result.length);
                                         clearTimeout(state.zha.queryReply);
+                                        state.zha.noDevices = false;
                                     } else if (buf.error?.code == 'unknown_command') {
-                                        log("Websocket (" + color("cyan", address) + ") - no ZHA devices - disabling");
                                         clearTimeout(state.zha.queryReply);
+                                        if (!state.zha.noDevices) {
+                                            log("Websocket (" + color("cyan", address) + ") - no ZHA devices - will retry");
+                                            state.zha.noDevices = true;
+                                            state.zha.queryReply = setTimeout(() => {
+                                                log("Websocket (" + color("cyan", address)
+                                                    + ") - retrying ZHA device query");
+                                                zhaQuery();
+                                            }, 60e3);
+                                        } else {
+                                            log("Websocket (" + color("cyan", address) + ") - still no ZHA devices - disabling");
+                                        }
                                     } else if (buf.error?.code == 'unknown_error') {
                                         log("Websocket (" + color("cyan", address)
                                             + ") - ZHA not online yet - will retry", 2);
                                     }
                                 }
                                 break;
-
                             case "auth_required":
                                 log("Websocket (" + color("cyan", address) + ") - authenticating", 0);
                                 send({ type: "auth", access_token: config.token });
                                 break;
-
                             case "auth_ok":
                                 log("Websocket (" + color("cyan", address) + ") - connection " + color("green", "ONLINE"));
                                 log("Websocket (" + color("cyan", address) + ") - subscribing to HA events", 1);
@@ -2148,7 +2156,6 @@ if (isMainThread) {
                                     ping();
                                 }, 10e3);
                                 break;
-
                             case "event":
                                 switch (buf.event.event_type) {
                                     case "zha_event":
@@ -2301,7 +2308,7 @@ if (isMainThread) {
                                     state.retry = true;
                                 }
                                 state.pingsLost++;
-                            } else { socket.close(); haReconnect("ping timeout"); return; }
+                            } else { socket.close(); haReconnect("ping timeout - reconnection process starting"); return; }
                         }
                         state.reply = false;
                         state.timeStart = time.epochMil;
@@ -2324,7 +2331,8 @@ if (isMainThread) {
                 });
 
                 function haReconnect(error) {
-                    state.error = true;
+                    state.error = true; 
+                    state.zha.noDevices = false;
                     clearTimeout(state.timer.reconnect);
                     if (error) log("websocket (" + color("cyan", address) + ") - " + error.toString(), 3);
                     em[address].removeAllListeners();
