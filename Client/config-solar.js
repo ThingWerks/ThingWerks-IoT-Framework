@@ -86,34 +86,64 @@ module.exports = {
                     inverterPower: "inverter_1"    // local sensor - total inverter power - used for welder detection only (as of now)
                 },
                 priority: {
-                    entityAuto: "input_boolean.auto_priority",
-                    battery: "main",
-                    delaySwitchOn: 10,    // 60s time to observe changes in amps/sun before toggling priorities on
-                    delaySwitchOff: 10,  // 30s time to observe changes in amps/sun before toggling priorities off
+                    entityAuto: "input_boolean.auto_priority",  // entity to enable/disable priority system
+                    entitySolar: "solar_power",                 // sensor entity for all solar energy 
+                    battery: "main",                            // battery entity used by priority system 
+                    delaySwitchOn: 5,    // 60s time to observe changes in amps/sun before toggling priorities on
+                    delaySwitchOff: 5,  // 30s time to observe changes in amps/sun before toggling priorities off
                     queue: [
                         {
                             name: "Inverter 10kw",
                             enable: true,
-                            onAmps: 20.0,
-                            onSun: 0.5,
-                            // offSun: 2.35,        // sunlight level to deactivate this system - independent of battery level
-                            offAmps: -15.0,
-                            offAmpsFloat: -30.0,
-                            // onVolts: 54.0,       // battery level to turn on system - in addition to sunlight if configured
-                            // offVolts: 53.7,      // battery level to turn off system - independent of battery level
-                            delayOff: 300,          // set delay for shutdown criteria hold time 
+                            on: {
+                                time: { hour: 5, min: 45 },
+                                timeVoltsMin: 54.0,
+                                // amps: 20.0,
+                                // sun: 0.5,
+                                // volts: 54.0,     // battery level to turn on system - in addition to sunlight if configured
+                            },
+                            off: {
+                                time: { hour: 21, min: 5 },
+                                // sun: 2.35,       // sunlight level to deactivate this system - independent of battery level
+                                // amps: -15.0,
+                                // ampsFloat: -30.0,
+                                volts: 53.7,      // battery level to turn off system - independent of battery level
+                                // delay: 300,         // shutdown criteria hold time 
+                            },
                             // inverter: 0          // optional - which inverter carries the load - if not specified, inverter 0 is used
-                            entities: ["solar-relay5-inverter-10kw"],
+                            entity: ["solar-relay5-inverter-10kw"],
                             entityAuto: null,       // entity to control this members activation
                         },
                         {
                             name: "Ram-Water ATS",
                             enable: true,
-                            onSun: 3.0,
-                            onAmps: 100.0,
-                            offAmps: 60.0,
-                            offAmpsFloat: -10.0,
-                            entities: ["solar-ram-relay1-water"]
+                            voltsFloat: 58.2,
+                            on: {
+                                time: { hour: 7, min: 0 },
+                                timeVoltsMin: 54.4,
+                                //  sun: 3.0,
+                                amps: 130.0,
+                            },
+                            off: {
+                                time: { hour: 21, min: 0 },
+                                amps: 90.0,
+                                ampsFloat: -180.0,
+                                budget: [ // hour, charge, discharge, solar, volts
+                                    { hour: 6, solar: 0.0, volts: 55.0 },
+                                    { hour: 7, solar: 0.0, volts: 55.0 },
+                                    { hour: 8, solar: 2.0, volts: 55.0 },
+                                    { hour: 9, solar: 8.0, volts: 55.8 },
+                                    { hour: 10, solar: 18.0, volts: 55.0 },
+                                    { hour: 11, solar: 39.0, volts: 55.0 },
+                                    { hour: 12, volts: 55.0 },
+                                    { hour: 14, volts: 55.0 },
+                                    { hour: 15, volts: 57.0 },
+                                    { hour: 16, volts: 56.5 },
+                                    { hour: 18, volts: 55.8 },
+                                    { hour: 20, volts: 55.0 },
+                                ]
+                            },
+                            entity: ["solar-ram-relay1-water"]
                         },
                     ],
                 }
@@ -315,9 +345,10 @@ module.exports = {
                     sensorWatt: "battery_power",    // used for recorder
                     sensorAmp: "battery_current_rs485",
                     sensorVolt: "battery_volts_twit",
-                    voltsFullCharge: 58.6,
+                    voltsFullCharge: 58.4,
+                    voltsFloat: 58.2,
                     voltsFloatStop: 56.0,
-                    ampsResetDischarge: 50.0,
+                    ampsResetDischarge: 30.0,
                     socTable: 1,
                 },
             ],
