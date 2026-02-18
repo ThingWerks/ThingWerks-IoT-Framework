@@ -928,8 +928,12 @@ if (isMainThread) {
                             //  console.log(entity[name])
                             try {
                                 if (entity[name]?.state != null && data.name in entity[name].client) {
-                                    if (typeof entity[name]?.state === "string" && entity[name].state.includes("remote_button_")) continue;
-                                    if (name.includes("input_button.")) continue;
+                                  //  if (name.includes("input_button.")) continue;
+                                    if (name.toLowerCase().includes("button")) continue;
+                                    if (typeof entity[name]?.state === "string") {
+                                        if (entity[name].state.includes("remote_button_")) continue;
+                                        if (entity[name].state.includes("toggle")) continue;
+                                    }
 
                                     log("Websocket (" + color("cyan", data.address) + ") - fetch reply to client: "
                                         + color("purple", data.name) + " - entity: " + name + " - state: "
@@ -2331,7 +2335,7 @@ if (isMainThread) {
                 });
 
                 function haReconnect(error) {
-                    state.error = true; 
+                    state.error = true;
                     state.zha.noDevices = false;
                     clearTimeout(state.timer.reconnect);
                     if (error) log("websocket (" + color("cyan", address) + ") - " + error.toString(), 3);
