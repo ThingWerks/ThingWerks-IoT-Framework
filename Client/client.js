@@ -373,7 +373,7 @@ auto = {
             console.log(`Successfully processed automation: ${automationFile}`);
             return clientModule;
         } catch (error) {
-            console.error(`Error processing automation file "${automationFile}":`, error.message);
+            console.trace(color("red", "Error processing automation file ") + automationFile + ":", error.message);
             return null;
         }
     },
