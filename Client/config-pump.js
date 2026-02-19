@@ -100,7 +100,7 @@ module.exports = {
                         },
                         durationEntity: "input_number.timer_oneshot_bubon",  // REQUIRED - single shot pump run time length
                         extend: true,                                    // extend OneShot timer after last usage
-                        // duration: 10, // duration of oneShot in minutes
+                         duration: 10, // duration of oneShot in minutes
                     },
                     pump: [
                         {
