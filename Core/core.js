@@ -290,17 +290,22 @@ if (isMainThread) {
                     case "fetch":
                         log("client - " + color("purple", buf.name) + " - requesting fetch - port: " + port, 3);
                         // console.log("time now: " + time.epoch + " -  last fetch: " + (time.epoch - state.fetchLast))
-                        if ((time.epoch - state.fetchLast) < 60) fetchReply()
+                        if ((time.epoch - state.fetchLast) < 60) fetchReply();
                         else if (cfg.homeAssistant?.length > 0) {
                             thread.ha.postMessage({ type: "fetch", name: buf.name, port });
+                            log("sending fetch request to HA Thread", 1, 0);
                             //  state.fetchLast = time.epoch;
                         } else fetchReply();
                         function fetchReply() {
                             for (const name in entity) {
                                 if (buf.name in entity[name].client) {
                                     if (entity[name].state != null) {
-                                        if (typeof entity[name].state === "string" && entity[name].state.includes("remote_button_")) continue
-                                        if (name.includes("input_button.")) continue
+                                        //  if (name.includes("input_button.")) continue;
+                                        if (name.toLowerCase().includes("button")) continue; // must also have in fetch cached reply (UDP)
+                                        else if (typeof entity[name]?.state === "string") {
+                                            if (entity[name].state.includes("remote_button_")) continue;
+                                            else if (entity[name].state.includes("toggle")) continue;
+                                        }
                                         log("cached entities fetch reply: " + name, 1, 0);
                                         client("state", { name, state: entity[name].state, owner: entity[name].owner }, port);
                                     }
@@ -928,11 +933,11 @@ if (isMainThread) {
                             //  console.log(entity[name])
                             try {
                                 if (entity[name]?.state != null && data.name in entity[name].client) {
-                                  //  if (name.includes("input_button.")) continue;
-                                    if (name.toLowerCase().includes("button")) continue;
-                                    if (typeof entity[name]?.state === "string") {
+                                    //  if (name.includes("input_button.")) continue;
+                                    if (name.toLowerCase().includes("button")) continue; // must also have in fetch cached reply (UDP)
+                                    else if (typeof entity[name]?.state === "string") {
                                         if (entity[name].state.includes("remote_button_")) continue;
-                                        if (entity[name].state.includes("toggle")) continue;
+                                        else if (entity[name].state.includes("toggle")) continue;
                                     }
 
                                     log("Websocket (" + color("cyan", data.address) + ") - fetch reply to client: "
