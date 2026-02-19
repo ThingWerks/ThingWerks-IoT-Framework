@@ -11,10 +11,10 @@ module.exports = { // exports added to clean up layout
                     clearInterval(st.timer.minute);
                     clearInterval(st.timer.second);
                     st.dd.forEach(element => {
-                        clearTimeout(element.state.flowTimerRestart);
-                        clearTimeout(element.state.flowTimerCheck);
+                        clearInterval(element.state.flow.timerInterval);
+                        clearTimeout(element.state.flow.timerRestart);
+                        clearTimeout(element.state.flow.timerCheck);
                         clearTimeout(element.state.oneShot);
-                        clearInterval(element.state.flowTimerInterval);
                     });
                     if (global.push) push.forIn((name, value) => { delete global.push[name]; })
                 }
@@ -30,7 +30,8 @@ module.exports = { // exports added to clean up layout
                         let flowName = cfg.sensor.flow[x].name;
                         let flowNameEntity = "flow_" + cfg.sensor.flow[x].name;
                         let unit = [cfg.sensor.flow[x].unit, cfg.sensor.flow[x].unit, cfg.sensor.flow[x].unit, "L/m", "L"]
-                        let value = [nv.flow[flowName].total, entity[flowNameEntity].hour, entity[flowNameEntity].day, entity[flowNameEntity].lm, nv.flow[flowName].today];
+                        let value = [nv.flow[flowName].total, entity[flowNameEntity].hour, entity[flowNameEntity].day
+                            , entity[flowNameEntity].lm, nv.flow[flowName].today];
                         for (let y = 0; y < 5; y++)
                             HAsend(flowNameEntity + list[y], Number(value[y]).toFixed(((unit[y] == "m3") ? 2 : 0)), unit[y]);
                     }
@@ -189,7 +190,7 @@ module.exports = { // exports added to clean up layout
                                                 } else if (state.profile != null) {
                                                     //  console.log("profile pressure: ", press.out.state.psi, " - starting pressure: "
                                                     //     + config.press.output.profile[state.profile].start)
-                                                    if (press.out.state.psi <= config.press.output.profile[state.profile].start) {
+                                                    if (press.out.state.psi <= config.press?.output?.profile?.[state.profile]?.start) {
                                                         log(config.name + " - " + press.out.cfg.name + " is low (" + press.out.state.psi.toFixed(0)
                                                             + "psi) - pump is starting with profile: " + state.profile);
                                                         delivery.start(x);
@@ -204,13 +205,14 @@ module.exports = { // exports added to clean up layout
                                                 }
                                                 if (state.timer.timeoutOff == true) {  // after pump has been off for a while
                                                     if (pump[state.pump].state === true && state.sharedPump.run == false) {
-                                                        log(config.name + " - pump running in HA/ESP but not here - switching pump ON");
-                                                        delivery.start(x);
+                                                        log(config.name + " - pump running in HA/ESP but not here - switching pump ON", 2);
+                                                        delivery.start(x, false);
                                                         return;
                                                     } else {
                                                         if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
                                                             && warn.flowFlush == false && state.sharedPump.shared == false) {
-                                                            log(config.name + " - flow is detected (" + flow[state.pump].lm.toFixed(0) + "lpm) possible sensor damage or flush operation", 2);
+                                                            log(config.name + " - flow is detected (" + flow[state.pump].lm.toFixed(0)
+                                                                + "lpm) possible sensor damage or flush operation", 2);
                                                             warn.flowFlush = true;
                                                             delivery.stop(x, true, "faulted");
                                                             return;
@@ -221,8 +223,9 @@ module.exports = { // exports added to clean up layout
                                             break;
                                         case true:  // when pump is STOPPED and flow faulted but HA/ESP home report as still running
                                             if (state.timer.timeoutOff == true) {
-                                                if (pump[state.pump].state === true || flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError) {
-                                                    log(config.name + " - pump is flow faulted but HA pump status is still ON, trying to stop again", 3);
+                                                if (pump[state.pump].state === true
+                                                    || flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError) {
+                                                    log(config.name + " - pump is flow faulted but pump is still ON, stopping again", 3);
                                                     delivery.stop(x, true, "faulted");
                                                     return;
                                                 }
@@ -245,9 +248,9 @@ module.exports = { // exports added to clean up layout
                                         }
                                     } else if (state.profile != null) {
                                         // if (config.pump[state.pump].flow?.runStop != undefined) return; // ether dont specify stop pressure or set it high
-                                        if (press.out.state.psi >= config.press.output.profile[state.profile].stop) {
-                                            log(config.name + " - " + press.out.cfg.name + " pump profile: " + state.profile + " pressure reached: "
-                                                + press.out.state.psi.toFixed(0) + " psi - pump is stopping");
+                                        if (press.out?.state?.psi >= config.press?.output?.profile?.[state.profile]?.stop) {
+                                            log(config.name + " - " + press.out.cfg.name + " pump profile: " + state.profile
+                                                + " pressure reached: " + press.out.state.psi.toFixed(0) + " psi - pump is stopping");
                                             delivery.stop(x);
                                             return;
                                         }
@@ -277,7 +280,8 @@ module.exports = { // exports added to clean up layout
                                         return;
                                     }
                                     if (time.epoch - state.timer.run >= config.fault.runLongError * 60) {
-                                        log(config.name + " - pump: " + pump[state.pump].name + " - max runtime exceeded - DD system shutting down", 3);
+                                        log(config.name + " - pump: " + pump[state.pump].name
+                                            + " - max runtime exceeded - DD system shutting down", 3);
                                         delivery.stop(x, true, "faulted");
                                         return;
                                     }
@@ -288,7 +292,8 @@ module.exports = { // exports added to clean up layout
                                     }
                                     if (config.press.output.riseTime != undefined) delivery.check.press(x);
                                     if (flow != undefined) {
-                                        if (config.pump[state.pump].flow.stopFlow != undefined && flow[state.pump].lm <= config.pump[state.pump].flow.stopFlow) {
+                                        if (config.pump[state.pump].flow.stopFlow != undefined
+                                            && flow[state.pump].lm <= config.pump[state.pump].flow.stopFlow) {
                                             log(config.name + " - stop flow rate reached - pump is stopping");
                                             delivery.stop(x);
                                             return;
@@ -305,7 +310,7 @@ module.exports = { // exports added to clean up layout
                             break;
                         case false:  // when auto is OFFLINE
                             if (state.timer.timeoutOff == true) {
-                                if (pump[state.pump].state === true && state.sharedPump.run == false) {        // this is mainly to sync the state of pumper after a service restart
+                                if (pump[state.pump].state === true && state.sharedPump.run == false) {        // this is mainly to sync the state of pump after a service restart
                                     log(config.name + " - is out of sync - auto is off but pump is on - switching auto ON", 2);
                                     send(auto.name, true);
                                     auto.state = true;
@@ -315,18 +320,13 @@ module.exports = { // exports added to clean up layout
                                 if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
                                     && warn.flowFlush == false && config.fault.flushWarning != false && state.sharedPump.shared == false) {
                                     warn.flowFlush = true;
-                                    log(config.name + " - Auto is off but flow is detected (" + flow[state.pump].lm.toFixed(1) + ") possible sensor damage or flush operation", 2);
+                                    log(config.name + " - Auto is off but flow is detected (" + flow[state.pump].lm.toFixed(1)
+                                        + ") possible sensor damage or flush operation", 2);
                                     if (pump[state.pump].state === null || pump[state.pump].state == true) delivery.stop(x, true);
                                     return;
                                 }
                             }
                             break;
-                    }
-                    if (press.out.state.meters >= (config.press.stop + .12) && fault.flowOver == false) {
-                        log(config.name + " - " + press.out.cfg.name + " is overflowing (" + press.out.state.meters
-                            + press.out.cfg.unit + ") - possible SSR or hardware failure", 3);
-                        delivery.stop(x);
-                        fault.flowOver = true;
                     }
                 },
                 start: function (x, sendOut) {
@@ -367,19 +367,19 @@ module.exports = { // exports added to clean up layout
                     fault.flow = false;
                     state.run = true;
                     state.timer.run = time.epoch;
-                    state.flowCheck = false;
-                    state.flowCheckPassed = false;
-                    state.flowCheckRunDelay = false;
+                    state.flow.check = false;
+                    state.flow.checkPassed = false;
+                    state.flow.checkRunDelay = false;
                     state.timer.timeoutOn = false;
 
                     setTimeout(() => { state.timer.timeoutOn = true }, 10e3);
                     if (config.pump[state.pump].flow.sensor != undefined) {
-                        state.flowTimerCheck = setTimeout(() => {
+                        state.flow.timerCheck = setTimeout(() => {
                             log(config.name + " - checking pump flow");
-                            state.flowCheck = true;
+                            state.flow.check = true;
                             //automation[_name](_name, slog, send, file, nvMem, entity, state, config);
                             delivery.check.flow(x);
-                            state.flowTimerInterval = setInterval(() => {
+                            state.flow.timerInterval = setInterval(() => {
                                 delivery.check.flow(x);
                             }, 1e3);
                         }, config.pump[state.pump].flow.startWait * 1000);
@@ -404,11 +404,7 @@ module.exports = { // exports added to clean up layout
                         hours = Math.floor(runTime / 60 / 60),
                         minutes = Math.floor(runTime / 60),
                         extraSeconds = runTime % 60, lbuf, tFlow;
-                    if (faulted) {
-                        log(config.name + " - faulted - setting auto to OFFLINE");
-                        auto.state = false;
-                        send(auto.name, false);
-                    }
+
 
                     state.run = false;
                     state.timer.timeoutOff = false;
@@ -416,18 +412,12 @@ module.exports = { // exports added to clean up layout
 
                     delivery.shared(x);
                     if (state.sharedPump.run == false) {
-                        lbuf = config.name + " - stopping pump: " + pump[state.pump].cfg.name + " - Runtime: " + hours + "h:" + minutes + "m:" + extraSeconds + "s";
+                        lbuf = config.name + " - stopping pump: " + pump[state.pump].cfg.name + " - Runtime: "
+                            + hours + "h:" + minutes + "m:" + extraSeconds + "s";
                         send(pump[state.pump].cfg.entity, false);
                     } else {
                         lbuf = config.name + " - stopping " + pump[state.pump].cfg.name + " but pump still in use by "
                             + cfg.dd[state.sharedPump.num].name + " - Runtime: " + hours + "h:" + minutes + "m:" + extraSeconds + "s";
-                    }
-
-                    if (faulted == true) {
-                        if (config.ha.solar != undefined) {
-                            log(config.name + " faulted - solar pump automation: " + config.ha.solar + " - is going offline", 2);
-                            send(config.ha.solar, false);
-                        }
                     }
 
                     if (config.solenoid != undefined) {
@@ -438,8 +428,8 @@ module.exports = { // exports added to clean up layout
                     }
 
                     if (flow != undefined) {
-                        state.flowCheck = false;
-                        clearInterval(state.flowTimerInterval);
+                        state.flow.check = false;
+                        clearInterval(state.flow.timerInterval);
                         tFlow = nv.flow[config.pump[state.pump].flow.sensor].total - flow[state.pump].batch;
                         log(lbuf + " - pumped "
                             + ((tFlow < 2.0) ? ((tFlow * 1000).toFixed(1) + "L") : (tFlow.toFixed(2) + "m3"))
@@ -449,7 +439,25 @@ module.exports = { // exports added to clean up layout
 
                     setTimeout(() => { state.timer.timeoutOff = true }, 10e3);
 
-                    if (state.oneShot !== false && config.oneShot.extend) {
+
+
+
+                    if (faulted) {
+                        log(config.name + " - " + color("red", "FAULTED") + " - Auto is going " + color("red", "OFFLINE"));
+                        auto.state = false;
+                        send(auto.name, false);
+
+                        if (config.ha.solar != undefined) {
+                            log(config.name + " faulted - solar pump automation: " + config.ha.solar + " - is going offline", 2);
+                            send(config.ha.solar, false);
+                        }
+
+                        clearTimeout(state.oneShot);
+                        return;
+                    }
+
+
+                    if (state.oneShot !== false && config.oneShot?.extend) {
                         let duration;
                         if (config.oneShot.extendLiterMin) {
                             if ((tFlow * 1000) < config.oneShot.extendLiterMin) {
@@ -497,55 +505,56 @@ module.exports = { // exports added to clean up layout
                     flow: function (x) {
                         let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
                         let flowLM = flow[state.pump].lm, pumpConfig = config.pump[state.pump].flow, psi = press.out.state.psi.toFixed(0);
-                        if (state.flowCheck == true) {
-                            if (state.flowCheckPassed == false) {
+                        if (state.flow.check == true) {
+                            if (state.flow.checkPassed == false) {
                                 if (flowLM < pumpConfig.startError) {
                                     fault.flow = true;
                                     if (config.fault.retryCount && config.fault.retryCount > 0) {
                                         if (fault.flowRestarts < config.fault.retryCount) {
-                                            log(config.name + " - flow check FAILED!! (" + flowLM.toFixed(1) + "lm) - " + psi + " psi - HA Pump State: "
+                                            log(config.name + " - " + color("red", "flow check FAILED") + " (" + flowLM.toFixed(1)
+                                                + "lm) - " + psi + " psi - HA Pump State: "
                                                 + pump[state.pump].state + " - waiting for retry " + (fault.flowRestarts + 1), 2);
                                             fault.flowRestarts++;
-                                            clearTimeout(state.flowTimerRestart);
-                                            state.flowTimerRestart = setTimeout(() => {
+                                            clearTimeout(state.flow.timerRestart);
+                                            state.flow.timerRestart = setTimeout(() => {
                                                 log(config.name + " - no flow retry wait complete, pump reenabled");
                                                 fault.flow = false;
                                             }, config.fault.retryWait * 1000);
                                         } else if (fault.flowRestarts == config.fault.retryCount && config.fault.retryFinal) {
-                                            log(config.name + " - low flow (" + flowLM.toFixed(1) + "lm) HA State: "
+                                            log(config.name + " - " + color("red", "low flow") + " (" + flowLM.toFixed(1) + "lm) HA State: "
                                                 + pump[state.pump].state + " - retries exceeded - going offline for " + config.fault.retryFinal + "m", 3);
                                             fault.flowRestarts++;
-                                            clearTimeout(state.flowTimerRestart);
-                                            state.flowTimerRestart = setTimeout(() => {
+                                            clearTimeout(state.flow.timerRestart);
+                                            state.flow.timerRestart = setTimeout(() => {
                                                 log(config.name + " - no flow retry extended wait complete, pump reenabled", 2);
                                                 fault.flow = false;
                                             }, config.fault.retryFinal * 60 * 1000);
                                         } else {
                                             fault.flowRestarts++;
-                                            log(config.name + " - low flow (" + flowLM.toFixed(1) + "lm) HA State: "
+                                            log(config.name + " - " + color("red", "low flow") + " (" + flowLM.toFixed(1) + "lm) HA State: "
                                                 + pump[state.pump].state + " - all retries failed - going OFFLINE permanently", 3);
                                             delivery.stop(x, true, "faulted");
                                             return;
                                         }
                                     } else {
-                                        log(config.name + " - low flow (" + flowLM.toFixed(1) + "lm) HA State: "
+                                        log(config.name + " - " + color("red", "low flow") + " (" + flowLM.toFixed(1) + "lm) HA State: "
                                             + pump[state.pump].state + " - pump retry not enabled - going OFFLINE permanently", 3);
                                         delivery.stop(x, true, "faulted");
                                         return;
                                     }
                                     // theres an issues here. when delivery.stop os called, it should clear the flock check interval instantly but after 1 second
-                                    // if state.flowCheck = false;  isnt set, interval still calls flock check function throwing multiple retry/errors. why?
-                                    // even if setting/clearing global.stat[_name].dd[x].state.flowTimerInterval doesnt not take effect. 
-                                    // state.flowCheck = false;   // moving this to delivery.stop
+                                    // if state.flow.check = false;  isnt set, interval still calls flock check function throwing multiple retry/errors. why?
+                                    // even if setting/clearing global.stat[_name].dd[x].state.flow.timerInterval doesnt not take effect. 
+                                    // state.flow.check = false;   // moving this to delivery.stop
                                     delivery.stop(x, true);
                                 } else if (flowLM < pumpConfig.startWarn && warn.flowDaily == false) {
                                     log(config.name + " - pump flow is lower than optimal (" + flowLM.toFixed(1) + "lm) - clean filter", 2);
-                                    state.flowCheckPassed = true;
+                                    state.flow.checkPassed = true;
                                     fault.flowRestarts = 0;
                                     warn.flowDaily = true;
                                 } else {
-                                    log(config.name + " - pump flow check PASSED (" + flowLM.toFixed(1) + "lm)");
-                                    state.flowCheckPassed = true;
+                                    log(config.name + " - pump flow check " + color("green", "PASSED") + " (" + flowLM.toFixed(1) + "lm)");
+                                    state.flow.checkPassed = true;
                                     fault.flowRestarts = 0;
                                 }
                             } else {
@@ -572,25 +581,25 @@ module.exports = { // exports added to clean up layout
                                 if (pumpConfig.runStop != undefined) {
                                     if (flowLM <= pumpConfig.runStop) {
                                         trigger((" - RUN flow stop (" + flowLM.toFixed(1) + "lm) - pump stopping - " + psi + " psi"), false);
-                                    } else state.flowCheckRunDelay = false;
+                                    } else state.flow.checkRunDelay = false;
                                 } else if (pumpConfig.runError != undefined) {
                                     if (flowLM < pumpConfig.runError) {
                                         trigger((" - RUN low flow (" + flowLM.toFixed(1) + "lm) HA State: "
                                             + pump[state.pump].state + " - going OFFLINE permanently"), true);
-                                    } else state.flowCheckRunDelay = false;
+                                    } else state.flow.checkRunDelay = false;
                                 } else if (pumpConfig.runError == undefined) {
                                     if (flowLM < pumpConfig.startError) {
                                         trigger((" - RUN low flow (" + flowLM.toFixed(1) + "lm) HA State: "
                                             + pump[state.pump].state + " - going OFFLINE permanently"), true);
-                                    } else state.flowCheckRunDelay = false;
+                                    } else state.flow.checkRunDelay = false;
                                 }
 
 
 
                                 function trigger(msg, error) {
-                                    if (state.flowCheckRunDelay == false) {
+                                    if (state.flow.checkRunDelay == false) {
                                         state.timer.flow = time.epoch;
-                                        state.flowCheckRunDelay = true;
+                                        state.flow.checkRunDelay = true;
                                         return;
                                     } else if (time.epoch - state.timer.flow >= 3) {
                                         if (error) {
@@ -605,7 +614,7 @@ module.exports = { // exports added to clean up layout
                             }
                         }
                     },
-                    press: function () { // not yet in use
+                    press: function (x) { // not yet in use
 
                         let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
 
@@ -643,7 +652,8 @@ module.exports = { // exports added to clean up layout
                         let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
 
                         // check that both press and flow stop are both not configured 
-                        if (config.pump[state.pump].flow.runStop == null && config.press?.output?.profile?.[state.profile].stop == null) {
+                        if (config.pump[state.pump].flow.runStop == null
+                            && config.press?.output?.profile?.[state.profile].stop == null) {
                             log(config.name + " - config error - you must configure ether 'Flow runStop' or 'Press output profile stop'", 3);
                             send(auto.name, false);
                             auto.state = false;
@@ -667,7 +677,8 @@ module.exports = { // exports added to clean up layout
                         if (config.pump[state.pump].press?.input?.sensor) {
                             if (entity[config.pump[state.pump].press?.input.sensor]
                                 <= config.pump[state.pump].press?.input.minError) {
-                                log(config.name + " - pump specific input tank level is too low " + press.in.state.meters + "m - DD shutting down", 3);
+                                log(config.name + " - pump specific input tank level is too low "
+                                    + press.in.state.meters + "m - DD shutting down", 3);
                                 send(auto.name, false);
                                 auto.state = false;
                                 fault.inputLevel = true;
@@ -684,6 +695,128 @@ module.exports = { // exports added to clean up layout
                             send(auto.name, false);
                             auto.state = false;
                             return;
+                        }
+
+                    },
+                    online_faults: function () { // 
+                        let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                        switch (auto.state) {
+                            case true:                  // when Auto System is ONLINE
+                                switch (state.run) {
+                                    case false:     // when pump is STOPPED (local perspective)
+                                        switch (fault.flow) {
+                                            case false: // when pump is STOPPED and not flow faulted
+                                                if (config.enable) {
+                                                    if (state.timer.timeoutOff == true) {  // after pump has been off for a while
+                                                        if (pump[state.pump].state === true && state.sharedPump.run == false) {
+                                                            log(config.name + " - pump running in HA/ESP but not here - switching pump ON", 2);
+                                                            delivery.start(x, false);
+                                                            return;
+                                                        } else {
+                                                            if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
+                                                                && warn.flowFlush == false && state.sharedPump.shared == false) {
+                                                                log(config.name + " - flow is detected (" + flow[state.pump].lm.toFixed(0)
+                                                                    + "lpm) possible sensor damage or flush operation", 2);
+                                                                warn.flowFlush = true;
+                                                                delivery.stop(x, true, "faulted");
+                                                                return;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                break;
+                                            case true:  // when pump is STOPPED and flow faulted but HA/ESP home report as still running
+                                                if (state.timer.timeoutOff == true) {
+                                                    if (pump[state.pump].state === true
+                                                        || flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError) {
+                                                        log(config.name + " - pump is flow faulted but pump is still ON, stopping again", 3);
+                                                        delivery.stop(x, true, "faulted");
+                                                        return;
+                                                    }
+                                                }
+                                                break;
+                                        }
+                                        break;
+                                    case true:      // when pump is RUNNING
+
+
+
+                                        if (state.profile != null) {
+                                            if (config.pump[state.pump].press?.input?.sensor) {
+                                                if (entity[config.pump[state.pump].press?.input.sensor]
+                                                    <= config.pump[state.pump].press?.input.minError) {
+                                                    log(config.name + " - input tank level is too low " + press.in.state.meters
+                                                        + "m - DD system shutting down", 3);
+                                                    delivery.stop(x, true, "faulted");
+                                                    return;
+                                                } else if (warn.inputLevel == false && entity[config.pump[state.pump].press?.input.sensor]
+                                                    <= config.pump[state.pump].press?.input.minWarn) {
+                                                    log(config.name + " - input tank level is getting low " + press.in.state.meters
+                                                        + "m", 2);
+                                                    warn.inputLevel = true;
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                        if (!flow && state.timer.timeoutOn == true && pump[state.pump].state === false) {
+                                            log(config.name + " - is out of sync - auto is on, system is RUN but pump is off", 2);
+                                            delivery.start(x);
+                                            return;
+                                        }
+                                        if (time.epoch - state.timer.run >= config.fault.runLongError * 60) {
+                                            log(config.name + " - pump: " + pump[state.pump].name
+                                                + " - max runtime exceeded - DD system shutting down", 3);
+                                            delivery.stop(x, true, "faulted");
+                                            return;
+                                        }
+                                        if (press.in != undefined && press.in.state.meters <= config.press.input.minError) {
+                                            log(config.name + " - input tank level is too low - auto is shutting down", 3);
+                                            delivery.stop(x, true, "faulted");
+                                            return;
+                                        }
+                                        if (config.press.output.riseTime != undefined) delivery.check.press(x);
+                                        if (flow != undefined) {
+                                            if (config.pump[state.pump].flow.stopFlow != undefined
+                                                && flow[state.pump].lm <= config.pump[state.pump].flow.stopFlow) {
+                                                log(config.name + " - stop flow rate reached - pump is stopping");
+                                                delivery.stop(x);
+                                                return;
+                                            }
+                                            delivery.check.flow(x);
+                                        }
+                                        break;
+                                }
+                                if (!warn.tankLow && press.out.state.meters <= (press.out.cfg.warn)) {
+                                    log(config.name + " - " + press.out.cfg.name + " is lower than expected (" + press.out.state.meters.toFixed(2)
+                                        + press.out.cfg.unit + ") - possible hardware failure or low performance", 2);
+                                    warn.tankLow = true;
+                                }
+                                break;
+                            case false:  // when auto is OFFLINE
+                                if (state.timer.timeoutOff == true) {
+                                    if (pump[state.pump].state === true && state.sharedPump.run == false) {        // this is mainly to sync the state of pump after a service restart
+                                        log(config.name + " - is out of sync - auto is off but pump is on - switching auto ON", 2);
+                                        send(auto.name, true);
+                                        auto.state = true;
+                                        delivery.start(x, false);
+                                        return;
+                                    }
+                                    if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
+                                        && warn.flowFlush == false && config.fault.flushWarning != false && state.sharedPump.shared == false) {
+                                        warn.flowFlush = true;
+                                        log(config.name + " - Auto is off but flow is detected (" + flow[state.pump].lm.toFixed(1)
+                                            + ") possible sensor damage or flush operation", 2);
+                                        if (pump[state.pump].state === null || pump[state.pump].state == true) delivery.stop(x, true);
+                                        return;
+                                    }
+                                }
+                                break;
+                        }
+                        if (press.out.state.meters >= (config.press.stop + .12) && fault.flowOver == false) {
+                            log(config.name + " - " + press.out.cfg.name + " is overflowing (" + press.out.state.meters
+                                + press.out.cfg.unit + ") - relay welded, SSR failure or other hardware malfunction", 3);
+                            delivery.stop(x);
+                            fault.flowOver = true;
                         }
 
                     },
@@ -763,7 +896,7 @@ module.exports = { // exports added to clean up layout
                             if (time.epochMin - fount.state.step >= fount.cfg.intervalOff) pumpFountain(x, true);
                         }
                     }
-                    if (fount.state.flowCheck) {
+                    if (fount.state.flow.check) {
                         let flow = (entity[cfg.sensor.flow[fount.cfg.sensor.flow.entity].entity].state / 60).toFixed(0);
                         if (flow <= fount.cfg.sensor.flow.startError) {
                             log(fount.cfg.name + " - flow check FAILED: " + flow + "lpm - auto will shut down", 3);
@@ -793,7 +926,7 @@ module.exports = { // exports added to clean up layout
                                     send(fount.cfg.haAuto, false);
                                 } else {
                                     log(fount.cfg.name + " - flow check PASSED: " + flow + "lpm");
-                                    fount.state.flowCheck = true;
+                                    fount.state.flow.check = true;
                                 }
                             }, (fount.cfg.flow.startWait * 1e3));
                         }
@@ -801,7 +934,7 @@ module.exports = { // exports added to clean up layout
                         log(fount.cfg.name + " - is turning off");
                         send(cfg.esp[fount.cfg.pump], false);
                         clearTimeout(fount.state.timer.flow);
-                        fount.state.flowCheck = false;
+                        fount.state.flow.check = false;
                     }
                 }
             }
@@ -812,6 +945,7 @@ module.exports = { // exports added to clean up layout
                             if (!config.enable) {
                                 log(config.name + " - system disabled - cannot go online", 2);
                                 send(dd.auto.name, false);
+                                entity[config.ha?.auto] && (entity[config.ha.auto].state = false);
                                 return;
                             }
                             log(config.name + " - is going ONLINE");
@@ -822,78 +956,109 @@ module.exports = { // exports added to clean up layout
                             dd.warn.inputLevel = false;
                             dd.state.cycleTimer = time.epoch;
                             dd.state.cycleCount = 0;
-                            clearTimeout(dd.state.flowTimerRestart);
+                            clearTimeout(dd.state.flow.timerRestart);
                         } else {
-                            log(config.name + " - is going OFFLINE - pump is stopping");
-                            clearTimeout(dd.state.flowTimerRestart);
-                            clearTimeout(dd.state.flowTimerCheck);
-                            clearInterval(dd.state.flowTimerInterval);
+                            log(config.name + " - is going OFFLINE");
+                            clearTimeout(dd.state.flow.timerRestart);
+                            clearTimeout(dd.state.flow.timerCheck);
+                            clearInterval(dd.state.flow.timerInterval);
                             clearTimeout(dd.state.oneShot);
                             dd.state.oneShot = false;
                             dd.state.oneShotCount = false;
-                            delivery.stop(index);
+                            if (dd.state.run) delivery.stop(index);
                         }
                     };
                 },
-                oneShot: function (dd, index, config) {
+                oneShot: function (dd, index, config, button) {
                     return (state, name) => {
-                        let duration;
-                        clearTimeout(dd.state.oneShot);
-                        if (config.oneShot.durationEntity) duration = Math.trunc(entity[config.oneShot.durationEntity].state);
-                        else if (config.oneShot.duration) duration = config.oneShot.duration;
-                        else { log(config.name + " - no duration entity or global value set - ignoring", 2); return; }
-                        dd.state.oneShotCount = 0;
-                        if (state?.includes("remote_button_")) {  // for zigbee buttons
-                            if (state?.includes("remote_button_short_press")) {
-                                if (!config.enable) {
-                                    log(config.name + " - system disabled - cannot perform one-shot - trigger: " + name, 2);
-                                    return;
-                                }
-                                if (entity[config.ha.auto].state) {
-                                    log(config.name + " - auto already online - ignoring one-shot request - trigger: " + name, 2);
-                                    pumpUp();
-                                    return;
-                                }
-                                log(config.name + " - one shot operation - " + "trigger: "
-                                    + name + " - stopping in " + duration + " min");
-                                timeout();
-                                send(config.ha.auto, true);
-                                pumpUp();
-                            } else if (state?.includes("remote_button_double_press")) {
-                                if (!config.enable) {
-                                    log(config.name + " - system disabled - cannot start system", 2);
-                                    return;
-                                }
-                                log(config.name + " - starting system - " + "triggered by: " + name);
-                                dd.state.oneShot = false;
-                                send(config.ha.auto, true);
-                            } else if (state?.includes("remote_button_long_press")) {
-                                log(config.name + " - STOPPING system - " + "triggered by: " + name);
-                                send(config.ha.auto, false);
+                        let action = null,
+                            duration = null;
+                        // =====================================
+                        // Resolve Action From Button Definition
+                        // =====================================
+                        if ("duration" in button)
+                            duration = button["duration"];
+
+                        for (const key in button) {
+                            if (key === "duration") continue; // skip non-action keys
+                            let trigger = button[key];
+                            // Normalize primitive → array
+                            if (!Array.isArray(trigger)) trigger = [trigger];
+                            for (const t of trigger) {
+                                // Match ANY state
+                                if (t === "any") { action = key; break; }
+                                // Direct match (string, boolean, number, etc.)
+                                if (t === state) { action = key; break; }
                             }
-                        } else {    // for home assistant buttons
+                            if (action) break;
+                        }
+
+                        if (!action) return;
+
+                        dd.state.button = name;
+                        clearTimeout(dd.state.oneShot);
+
+                        if (duration == null) {
+                            if (config.oneShot.durationEntity)
+                                duration = Math.trunc(entity[config.oneShot.durationEntity].state);
+                            else if (config.oneShot.duration)
+                                duration = config.oneShot.duration;
+                            else {
+                                log(config.name + " - no duration in entity or global - ignoring button press from: "
+                                    + name + " - state: " + state, 2);
+                                return;
+                            }
+                        }
+
+                        // =====================================
+                        // ACTION EXECUTION
+                        // =====================================
+
+                        if (action === "oneShot") {
                             if (!config.enable) {
-                                log(config.name + " - system disabled - cannot perform one-shot - trigger: " + name, 2);
+                                log(config.name + " - system disabled - cannot perform one-shot - trigger: "
+                                    + name + " - state: " + state, 2);
                                 return;
                             }
                             if (entity[config.ha.auto].state) {
-                                log(config.name + " - auto already online - ignoring one-shot request - trigger: " + name, 2);
+                                log(config.name + " - auto already online - ignoring one-shot request - trigger: "
+                                    + name + " - state: " + state, 2);
                                 pumpUp();
                                 return;
                             }
-                            log(config.name + " - one shot operation - " + "triggered by: "
-                                + name + " - stopping in " + duration + " min");
+                            log(config.name + " - one shot operation - trigger: "
+                                + name + " - state: " + state + " - stopping in " + duration + " min");
                             timeout();
                             send(config.ha.auto, true);
                             pumpUp();
                         }
+
+                        else if (action === "start") {
+                            if (!config.enable) {
+                                log(config.name + " - system disabled - cannot start system - trigger: " + name, 2);
+                                return;
+                            }
+                            log(config.name + " - starting system - triggered by: " + name + " - state: " + state);
+                            dd.state.oneShot = false;
+                            send(config.ha.auto, true);
+                        }
+
+                        else if (action === "stop") {
+                            log(config.name + " - STOPPING system - triggered by: " + name + " - state: " + state);
+                            send(config.ha.auto, false);
+                        }
+
+                        // =====================================
+                        // HELPERS
+                        // =====================================
                         function pumpUp() {
                             if (config.oneShot.pumpUp) {
-                                if (!dd.run) {
-                                    log(config.name + " - starting Pump Up - trigger: " + name, 1);
+                                if (!dd.state.run) {
+                                    log(config.name + " - starting Pump Up - trigger: " + name + " - state: " + state, 1);
                                     delivery.start(index);
+                                } else {
+                                    log(config.name + " - pump already running");
                                 }
-                                else log(config.name + " - pump already running");
                             }
                         }
                         function timeout() {
@@ -920,8 +1085,7 @@ module.exports = { // exports added to clean up layout
                 },
                 profile: function (dd, index, config) {
                     return (state, name) => {
-                        log(config.name + " - pump profile change triggered by: " + name);
-                        log(config.name + " - pump profile changing to mode: " + ~~state);
+                        log(config.name + " - pump profile change triggered by: " + name + " - new state: " + ~~state);
                         dd.state.profile = parseInt(state);
                         return;
                     };
@@ -988,9 +1152,13 @@ module.exports = { // exports added to clean up layout
                         state: {
                             run: false,
                             oneShot: false,
+                            button: null,
                             turbo: false,
                             profile: null,
                             pump: 0,
+                            cycleCount: 0,
+                            pressStart: null,
+                            heartbeat: false,
                             sharedPump: {},
                             flow: {
                                 check: false,
@@ -1000,12 +1168,6 @@ module.exports = { // exports added to clean up layout
                                 timerRestart: null,
                                 timerInterval: null,
                             },
-                            flowCheck: false,
-                            flowCheckPassed: false,
-                            flowCheckRunDelay: false,
-                            flowTimerCheck: null,
-                            flowTimerRestart: null,
-                            flowTimerInterval: null,
                             timer: {
                                 timeoutOff: true,
                                 timeoutOn: false,
@@ -1013,9 +1175,7 @@ module.exports = { // exports added to clean up layout
                                 run: time.epoch,
                                 rise: time.epoch,
                             },
-                            cycleCount: 0,
-                            pressStart: null,
-                            heartbeat: false,
+
                         },
                         fault: {
                             flow: false,
@@ -1071,17 +1231,20 @@ module.exports = { // exports added to clean up layout
                 push["clear-oneShot"] = (number) => {
                     log(cfg.dd[number].name + " - clearing oneShot for DD: " + number);
                     clearTimeout(st.dd[number].state.oneShot);
-                    st.dd[number].state.oneShot = null;
+                    st.dd[number].state.oneShot = false;
+                }
+                push["Button-eWeLink"] = (state) => {
+                    log(" - TEST BUTTON - State:" + state);
                 }
                 cfg.dd.forEach((config, x) => {
                     push[config.ha.auto] = push_constructor.auto(st.dd[x], x, config);
                     push[config.ha.turbo] = push_constructor.turbo(st.dd[x], x, config);
                     push[config.ha.profile] = push_constructor.profile(st.dd[x], x, config);
                     if (config.oneShot?.buttons) {
-                        for (const key of config.oneShot.buttons) {
-                            log("loading constructor for oneshot entity: " + key, 0);
-                            push[key] = push_constructor.oneShot(st.dd[x], x, config);
-                        }
+                        config.oneShot.buttons.forIn((name, value) => {
+                            log("loading constructor for oneshot entity: " + name, 0);
+                            push[name] = push_constructor.oneShot(st.dd[x], x, config, value);
+                        })
                     }
                 });
                 cfg.fountain.forEach(config => {
