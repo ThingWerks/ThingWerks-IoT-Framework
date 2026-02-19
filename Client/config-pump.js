@@ -2,21 +2,23 @@ module.exports = {
     entity: {
         subscribe: [
             "input_boolean.auto_bubon",
+            "input_boolean.auto_freezer",
+            "input_boolean.auto_irrigatiion",
+
             "input_number.profile_bubon",
             "input_number.timer_oneshot_bubon",
             "input_number.timer_oneshot_irrigation",
-            "Switch Kitchen Pump",
-            "switch.relay_bodega_freezer_fujidenzo",
-            "input_boolean.auto_freezer",
+
+            "input_button.oneshot_irrigation",
+            "input_button.oneshot_bubon",
             "Button Bodega Water Filtered",
-            "input_boolean.auto_irrigatiion",
             "Button Irrigation Entrance",
             "Button Water Groogies",
             "Button Water Irrigation House Back",
             "Button Water Irrigation Piggary",
             "Button Water Irrigation Dalom",
-            "input_button.oneshot_irrigation",
-            "input_button.oneshot_bubon",
+            "Button-eWeLink",
+            "Switch Kitchen Pump",
 
             "psi-main",
             "psi-irrigation",
@@ -90,12 +92,12 @@ module.exports = {
                         // reserve: 9,                              // ha entity for reserve tank/pump
                     },
                     oneShot: {
-                        buttons: [ // single shot pump automation run button, must be array 
-                            "Switch Kitchen Pump",
-                            "Button Bodega Water Filtered",
-                            "Button Water Groogies",
-                            "input_button.oneshot_bubon"
-                        ],
+                        buttons: {// single shot pump automation run button, must be array 
+                            "Switch Kitchen Pump": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
+                            "Button Bodega Water Filtered": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
+                            "Button Water Groogies": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
+                            "input_button.oneshot_bubon": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
+                        },
                         durationEntity: "input_number.timer_oneshot_bubon",  // REQUIRED - single shot pump run time length
                         extend: true,                                    // extend OneShot timer after last usage
                         // duration: 10, // duration of oneShot in minutes
@@ -104,6 +106,7 @@ module.exports = {
                         {
                             name: "1.5hp jetpump",
                             entity: "solar-relay3-pump-bubon",  // ESP/HA cfg ID number
+                            class: "primary", // for reserve pump only as of now
                             flow: {
                                 sensor: "bubon",    // flow sensor number (in cfg.sensor.flow block)
                                 startWarn: 11,      // min start flow before triggering notification (useful for filters)
@@ -112,22 +115,21 @@ module.exports = {
                                 runError: 5,        // flow rate to fault 
                                 runStop: 10         // flow rate to stop 
                             },
-                            press: {
-                                input: {
+                            input: {
 
-                                },
-                                output: {
-                                    riseTime: undefined,
+                            },
 
-                                }
-                            }
                         },
                     ],
                     press: {
+                        input: {
+
+                        },
                         output: {
                             sensor: "bubon", // pressure sensor number (in cfg.sensor.press block)
                             profile: [{ start: 22 }, { start: 45 }, { start: 50 }],
                             // profile: [{ start: 22, stop: 35 }, { start: 45, stop: 59 }, { start: 50, stop: 62 }],
+                            riseTime: undefined,
                         },
                     },
                     fault: {
@@ -153,25 +155,27 @@ module.exports = {
 
                     },
                     oneShot: {
-                        buttons: [ // single shot pump automation run button, must be array 
-                            "Button Irrigation Entrance",
-                            "Button Water Irrigation House Back",
-                            "Button Water Irrigation Dalom",
-                            "input_button.oneshot_irrigation",
-                            "Button Water Irrigation Piggary",
-                            //  { entity: "Button Irrigation Entrance" },
-                            //  { entity: "Button Water Irrigation House Back" },
-                            //  { entity: "Button Water Irrigation Dalom" },
-                            //  { entity: "input_button.oneshot_irrigation" },
-                            //  { entity: "Button Water Irrigation Piggary" },
-                        ],
+                        buttons: { // single shot pump automation run button, must be array 
+                            /*
+                            old buttons:
+                                "remote_button_short_press" "remote_button_short_press" "remote_button_double_press"
+                            new buttons: true, false and "toggle"
+                            "any" can be used to trigger the action for any state
+                            */
+                            "Button Water Irrigation House Back": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
+                            "Button Water Irrigation Dalom": { oneShot: "remote_button_short_press", stop: "remote_button_short_press" },
+                            "Button Water Irrigation Piggary": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
+                            "Button Irrigation Entrance": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
+                            "input_button.oneshot_irrigation": { oneShot: "any" },
+                            "Button-eWeLink": { oneShot: ["toggle", true, false], duration: 5 },
+                        },
                         // durationEntity: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
-                        duration: 20,                                 // duration of oneShot in minutes
-                        pumpUp: true,
-                        interrupt: false,                                // interrupt current pump operation if timeout reached
-                        extend: true,                                    // extend OneShot timer after last usage
-                        extendLiterMin: 30.0,                            // minimum liters pumped to keep extending
-                        extendRetry: 3,                                  // extension short cycle evaluation allowance window    
+                        duration: 20,           // duration of oneShot in minutes
+                        pumpUp: true,           // top off the tank                   
+                        interrupt: false,       // interrupt current pump operation if timeout reached
+                        extend: true,           // extend OneShot timer after last usage
+                        extendLiterMin: 30.0,   // minimum liters pumped to keep extending
+                        extendRetry: 2,         // extension short cycle evaluation allowance window    
                     },
                     pump: [
                         {
