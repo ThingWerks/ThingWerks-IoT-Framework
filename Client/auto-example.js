@@ -33,23 +33,6 @@ module.exports = {
         // choose any name for automation 
         "---automation name here----": function (_name, _push, _reload) {
             let { state, config, nv, log, write, push } = _pointers(_name);
-            if (_reload) {   // called after modification/reload of this automation file
-                if (_reload != "config") {
-                    log("hot reload initiated");
-                    /*
-                    automation reload logic
-
-                    // clear automation timers and intervals or another other logic you need for a hot reload
-                    clearInterval(state.timer);
-
-                    */
-                    //clear event timers clearInterval(state.timer.second);
-                    if (global.push) push.forIn(name => { delete global.push[name]; })
-                } else ({ state, config, nv } = _pointers(_name));
-                return;
-            }
-
-
 
             /*  common functions and those called by push events or the init function need to go in this area. 
             ie. before   if (_push === "init"){}
@@ -90,8 +73,19 @@ module.exports = {
                 send("testLED", true);
             }
 
+            // example check timer function
+            function timer() { // called once per minute   
+                if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
+                    log("turning on outside lights", 1);
+                    send("switch.light_outside_switch", true);
+                }
+                if (time.hour == 22 && time.min == 0) {
+                    log("turning off outside lights", 1);
+                    send("switch.light_outside_switch", false);
+                }
+            };
 
-            // initialization sequence begins here
+            // you initialization sequence begins here
 
             if (_push === "init") { // ran only once
                 global.config[_name] = {    // initialize automation's configurations
@@ -164,23 +158,24 @@ module.exports = {
 
 
 
-            } else push[_push.name]?.(_push.state, _push.name);
-
-
-            // example check timer function
-            function timer() { // called once per minute   
-                if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
-                    log("turning on outside lights", 1);
-                    send("switch.light_outside_switch", true);
+            } else
+                if (_reload) {   // called after modification/reload of this automation file
+                    if (global.push) push.forIn(name => { delete global.push[name]; }); // destroy all constructors 
+                    if (_reload === "config") { // only called if JSON config file is reloaded 
+                        log("hot config reload initiated");
+                        ({ state, config, nv } = _pointers(_name));
+                        //  reload all your constructors
+                    } else {
+                        log("hot reload initiated");
+                        /*
+                            automation reload logic
+    
+                            // clear automation timers and intervals and perform other cleanup logic needed for hot reload
+                            clearInterval(state.timer);
+                        */
+                    }
+                    return;
                 }
-                if (time.hour == 22 && time.min == 0) {
-                    log("turning off outside lights", 1);
-                    send("switch.light_outside_switch", false);
-                }
-            };
-
-
-
         },
 
 
@@ -190,18 +185,6 @@ module.exports = {
         "---another automation name here----": function (_name, _push, _reload) {
             try {
                 let { state, config, nv, log, save, send, push } = _pointers(_name);
-                
-                if (_reload) {   // called after modification/reload of this automation file
-                    if (_reload != "config") {
-                        log("hot reload initiated");
-
-                        //clear you event timers here.  ie. clearInterval(state.timer.second);
-
-                        if (global.push) push.forIn((name, value) => { delete global.push[name]; }) // destroy all push calls 
-                    } else ({ state, config, nv } = _pointers(_name));
-                    return;
-                }
-
 
                 if (_push === "init") { // ran only once - your initialization procedure
                     global.config[_name] = {};  // initialize automation's configurations or from -c config File or from config object above
@@ -209,10 +192,23 @@ module.exports = {
                     global.nv[_name] ||= {};    // initialize automation's non-volatile memory
                     global.push[_name] = {};    // initialize push functions 
                     ({ state, config, nv, push } = _pointers(_name)); // call pointers directly after config and state initialization 
-                    return;
-                } else push[_push.name]?.(_push.state, _push.name);    // called with every incoming push event
-            } catch (error) { console.trace(error) }
 
+
+                    return;
+                } else push[_push?.name]?.(_push?.state, _push?.name);    // called with every incoming push event
+            } catch (error) { console.trace(error) }
+            if (_reload) {   // called after modification/reload of this automation file
+                if (global.push) push.forIn((name, value) => { delete global.push[name]; }) // destroy all push calls 
+                if (_reload == "config") {
+                    log("hot reload initiated");
+                    //clear you event timers here.  ie. clearInterval(state.timer.second);
+                } else {
+                    log("hot config reload initiated");
+                    ({ state, config, nv } = _pointers(_name));
+
+                }
+                return;
+            }
 
 
         },
