@@ -1,5 +1,5 @@
 #!/usr/bin/node
-module.exports = {
+module.exports(_shared) = {
     entity: {
         subscribe: [],
         create: [],
@@ -15,43 +15,51 @@ module.exports = {
         "---automation name here----": function (_name, _push, _reload) {
             try {
                 let { state, config, nv, log, save, send, push } = _pointers(_name);
-                if (_reload) {   // called after modification/reload of this automation file
-                    if (_reload != "config") {
-                        log("hot reload initiated");
-
-                        //clear event timers clearInterval(state.timer.second);
-
-                        if (global.push) push.forIn((name, value) => { delete global.push[name]; }) // destroy all push calls 
-                    } else ({ state, config, nv } = _pointers(_name));
-                    return;
-                }
 
                 /*
         
-                        common functions (for initialization and push events) go here
+                        your automation functions go here (below pointer call and above _push==init)
         
                 */
-
 
                 if (_push === "init") { // ran only once - your initialization procedure
                     global.config[_name] = {};  // initialize automation's configurations here or from -c config File or from config object above
                     global.state[_name] = {};   // initialize automation's volatile memory
                     global.nv[_name] ||= {};    // initialize automation's non-volatile memory
-                    global.push[_name] = {};    // initialize push functions 
-                    ({ state, config, nv, push } = _pointers(_name)); // call pointers directly after config and state initialization 
+                    global.push[_name] = { "myEntity": () => { console.log("test") } };    // initialize push functions 
+                    ({ state, config, nv, push } = _pointers(_name)); // call pointers directly after global declarations
 
                     /*
         
-                        initialization logic goes here
+                        your initialization logic goes here
+                        also initialize or call constructor functions from here here 
         
                     */
                     //  example push
                     //  push["input_boolean.test"] = (pushState, pushName) => { test2() }
 
                     return;
-                } else push[_push.name]?.(_push.state, _push.name);    // called with every incoming push event
-            } catch (error) { console.trace(error) }
+                }
+                else if (_push) push[_push.name]?.(_push.state, _push.name);
+                else if (_reload) {   // called after modification/reload of this automation file
+                    if (push) push.forIn((name) => { delete push[name]; }) // destroy all push calls 
+                    if (_reload == "config") {
+                        log("config hot reload initiated");
 
+                        // re-initialize/call your constructor function here
+                        // _push === "init" is not called on a config file reload
+
+                    } else {
+                        log("automation hot reload initiated");
+                        ({ state, config, nv } = _pointers(_name));
+
+                        // clear you event timers/intervals here.  ie. clearInterval(state.timer.second);
+                        // _push === "init" will be called again
+
+                    }
+                    return;
+                }
+            } catch (error) { console.trace(error); process.exit(1); } // quite the process on error is usually safer than continue running 
         },
     },
 }
