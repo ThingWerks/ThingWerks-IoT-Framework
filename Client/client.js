@@ -15,7 +15,7 @@ writeNV = function (name) {  // write non-volatile memory to the disk
     function writeFile() {
         // slog("writing NV data...");
         timer.fileWriteLast = time.epoch;
-        fs.writeFile(workingDir + "/nv-" + lname + "-bak.json", JSON.stringify(nv[name], null, 2), function () {
+        fs.writeFile(workingDir + "/nv-" + lname + "-bak.json", JSON.stringify(global.nv[name], null, 2), function () {
             fs.copyFile(workingDir + "/nv-" + lname + "-bak.json", workingDir + "/nv-" + lname + ".json", (err) => {
                 if (err) throw err;
             });
@@ -371,7 +371,7 @@ auto = {
                 let path = workingDir + "nv-" + lname + ".json";
                 if (fs.existsSync(path)) {
                     console.log("found NV data for: " + name + " - loading now...");
-                    nv[name] = JSON.parse(fs.readFileSync(path, 'utf8'));
+                    global.nv[name] = JSON.parse(fs.readFileSync(path, 'utf8'));
                 } else {
                     console.log("found no NV data for: " + name + " - required path: " + path);
                 }
