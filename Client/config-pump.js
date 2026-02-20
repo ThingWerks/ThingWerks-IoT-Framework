@@ -97,10 +97,11 @@ module.exports = {
                             "Button Bodega Water Filtered": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
                             "Button Water Groogies": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
                             "input_button.oneshot_bubon": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
+                            "Button-eWeLink": { oneShot: ["toggle", true, false] },
                         },
-                        durationEntity: "input_number.timer_oneshot_bubon",  // REQUIRED - single shot pump run time length
                         extend: true,                                    // extend OneShot timer after last usage
-                         duration: 10, // duration of oneShot in minutes
+                        // durationEntity: "input_number.timer_oneshot_bubon",  // REQUIRED - single shot pump run time length
+                        duration: 10, // duration of oneShot in minutes
                     },
                     pump: [
                         {
@@ -167,7 +168,7 @@ module.exports = {
                             "Button Water Irrigation Piggary": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
                             "Button Irrigation Entrance": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
                             "input_button.oneshot_irrigation": { oneShot: "any" },
-                            "Button-eWeLink": { oneShot: ["toggle", true, false], duration: 5 },
+                            //  "Button-eWeLink": { oneShot: ["toggle", true, false], duration: 5 },
                         },
                         // durationEntity: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
                         duration: 20,           // duration of oneShot in minutes
