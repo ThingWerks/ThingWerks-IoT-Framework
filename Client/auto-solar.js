@@ -1382,7 +1382,12 @@ module.exports = {
                             }, 1e3);
                         }, 3e3);
                     }, 3e3);
-                    state.timer.minute = setInterval(() => { timer(); }, 60e3);
+
+                    setTimeout(() => {  // start minute timer aligned with system minute
+                        timer();
+                        state.timer.minute = setInterval(() => { timer(); }, 60e3);
+                    }, (60e3 - ((time.sec * 1e3) + time.mil)));
+
                     state.timer.write = setInterval(() => { write(); }, 30e3);
                     if (cfg.solar.inverterAuto != undefined
                         && entity[cfg.solar.inverterAuto]?.state == true) log("inverter automation is on");
@@ -1392,8 +1397,9 @@ module.exports = {
                     constructor.init();
 
                     return;
-                } else push[_push?.name]?.(_push?.state, _push?.name);
-                if (_reload) {
+                }
+                else if (_push) push[_push.name]?.(_push.state, _push.name);
+                else if (_reload) {
                     if (push) push.forIn((name) => {
                         log("deleting constructor for: " + name);
                         delete push[name];
