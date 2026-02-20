@@ -1,234 +1,86 @@
 #!/usr/bin/node
 module.exports = {
     entity: {
-        subscribe: [    // entities to subscribe to 
-            "input_boolean.test",
-            //  "sunlight",
-            //  "wifi_signal",
-        ],
-        create: [       // entities to create
-            // any string you put here creates an entity that others can subscribe to. entity state is non-volatile.
-            // starting this automation with name/string removed is considered a removal/deletion
-            // "test-local-sensor",
-            // "test-local-sensor2",
-        ],
-        sync: {         // entities to sync - any type of binary output can be synced. TWIT, ESP or even Toggles on different HA servers 
-            // string is any group name you want, followed by array of entities, any entity change is parroted to all others
-            // "testGroup": ["input_boolean.test_switch", "input_boolean.test", "test-led", "test-local-sensor"],
-        },
-        heartbeat: {    // entities to use for heartbeats
-            // string is the entities name, value is heartbeat interval in milliseconds. Method is true/false toggle
-            // "test-led": 500
-        },
+        subscribe: [],
+        heartbeat: {},
+        sync: {
+            house_stairs: ["switch.switch_test", "input_boolean.lights_stairs",],
+            house_patio: ["switch.lights_outside_bedroom", "input_boolean.lights_bedroom_outside"],
+            house_entrance: ["switch.lights_outside_entrance", "input_boolean.lights_house_entrance"],
+        }
     },
-    config: { // this can be removed if loading externally or upon each global.config[_name] declaration 
-        // if using this for automation config, create an object for each below
-        "---automation name here----": {}, // the name here must match automation name below
-        "---another automation name here----": {}
-    },
-
 
     automation: {
-
-        // choose any name for automation 
-        "---automation name here----": function (_name, _push, _reload) {
-            let { state, config, nv, log, write, push } = _pointers(_name);
-
-            /*  common functions and those called by push events or the init function need to go in this area. 
-            ie. before   if (_push === "init"){}
- 
-            generally automation functions need to be declared before initialization sequences 
- 
- 
-            */
-
-
-            // example functions showing standard methods
-            function myFunction(newState, name) {
-                // logging  log("message", severityNumber)  0 - debug, 1 - notification (assumed), 2 - warning, 3 - error 
-                log("thing 2 entity " + name + ": is setting state to: " + newState);
-                log("thing 2 entity " + name + ": is setting state to: " + newState, 2);
-
-                // write some NV data and save
-                nv.myData = newState;
-                write();
-
-
-            }
-
-            function myAuto() {
-
-                // check the current state of an entity
-                log("my entity TEST has a state of: " + entity["test"].state);
-
-                // set the state of an any entity   
-                log("setting entity TEST's state to false");
-                send("test", false);
-
-                log("setting Home Assistant entity input_boolean.test state to 20psi");
-                send("input_number.test", 20, "psi"); // telemetry sensor example
-                send("input_number.test", 20, "psi", "10.10.0.1"); // telemetry sensor example multiple Home Assistant Servers
-
-                log("setting ESPHome entity testLED state to true");
-                send("testLED", true);
-            }
-
-            // example check timer function
-            function timer() { // called once per minute   
-                if (time.hour == 18 && time.min == 0) {  // set events to run at a specific time using clock function. match hour and minute of day, etc
-                    log("turning on outside lights", 1);
-                    send("switch.light_outside_switch", true);
-                }
-                if (time.hour == 22 && time.min == 0) {
-                    log("turning off outside lights", 1);
-                    send("switch.light_outside_switch", false);
-                }
-            };
-
-            // you initialization sequence begins here
-
-            if (_push === "init") { // ran only once
-                global.config[_name] = {    // initialize automation's configurations
-                    // static configuration can be put here for simplicity or
-                    // can be specified above on module.exports.config 
-                    // places into an external config file and specified  
-                };
-                global.state[_name] = {     // initialize automation's volatile memory
-                    timer: {},
-                    // generally state initialization would have its own function after this declaration 
-                };
-                global.nv[_name] ||= {      // initialize automation's non-volatile memory
-                    // generally NV initialization would have its own function after this declaration 
-                    // write(); // wite non-volatile memory after your initialization logic
-                };
-                global.push[_name] = {      // initialize incoming push function logic
-
-                    // the push object is called using the entities name as subscribed above in module.exports entities, subscribed 
-                    // the call includes, first the "state or value" and seconds "the entities name itself"
-
-                    //  PUSH METHOD 1: specify methods within the global.push declaration.
-                    "input_boolean.test": (newState, name) => {
-                        log("entity " + name + ": is setting state to: " + newState);
-                    }
-
-                };
-
-                // you must call pointers directly after config, state and or NV initializations 
-                ({ state, config, nv, push } = _pointers(_name));
-
-                //      PUSH METHOD 2: post declaration assignment:  
-                push["input_boolean.test"] = (newState, name) => {
-                    log("entity " + name + ": is setting state to: " + newState);
-                }
-
-                //      PUSH METHOD 3: make constructor factory
-                someArray.forEach(element => {
-                    push[element] = factory.thing1(element, config,);
-                });
-                someArray2.forEach(element => {
-                    push[element] = factory.thing2(element, config, nv,);
-                });
-
-                let factory = {
-                    thing1: function (element, config,) { // pass whatever data is needed for the factory
-                        return (newState, name) => {
-                            // reference config. state or nv data directly in your push logic
-                            log("thing 1 entity " + name + ": is setting state to: " + newState);
-                        }
-                    },
-                    thing2: function (element, config, nv,) { // 
-                        return (newState, name) => {
-                            log("thing 2 entity " + name + ": is setting state to: " + newState);
-                            myFunction(newState, name);
-                        }
-                    },
-                }
-
-
-                // run my automation in some interval:
-                state.timer.myAuto = setInterval(() => { myAuto(); }, 1e3);
-
-
-                setTimeout(() => {  // start minute timer aligned with system minute
-                    timer();
-                    st.timer.minute = setInterval(() => { timer(); }, 60e3);
-                }, (60e3 - ((time.sec * 1e3) + time.mil)));
-
-                // any other initialization sequence here
-            }
-            else if (_push) push[_push.name]?.(_push.state, _push.name);
-            else if (_reload) {   // called after modification/reload of this automation file
-                if (push) push.forIn((name) => { delete push[name]; }) // destroy all push calls 
-                if (_reload == "config") {
-                    log("config hot reload initiated");
-
-                    // re-initialize/call your constructor function here
-                    // _push === "init" is not called on a config file reload
-
-                } else {
-                    log("automation hot reload initiated");
-                    ({ state, config, nv } = _pointers(_name));
-
-                    // clear you event timers/intervals here.  ie. clearInterval(state.timer.second);
-                    // _push === "init" will be called again
-
-                }
-                return;
-            }
-        },
-
-
-
-
-        // create another automation if needed - same logic applies
-        "---another automation name here----": function (_name, _push, _reload) {
+        Compound: function (_name, _push, _reload) {
             try {
-                let { state, config, nv, log, save, send, push } = _pointers(_name);
-
-
-                // your program functions here
-
-
-                if (_push === "init") { // ran only once - your initialization procedure
-                    global.config[_name] = {};  // initialize automation's configurations or from -c config File or from config object above
-                    global.state[_name] = {};   // initialize automation's volatile memory
-                    global.nv[_name] ||= {};    // initialize automation's non-volatile memory
-                    global.push[_name] = {};    // initialize push functions 
-                    ({ state, config, nv, push } = _pointers(_name)); // call pointers directly after config and state initialization 
-
-                    // your init logic here
-
+                let { st, cfg, nv, log, write, send, push } = _pointers(_name);
+                function timer() {
+                    if (time.hour == 5 && time.min == 15) {
+                        log("Lights - Outside Lights - Turning OFF");
+                        send("input_boolean.lights_stairs", false);
+                        send("switch.relay_bodega_hall", false);
+                        send("switch.relay_bodega_freezer_fujidenzo", false);
+                        send("switch.relay_bodega_outside", false);
+                        send("switch.relay_shed", false);
+                        send("solar-relay6-lights", false);
+                        send("switch.lights_bodega_front_1", false);
+                        send("switch.lights_bodega_front_2", false);
+                        send("switch.lights_outside_entrance", false);
+                    }
+                    if (time.hour == 5 && time.min == 30) {
+                        log("Auto Bubon - Turning ON");
+                        send("clear-oneShot", 0);
+                        send("input_boolean.auto_bubon", true);
+                    }
+                    if (time.hour == 17 && time.min == 30) {
+                        log("Lights - Outside Lights - Turning ON");
+                        send("input_boolean.lights_stairs", true);
+                        send("switch.lights_bodega_front_2", true);
+                        send("switch.lights_outside_bedroom", true);
+                        send("switch.lights_outside_entrance", true);
+                        send("switch.relay_bodega_hall", true);
+                        send("switch.relay_bodega_freezer_fujidenzo", true);
+                        send("switch.relay_bodega_outside", true);
+                        send("switch.relay_shed", true);
+                        send("solar-relay6-lights", true);
+                    }
+                    if (time.hour == 21 && time.min == 0) {
+                        send("input_boolean.auto_bubon", false);
+                    }
+                    if (time.hour == 22 && time.min == 0) {
+                        send("switch.lights_outside_bedroom", false);
+                    }
+                }
+                if (_push === "init") {
+                    global.state[_name] = { boot: false, timer: null };
+                    global.config[_name] ||= {};
+                    ({ st, cfg, nv, push } = _pointers(_name));
+                    log("automation is starting");
+                    setTimeout(() => {  // start minute timer aligned with system minute
+                        timer();
+                        st.timer = setInterval(() => { timer(); }, 60e3);
+                    }, (60e3 - ((time.sec * 1e3) + time.mil)));
                     return;
                 }
-                else if (_push) push[_push.name]?.(_push.state, _push.name);    // called with every incoming push event
-                else if (_reload) {   // called after modification/reload of this automation file
-                    if (push) push.forIn((name) => { delete push[name]; }) // destroy all push calls 
-                    if (_reload == "config") {
-                        log("config hot reload initiated");
-
-                        // re-initialize/call your constructor function here
-                        // _push === "init" is not called on a config file reload
-
-                    } else {
-                        log("automation hot reload initiated");
-                        ({ state, config, nv } = _pointers(_name));
-
-                        // clear you event timers/intervals here.  ie. clearInterval(state.timer.second);
-                        // _push === "init" will be called again
-
+                else if (_push) push[_push.name]?.(_push.state, _push.name);
+                else if (_reload) {
+                    if (push) push.forIn((name) => { delete push[name]; })
+                    if (_reload == "config") { ({ st, cfg, nv } = _pointers(_name)); }
+                    else {
+                        log("hot reload initiated");
+                        clearInterval(st.timer);
                     }
                     return;
                 }
+
             } catch (error) { console.trace(error); process.exit(1); }
         },
     },
 }
-
-
-let _pointers = (_name) => {
+let _pointers = (_name) => { // don't touch 
     return {
-        state: state[_name] ?? undefined,
-        config: config[_name] ?? undefined,
+        st: state[_name] ?? undefined,
+        cfg: config[_name] ?? undefined,
         nv: nv[_name] ?? undefined,
         push: push[_name] ||= {},
         log: (m, l) => slog(m, l, _name),
