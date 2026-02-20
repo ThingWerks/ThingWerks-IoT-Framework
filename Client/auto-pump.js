@@ -187,43 +187,38 @@ module.exports = { // exports added to clean up layout
                                                     return;
                                                 }
 
-                                                /*
-
-
-                                                */
-
-                                                if (state.timer.timeoutOff == true) {  // after pump has been off for a while
-                                                    if (pump[state.pump].state === true && state.sharedPump.run == false) {
-                                                        log(config.name + " - pump running in HA/ESP but not here - switching pump ON", 2);
-                                                        delivery.start(x, false);
-                                                        return;
-                                                    } else {
-                                                        if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
-                                                            && warn.flowFlush == false && state.sharedPump.shared == false) {
-                                                            log(config.name + " - flow is detected (" + flow[state.pump].lm.toFixed(0)
-                                                                + "lpm) possible sensor damage or flush operation", 2);
-                                                            warn.flowFlush = true;
-                                                            delivery.stop(x, true, "faulted");
+                                                (function __faults__() {
+                                                    if (state.timer.timeoutOff == true) {  // after pump has been off for a while
+                                                        if (pump[state.pump].state === true && state.sharedPump.run == false) {
+                                                            log(config.name + " - pump running in HA/ESP but not here - switching pump ON", 2);
+                                                            delivery.start(x, false);
                                                             return;
+                                                        } else {
+                                                            if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
+                                                                && warn.flowFlush == false && state.sharedPump.shared == false) {
+                                                                log(config.name + " - flow is detected (" + flow[state.pump].lm.toFixed(0)
+                                                                    + "lpm) possible sensor damage or flush operation", 2);
+                                                                warn.flowFlush = true;
+                                                                delivery.stop(x, true, "faulted");
+                                                                return;
+                                                            }
                                                         }
                                                     }
-                                                }
+                                                })();
+
                                             }
                                             break;
                                         case true:  // when pump is STOPPED and flow faulted but HA/ESP home report as still running
-                                            // see online_fault()
-                                            /*
-                                            if (state.timer.timeoutOff == true) {
-                                                if (pump[state.pump].state === true
-                                                    || flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError) {
-                                                    log(config.name + " - pump is flow faulted but pump is still ON, stopping again", 3);
-                                                    delivery.stop(x, true, "faulted");
-                                                    return;
+                                            (function __faults__() {
+                                                if (state.timer.timeoutOff == true) {
+                                                    if (pump[state.pump].state === true
+                                                        || flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError) {
+                                                        log(config.name + " - pump is flow faulted but pump is still ON, stopping again", 3);
+                                                        delivery.stop(x, true, "faulted");
+                                                        return;
+                                                    }
                                                 }
-                                            }
-
-                                            */
-
+                                            })();
                                             break;
                                     }
                                     break;
@@ -241,9 +236,6 @@ module.exports = { // exports added to clean up layout
                                             return;
                                         }
                                     } else if (state.profile != null) {
-
-
-
                                         // if (config.pump[state.pump].flow?.runStop != undefined) return; // ether dont specify stop pressure or set it high
                                         if (press.out?.state?.psi >= config.press?.output?.profile?.[state.profile]?.stop) {
                                             log(config.name + " - " + press.out.cfg.name + " pump profile: " + state.profile
@@ -252,62 +244,57 @@ module.exports = { // exports added to clean up layout
                                             return;
                                         }
 
-                                        /*
-
-
-                                        */
-
-
-                                        (function test() {
-                                            //  console.log("I run immediately!");
-
-
-                                        })();
-                                        if (config.pump[state.pump].press?.input?.sensor) {
-                                            if (entity[config.pump[state.pump].press?.input.sensor]
-                                                <= config.pump[state.pump].press?.input.minError) {
-                                                log(config.name + " - input tank level is too low " + press.in.state.meters
-                                                    + "m - DD system shutting down", 3);
-                                                delivery.stop(x, true, "faulted");
-                                                return;
-                                            } else if (warn.inputLevel == false && entity[config.pump[state.pump].press?.input.sensor]
-                                                <= config.pump[state.pump].press?.input.minWarn) {
-                                                log(config.name + " - input tank level is getting low " + press.in.state.meters
-                                                    + "m", 2);
-                                                warn.inputLevel = true;
-                                                return;
+                                        (function __faults__() {
+                                            if (config.pump[state.pump].press?.input?.sensor) {
+                                                if (entity[config.pump[state.pump].press?.input.sensor]
+                                                    <= config.pump[state.pump].press?.input.minError) {
+                                                    log(config.name + " - input tank level is too low " + press.in.state.meters
+                                                        + "m - DD system shutting down", 3);
+                                                    delivery.stop(x, true, "faulted");
+                                                    return;
+                                                } else if (warn.inputLevel == false && entity[config.pump[state.pump].press?.input.sensor]
+                                                    <= config.pump[state.pump].press?.input.minWarn) {
+                                                    log(config.name + " - input tank level is getting low " + press.in.state.meters
+                                                        + "m", 2);
+                                                    warn.inputLevel = true;
+                                                    return;
+                                                }
                                             }
-                                        }
+                                        })();
+
                                     } else if (press.out.state.psi >= config.press.stop) {
                                         log(config.name + " - " + press.out.cfg.name + " shutoff pressure reached - pump is stopping");
                                         delivery.stop(x);
                                         return;
                                     }
 
-                                    /*
-
-
-                                   */
-                                    if (!flow && state.timer.timeoutOn == true && pump[state.pump].state === false) {
-                                        log(config.name + " - is out of sync - auto is on, system is RUN but pump is off", 2);
-                                        delivery.start(x);
-                                        return;
-                                    }
-                                    if (time.epoch - state.timer.run >= config.fault.runLongError * 60) {
-                                        log(config.name + " - pump: " + pump[state.pump].name
-                                            + " - max runtime exceeded - DD system shutting down", 3);
-                                        delivery.stop(x, true, "faulted");
-                                        return;
-                                    }
-                                    if (press.in != undefined && press.in.state.meters <= config.press.input.minError) {
-                                        log(config.name + " - input tank level is too low - auto is shutting down", 3);
-                                        delivery.stop(x, true, "faulted");
-                                        return;
-                                    }
-
-
+                                    (function __faults__() {
+                                        if (!flow && state.timer.timeoutOn == true && pump[state.pump].state === false) {
+                                            log(config.name + " - is out of sync - auto is on, system is RUN but pump is off", 2);
+                                            delivery.start(x);
+                                            return;
+                                        }
+                                        if (time.epoch - state.timer.run >= config.fault?.runLongError * 60) {
+                                            log(config.name + " - pump: " + pump[state.pump].name
+                                                + " - max runtime exceeded - DD system shutting down", 3);
+                                            delivery.stop(x, true, "faulted");
+                                            return;
+                                        }
+                                        if (!fault.runLong && time.epoch - state.timer.run >= config.fault?.runLongWarn * 60) {
+                                            log(config.name + " - pump: " + pump[state.pump].name
+                                                + " - runtime warning - current runtime: " + (time.epoch - state.timer.run), 2);
+                                            fault.runLong = true;
+                                            return;
+                                        }
+                                        if (press.in != undefined && press.in.state.meters <= config.press.input.minError) {
+                                            log(config.name + " - input tank level is too low - auto is shutting down", 3);
+                                            delivery.stop(x, true, "faulted");
+                                            return;
+                                        }
+                                    })();
 
                                     if (config.press.output.riseTime != undefined) delivery.check.press(x);
+
                                     if (flow != undefined) {
                                         if (config.pump[state.pump].flow.stopFlow != undefined
                                             && flow[state.pump].lm <= config.pump[state.pump].flow.stopFlow) {
@@ -320,42 +307,40 @@ module.exports = { // exports added to clean up layout
                                     break;
                             }
 
-                            /*
-
-
-                            */
-
-
-                            if (!warn.tankLow && press.out.state.meters <= (press.out.cfg.warn)) {
-                                log(config.name + " - " + press.out.cfg.name + " is lower than expected (" + press.out.state.meters.toFixed(2)
-                                    + press.out.cfg.unit + ") - possible hardware failure or low performance", 2);
-                                warn.tankLow = true;
-                            }
+                            (function __faults__() {
+                                if (!warn.tankLow && press.out.state.meters <= (press.out.cfg.warn)) {
+                                    log(config.name + " - " + press.out.cfg.name + " is lower than expected (" + press.out.state.meters.toFixed(2)
+                                        + press.out.cfg.unit + ") - possible hardware failure or low performance", 2);
+                                    warn.tankLow = true;
+                                }
+                            })();
                             break;
                         case false:  // when auto is OFFLINE
-                            if (state.timer.timeoutOff == true) {
-                                if (pump[state.pump].state === true && state.sharedPump.run == false) {        // this is mainly to sync the state of pump after a service restart
-                                    log(config.name + " - is out of sync - auto is off but pump is on - switching auto ON", 2);
-                                    send(auto.name, true);
-                                    auto.state = true;
-                                    delivery.start(x, false);
-                                    return;
+                            (function __faults__() {
+                                if (state.timer.timeoutOff == true) {
+                                    if (pump[state.pump].state === true && state.sharedPump.run == false) {        // this is mainly to sync the state of pump after a service restart
+                                        log(config.name + " - is out of sync - auto is off but pump is on - switching auto ON", 2);
+                                        send(auto.name, true);
+                                        auto.state = true;
+                                        delivery.start(x, false);
+                                        return;
+                                    }
+                                    if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
+                                        && warn.flowFlush == false && config.fault.flushWarning != false && state.sharedPump.shared == false) {
+                                        warn.flowFlush = true;
+                                        log(config.name + " - Auto is off but flow is detected (" + flow[state.pump].lm.toFixed(1)
+                                            + ") possible sensor damage or flush operation", 2);
+                                        if (pump[state.pump].state === null || pump[state.pump].state == true) delivery.stop(x, true);
+                                        return;
+                                    }
                                 }
-                                if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
-                                    && warn.flowFlush == false && config.fault.flushWarning != false && state.sharedPump.shared == false) {
-                                    warn.flowFlush = true;
-                                    log(config.name + " - Auto is off but flow is detected (" + flow[state.pump].lm.toFixed(1)
-                                        + ") possible sensor damage or flush operation", 2);
-                                    if (pump[state.pump].state === null || pump[state.pump].state == true) delivery.stop(x, true);
-                                    return;
-                                }
-                            }
+                            })();
                             break;
                     }
                 },
                 start: function (x, sendOut) {
                     let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
-                    delivery.check.start(x);
+                    delivery.check.start_conditions(x);
 
                     if (config.ha.reserve != undefined) {
                         if (entity[config.ha.reserve].state == true) {
@@ -389,11 +374,12 @@ module.exports = { // exports added to clean up layout
                     }
 
                     fault.flow = false;
+                    warn.runLong = false;
                     state.run = true;
-                    state.timer.run = time.epoch;
                     state.flow.check = false;
                     state.flow.checkPassed = false;
                     state.flow.checkRunDelay = false;
+                    state.timer.run = time.epoch;
                     state.timer.timeoutOn = false;
 
                     setTimeout(() => { state.timer.timeoutOn = true }, 10e3);
@@ -672,7 +658,7 @@ module.exports = { // exports added to clean up layout
                             state.timer.rise = time.epoch;
                         }
                     },
-                    start: function (x) { // check start requirements
+                    start_conditions: function (x) { // check start requirements
                         let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
 
                         // check that both press and flow stop are both not configured 
@@ -719,117 +705,6 @@ module.exports = { // exports added to clean up layout
                             send(auto.name, false);
                             auto.state = false;
                             return;
-                        }
-
-                    },
-                    online_faults: function () { //
-                        let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
-                        switch (auto.state) {
-                            case true:                  // when Auto System is ONLINE
-                                switch (state.run) {
-                                    case false:     // when pump is STOPPED (local perspective)
-                                        switch (fault.flow) {
-                                            case false: // when pump is STOPPED and not flow faulted
-                                                if (config.enable) {
-                                                    if (state.timer.timeoutOff == true) {  // after pump has been off for a while
-                                                        if (pump[state.pump].state === true && state.sharedPump.run == false) {
-                                                            log(config.name + " - pump running in HA/ESP but not here - switching pump ON", 2);
-                                                            delivery.start(x, false);
-                                                            return;
-                                                        } else {
-                                                            if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
-                                                                && warn.flowFlush == false && state.sharedPump.shared == false) {
-                                                                log(config.name + " - flow is detected (" + flow[state.pump].lm.toFixed(0)
-                                                                    + "lpm) possible sensor damage or flush operation", 2);
-                                                                warn.flowFlush = true;
-                                                                delivery.stop(x, true, "faulted");
-                                                                return;
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                break;
-                                            case true:  // when pump is STOPPED and flow faulted but HA/ESP home report as still running
-                                                if (state.timer.timeoutOff == true) {
-                                                    if (pump[state.pump].state === true
-                                                        || flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError) {
-                                                        log(config.name + " - pump is flow faulted but pump is still ON, stopping again", 3);
-                                                        delivery.stop(x, true, "faulted");
-                                                        return;
-                                                    }
-                                                }
-                                                break;
-                                        }
-                                        break;
-                                    case true:      // when pump is RUNNING
-                                        if (state.profile != null) {
-                                            if (config.pump[state.pump].press?.input?.sensor) {
-                                                if (entity[config.pump[state.pump].press?.input.sensor]
-                                                    <= config.pump[state.pump].press?.input.minError) {
-                                                    log(config.name + " - input tank level is too low " + press.in.state.meters
-                                                        + "m - DD system shutting down", 3);
-                                                    delivery.stop(x, true, "faulted");
-                                                    return;
-                                                } else if (warn.inputLevel == false && entity[config.pump[state.pump].press?.input.sensor]
-                                                    <= config.pump[state.pump].press?.input.minWarn) {
-                                                    log(config.name + " - input tank level is getting low " + press.in.state.meters
-                                                        + "m", 2);
-                                                    warn.inputLevel = true;
-                                                    return;
-                                                }
-                                            }
-                                        }
-                                        if (!flow && state.timer.timeoutOn == true && pump[state.pump].state === false) {
-                                            log(config.name + " - is out of sync - auto is on, system is RUN but pump is off", 2);
-                                            delivery.start(x);
-                                            return;
-                                        }
-                                        if (time.epoch - state.timer.run >= config.fault.runLongError * 60) {
-                                            log(config.name + " - pump: " + pump[state.pump].name
-                                                + " - max runtime exceeded - DD system shutting down", 3);
-                                            delivery.stop(x, true, "faulted");
-                                            return;
-                                        }
-                                        if (press.in != undefined && press.in.state.meters <= config.press.input.minError) {
-                                            log(config.name + " - input tank level is too low - auto is shutting down", 3);
-                                            delivery.stop(x, true, "faulted");
-                                            return;
-                                        }
-                                        if (config.press.output.riseTime != undefined) delivery.check.press(x);
-                                        // if (flow != undefined) { }
-                                        break;
-                                }
-                                if (!warn.tankLow && press.out.state.meters <= (press.out.cfg.warn)) {
-                                    log(config.name + " - " + press.out.cfg.name + " is lower than expected (" + press.out.state.meters.toFixed(2)
-                                        + press.out.cfg.unit + ") - possible hardware failure or low performance", 2);
-                                    warn.tankLow = true;
-                                }
-                                break;
-                            case false:  // when auto is OFFLINE
-                                if (state.timer.timeoutOff == true) {
-                                    if (pump[state.pump].state === true && state.sharedPump.run == false) {        // this is mainly to sync the state of pump after a service restart
-                                        log(config.name + " - is out of sync - auto is off but pump is on - switching auto ON", 2);
-                                        send(auto.name, true);
-                                        auto.state = true;
-                                        delivery.start(x, false);
-                                        return;
-                                    }
-                                    if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
-                                        && warn.flowFlush == false && config.fault.flushWarning != false && state.sharedPump.shared == false) {
-                                        warn.flowFlush = true;
-                                        log(config.name + " - Auto is off but flow is detected (" + flow[state.pump].lm.toFixed(1)
-                                            + ") possible sensor damage or flush operation", 2);
-                                        if (pump[state.pump].state === null || pump[state.pump].state == true) delivery.stop(x, true);
-                                        return;
-                                    }
-                                }
-                                break;
-                        }
-                        if (press.out.state.meters >= (config.press.stop + .12) && fault.flowOver == false) {
-                            log(config.name + " - " + press.out.cfg.name + " is overflowing (" + press.out.state.meters
-                                + press.out.cfg.unit + ") - relay welded, SSR failure or other hardware malfunction", 3);
-                            delivery.stop(x);
-                            fault.flowOver = true;
                         }
 
                     },
@@ -984,6 +859,7 @@ module.exports = { // exports added to clean up layout
                                 return;
                             }
                             log(config.name + " - is going ONLINE");
+                            // some fault/warn are reset in delivery.start
                             dd.fault.flow = false;
                             dd.fault.flowRestarts = 0;
                             dd.fault.inputLevel = false;
@@ -1225,13 +1101,14 @@ module.exports = { // exports added to clean up layout
                         fault: {
                             flow: false,
                             flowRestarts: 0,
-                            flowOver: false,
+                            overFlow: false, // tank is overflowing
                             inputLevel: false,
                         },
                         warn: {
                             flow: false,
                             flowDaily: false,
                             flowFlush: false,
+                            runLong: false, // DD has ran too long
                             haLag: false,
                             tankLow: false,
                             inputLevel: false,
@@ -1267,7 +1144,7 @@ module.exports = { // exports added to clean up layout
                 }, (60e3 - ((time.sec * 1e3) + time.mil)));
                 st.timer.hour = setInterval(() => {     // called every hour  -  reset hourly notifications
                     cfg.dd.forEach((_, x) => {
-                        st.dd[x].fault.flowOver = false;
+                        st.dd[x].fault.overFlow = false;
                         st.dd[x].warn.tankLow = false;
                     });
                 }, 3600e3);
@@ -1277,9 +1154,9 @@ module.exports = { // exports added to clean up layout
                     push[config.haAuto] = constructor.fountain();
                 });
 
-            } else push[_push.name]?.(_push?.state, _push?.name);
+            } else push[_push?.name]?.(_push?.state, _push?.name);
             if (_reload) {
-                if (global.push) push.forIn((name) => { delete global.push[name]; })
+                if (push) push.forIn((name) => { delete push[name]; })
                 if (_reload == "config") {
                     ({ st, cfg, nv } = _pointers(_name));
                     constructor.init();
