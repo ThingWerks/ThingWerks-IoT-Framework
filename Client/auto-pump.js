@@ -3,23 +3,6 @@ module.exports = { // exports added to clean up layout
     automation: {
         Pumper: function (_name, _push, _reload) {
             let { st, cfg, nv, log, write, send, push } = _pointers(_name);
-            if (_reload) {
-                if (_reload == "config") ({ st, cfg, nv } = _pointers(_name));
-                else {
-                    log("hot reload initiated");
-                    clearInterval(st.timer.hour);
-                    clearInterval(st.timer.minute);
-                    clearInterval(st.timer.second);
-                    st.dd.forEach(element => {
-                        clearInterval(element.state.flow.timerInterval);
-                        clearTimeout(element.state.flow.timerRestart);
-                        clearTimeout(element.state.flow.timerCheck);
-                        clearTimeout(element.state.oneShot);
-                    });
-                    if (global.push) push.forIn((name, value) => { delete global.push[name]; })
-                }
-                return;
-            }
             let sensor = {
                 ha_push: function () {
                     ({ st, cfg, nv } = _pointers(_name));
@@ -203,6 +186,12 @@ module.exports = { // exports added to clean up layout
                                                     delivery.start(x);
                                                     return;
                                                 }
+
+                                                /*
+
+
+                                                */
+
                                                 if (state.timer.timeoutOff == true) {  // after pump has been off for a while
                                                     if (pump[state.pump].state === true && state.sharedPump.run == false) {
                                                         log(config.name + " - pump running in HA/ESP but not here - switching pump ON", 2);
@@ -222,6 +211,8 @@ module.exports = { // exports added to clean up layout
                                             }
                                             break;
                                         case true:  // when pump is STOPPED and flow faulted but HA/ESP home report as still running
+                                            // see online_fault()
+                                            /*
                                             if (state.timer.timeoutOff == true) {
                                                 if (pump[state.pump].state === true
                                                     || flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError) {
@@ -230,6 +221,9 @@ module.exports = { // exports added to clean up layout
                                                     return;
                                                 }
                                             }
+
+                                            */
+
                                             break;
                                     }
                                     break;
@@ -247,6 +241,9 @@ module.exports = { // exports added to clean up layout
                                             return;
                                         }
                                     } else if (state.profile != null) {
+
+
+
                                         // if (config.pump[state.pump].flow?.runStop != undefined) return; // ether dont specify stop pressure or set it high
                                         if (press.out?.state?.psi >= config.press?.output?.profile?.[state.profile]?.stop) {
                                             log(config.name + " - " + press.out.cfg.name + " pump profile: " + state.profile
@@ -254,6 +251,18 @@ module.exports = { // exports added to clean up layout
                                             delivery.stop(x);
                                             return;
                                         }
+
+                                        /*
+
+
+                                        */
+
+
+                                        (function test() {
+                                            //  console.log("I run immediately!");
+
+
+                                        })();
                                         if (config.pump[state.pump].press?.input?.sensor) {
                                             if (entity[config.pump[state.pump].press?.input.sensor]
                                                 <= config.pump[state.pump].press?.input.minError) {
@@ -274,6 +283,11 @@ module.exports = { // exports added to clean up layout
                                         delivery.stop(x);
                                         return;
                                     }
+
+                                    /*
+
+
+                                   */
                                     if (!flow && state.timer.timeoutOn == true && pump[state.pump].state === false) {
                                         log(config.name + " - is out of sync - auto is on, system is RUN but pump is off", 2);
                                         delivery.start(x);
@@ -290,6 +304,9 @@ module.exports = { // exports added to clean up layout
                                         delivery.stop(x, true, "faulted");
                                         return;
                                     }
+
+
+
                                     if (config.press.output.riseTime != undefined) delivery.check.press(x);
                                     if (flow != undefined) {
                                         if (config.pump[state.pump].flow.stopFlow != undefined
@@ -302,6 +319,13 @@ module.exports = { // exports added to clean up layout
                                     }
                                     break;
                             }
+
+                            /*
+
+
+                            */
+
+
                             if (!warn.tankLow && press.out.state.meters <= (press.out.cfg.warn)) {
                                 log(config.name + " - " + press.out.cfg.name + " is lower than expected (" + press.out.state.meters.toFixed(2)
                                     + press.out.cfg.unit + ") - possible hardware failure or low performance", 2);
@@ -464,33 +488,33 @@ module.exports = { // exports added to clean up layout
                                 if (config.oneShot.extendRetry) {
                                     if (state.oneShotCount < config.oneShot.extendRetry) {
                                         log(config.name + " - OneShot minimum (" + config.oneShot.extendLiterMin
-                                            + "L) batch flow: " + ~~(tFlow * 1000) + " not reached - attempt: " + state.oneShotCount, 1);
+                                            + "L) batch flow not reached - attempt: " + state.oneShotCount);
                                         clearTimeout(state.oneShot);
                                     } else {
                                         log(config.name + " - OneShot minimum batch flow retries exceeded ("
-                                            + state.oneShotCount + ") - terminating OneShot and auto shutdown", 1);
+                                            + state.oneShotCount + "L) - terminating OneShot and auto shutdown");
                                         send(auto.name, false);
                                         clearTimeout(state.oneShot);
                                         return;
                                     }
                                 } else {
-                                    log(config.name + " - OneShot minimum batch flow not reached - terminating OneShot and auto shutdown", 1);
+                                    log(config.name + " - OneShot minimum batch flow not reached - terminating OneShot and auto shutdown");
                                     send(auto.name, false);
                                     clearTimeout(state.oneShot);
                                     return;
                                 }
                             } else {
                                 if (config.oneShot.extendRetry) {
-                                    log(config.name + " - OneShot minimum batch flow reached - resetting retry counter", 1);
+                                    log(config.name + " - OneShot minimum batch flow reached - resetting retry counter");
                                     state.oneShotCount = 0;
                                 } else {
-                                    log(config.name + " - OneShot minimum batch flow reached", 1);
+                                    log(config.name + " - OneShot minimum batch flow reached");
                                 }
                                 clearTimeout(state.oneShot);
                             }
                         }
 
-                        log(config.name + " - extending OneShot timer", 1);
+                        log(config.name + " - extending OneShot timer");
                         clearTimeout(state.oneShot);
                         if (config.oneShot.durationEntity) duration = Math.trunc(entity[config.oneShot.durationEntity].state);
                         else if (config.oneShot.duration) duration = config.oneShot.duration;
@@ -698,7 +722,7 @@ module.exports = { // exports added to clean up layout
                         }
 
                     },
-                    online_faults: function () { // 
+                    online_faults: function () { //
                         let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
                         switch (auto.state) {
                             case true:                  // when Auto System is ONLINE
@@ -738,9 +762,6 @@ module.exports = { // exports added to clean up layout
                                         }
                                         break;
                                     case true:      // when pump is RUNNING
-
-
-
                                         if (state.profile != null) {
                                             if (config.pump[state.pump].press?.input?.sensor) {
                                                 if (entity[config.pump[state.pump].press?.input.sensor]
@@ -775,15 +796,7 @@ module.exports = { // exports added to clean up layout
                                             return;
                                         }
                                         if (config.press.output.riseTime != undefined) delivery.check.press(x);
-                                        if (flow != undefined) {
-                                            if (config.pump[state.pump].flow.stopFlow != undefined
-                                                && flow[state.pump].lm <= config.pump[state.pump].flow.stopFlow) {
-                                                log(config.name + " - stop flow rate reached - pump is stopping");
-                                                delivery.stop(x);
-                                                return;
-                                            }
-                                            delivery.check.flow(x);
-                                        }
+                                        // if (flow != undefined) { }
                                         break;
                                 }
                                 if (!warn.tankLow && press.out.state.meters <= (press.out.cfg.warn)) {
@@ -938,7 +951,29 @@ module.exports = { // exports added to clean up layout
                     }
                 }
             }
-            let push_constructor = {
+            let constructor = {
+                init: function () {
+                    log("loading constructors");
+                    push["clear-oneShot"] = (number) => {
+                        log(cfg.dd[number].name + " - clearing oneShot for DD: " + number);
+                        clearTimeout(st.dd[number].state.oneShot);
+                        st.dd[number].state.oneShot = false;
+                    }
+                    push["Button-eWeLink"] = (state) => {
+                        log(" - TEST BUTTON - State:" + state);
+                    }
+                    cfg.dd.forEach((config, x) => {
+                        push[config.ha.auto] = constructor.auto(st.dd[x], x, config);
+                        push[config.ha.turbo] = constructor.turbo(st.dd[x], x, config);
+                        push[config.ha.profile] = constructor.profile(st.dd[x], x, config);
+                        if (config.oneShot?.buttons) {
+                            config.oneShot.buttons.forIn((name, value) => {
+                                log("loading constructor for oneshot entity: " + name, 0);
+                                push[name] = constructor.oneShot(st.dd[x], x, config, value);
+                            })
+                        }
+                    });
+                },
                 auto: function (dd, index, config) {
                     return (state) => {
                         if (state) {
@@ -999,7 +1034,7 @@ module.exports = { // exports added to clean up layout
                         clearTimeout(dd.state.oneShot);
 
                         if (duration == null) {
-                            if (config.oneShot.durationEntity)
+                            if (config.oneShot.durationEntity && entity[config.oneShot.durationEntity]?.state)
                                 duration = Math.trunc(entity[config.oneShot.durationEntity].state);
                             else if (config.oneShot.duration)
                                 duration = config.oneShot.duration;
@@ -1108,6 +1143,16 @@ module.exports = { // exports added to clean up layout
 
                     };
                 },
+            }
+            function timer() {    // called every minute
+                for (let x = 0; x < cfg.dd.length; x++) { st.dd[x].warn.flowFlush = false; }
+                if (time.hour == 4 && time.min == 0) {
+                    for (let x = 0; x < cfg.dd.length; x++) { st.dd[x].warn.flowDaily = false; } // reset low flow daily warning
+                }
+                if (time.hour == 0 && time.min == 0) {
+                    log("resetting daily flow meters")
+                    for (const name in nv.flow) { nv.flow[name].today = 0; }  // reset daily low meters
+                }
             }
             if (_push === "init") {
                 log("initializing pumper config and state")
@@ -1227,40 +1272,32 @@ module.exports = { // exports added to clean up layout
                     });
                 }, 3600e3);
 
-                log("loading constructors");
-                push["clear-oneShot"] = (number) => {
-                    log(cfg.dd[number].name + " - clearing oneShot for DD: " + number);
-                    clearTimeout(st.dd[number].state.oneShot);
-                    st.dd[number].state.oneShot = false;
-                }
-                push["Button-eWeLink"] = (state) => {
-                    log(" - TEST BUTTON - State:" + state);
-                }
-                cfg.dd.forEach((config, x) => {
-                    push[config.ha.auto] = push_constructor.auto(st.dd[x], x, config);
-                    push[config.ha.turbo] = push_constructor.turbo(st.dd[x], x, config);
-                    push[config.ha.profile] = push_constructor.profile(st.dd[x], x, config);
-                    if (config.oneShot?.buttons) {
-                        config.oneShot.buttons.forIn((name, value) => {
-                            log("loading constructor for oneshot entity: " + name, 0);
-                            push[name] = push_constructor.oneShot(st.dd[x], x, config, value);
-                        })
-                    }
-                });
+                constructor.init();
                 cfg.fountain.forEach(config => {
-                    push[config.haAuto] = push_constructor.fountain();
+                    push[config.haAuto] = constructor.fountain();
                 });
 
-            } else push[_push.name]?.(_push.state, _push.name);
-            function timer() {    // called every minute
-                for (let x = 0; x < cfg.dd.length; x++) { st.dd[x].warn.flowFlush = false; }
-                if (time.hour == 4 && time.min == 0) {
-                    for (let x = 0; x < cfg.dd.length; x++) { st.dd[x].warn.flowDaily = false; } // reset low flow daily warning
+            } else push[_push.name]?.(_push?.state, _push?.name);
+            if (_reload) {
+                if (global.push) push.forIn((name) => { delete global.push[name]; })
+                if (_reload == "config") {
+                    ({ st, cfg, nv } = _pointers(_name));
+                    constructor.init();
                 }
-                if (time.hour == 0 && time.min == 0) {
-                    log("resetting daily flow meters")
-                    for (const name in nv.flow) { nv.flow[name].today = 0; }  // reset daily low meters
+                else {
+                    log("hot reload initiated");
+                    clearInterval(st.timer.hour);
+                    clearInterval(st.timer.minute);
+                    clearInterval(st.timer.second);
+                    st.dd.forEach(element => {
+                        clearInterval(element.state.flow.timerInterval);
+                        clearTimeout(element.state.flow.timerRestart);
+                        clearTimeout(element.state.flow.timerCheck);
+                        clearTimeout(element.state.oneShot);
+                    });
+
                 }
+                return;
             }
         },
     }
