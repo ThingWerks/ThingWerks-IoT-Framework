@@ -1154,8 +1154,9 @@ module.exports = { // exports added to clean up layout
                     push[config.haAuto] = constructor.fountain();
                 });
 
-            } else push[_push?.name]?.(_push?.state, _push?.name);
-            if (_reload) {
+            }
+            else if (_push) push[_push.name]?.(_push.state, _push.name);
+            else if (_reload) {
                 if (push) push.forIn((name) => { delete push[name]; })
                 if (_reload == "config") {
                     ({ st, cfg, nv } = _pointers(_name));
@@ -1172,7 +1173,6 @@ module.exports = { // exports added to clean up layout
                         clearTimeout(element.state.flow.timerCheck);
                         clearTimeout(element.state.oneShot);
                     });
-
                 }
                 return;
             }
