@@ -4,21 +4,6 @@ module.exports = {
         Solar: function (_name, _push, _reload) {
             try {
                 let { state, cfg, nv, log, write, push, send } = _pointers(_name);
-                if (_reload) {
-                    if (_reload == "config") ({ state, cfg, nv } = _pointers(_name));
-                    else {
-                        log("hot reload initiated");
-                        state.inverter.forEach(inverter => {
-                            clearTimeout(inverter.switchWattsTimer);
-                        });
-                        clearInterval(state.timer.write);
-                        clearInterval(state.timer.minute);
-                        clearInterval(state.timer.second);
-                        clearInterval(state.timer.priority);
-                        if (global.push) push.forIn((name, value) => { delete global.push[name]; })
-                    }
-                    return;
-                }
                 let solar = {
                     auto: function () { // check sequence director
                         ({ st, cfg, nv } = _pointers(_name));
@@ -110,7 +95,7 @@ module.exports = {
                             if (solar.nightMode(x) == true) {
                                 if (voltsBat < config.nightMode.startVoltageMin) {
                                     log("inverter: " + config.name + " - Battery is too low to make it through the night: "
-                                        + voltsBat + ", switching off");
+                                        + voltsBat + "v, switching off");
                                     solar.power(x, false);
                                     return;
                                 }
@@ -212,7 +197,6 @@ module.exports = {
                     },
                     off: function (x) { // when inverter is stopped
                         if (cfg.inverter[x].enable == true) {
-
                             let { voltsBat, inverterVolts, battery, config, inverter } = solar.pointers(x);
                             //   console.log(inverter.state)
                             if (battery.sensorVolt != undefined) {
@@ -237,7 +221,6 @@ module.exports = {
                                 }
                             }
                         }
-
                     },
                     changing: function (x, power) {
                         let { voltsBat, ampsBat, gridWatts, wattsSolar, sun, config, inverter } = solar.pointers(x);
@@ -1096,7 +1079,29 @@ module.exports = {
                         }
                     },
                 }
-                let push_constructor = {
+                let constructor = {
+                    init: function () {
+                        log("initializing push constructors");
+                        for (let sensor of cfg.sensor.amp) push[sensor.entity] = constructor.sensor.amp(sensor);
+                        for (let sensor of cfg.sensor.volt) push[sensor.entity] = constructor.sensor.volt(sensor);
+                        for (let sensor of cfg.sensor.watt) push[sensor.entity] = constructor.sensor.watt(sensor);
+                        for (let sensor of cfg.sensor.kwh) push[sensor.entity] = constructor.sensor.kwh(sensor);
+                        for (let sensor of cfg.sensor.temp) push[sensor.entity] = constructor.sensor.temp(sensor);
+
+                        push[cfg.solar.inverterAuto] = constructor.inverterAuto();
+
+                        cfg.inverter.forEach((inverter, x) => {
+                            push[inverter.entity] = constructor.inverterOperation(x);
+                        });
+
+                        push[cfg.solar.priority.entityAuto] = constructor.priorityAuto();
+                        cfg.solar.priority.queue.forEach((queue, x) => {
+                            push[queue.entityAuto] = constructor.priorityQueueAuto(queue, x);
+                            queue.entity.forEach((entity, y) => {
+                                push[entity] = constructor.priorityQueue(queue, entity, x, y);
+                            })
+                        })
+                    },
                     sensor: {
                         amp: function (config) {
                             return (state, name) => {
@@ -1286,6 +1291,39 @@ module.exports = {
                         }
                     },
                 }
+                function recorder(obj, diff, name) {  // nv is written every 60 seconds
+                    let calcHour = 0, calcDay = 0, calcMonth = 0, lastHour = 0, lastDay = 0, last30Days = 0, lastMonth;
+                    if (!Array.isArray(obj.min) || obj.min.length != 60) obj.min = new Array(60).fill(0);
+                    if (!Array.isArray(obj.hour) || obj.hour.length != 24) obj.hour = new Array(24).fill(0);
+                    if (!Array.isArray(obj.day) || obj.day.length != 31) obj.day = new Array(31).fill(0);
+                    if (!Array.isArray(obj.month) || obj.month.length != 12) obj.month = new Array(12).fill(0);
+                    if (obj.total == undefined) obj.total = 0;
+                    if (obj.lastMin != time.min) { obj.min[time.min] = 0; obj.lastMin = time.min; }
+                    obj.min[time.min] += diff;
+                    for (let x = 0; x <= time.min; x++) calcHour += obj.min[x];
+                    obj.hour[time.hour] = calcHour;
+                    for (let x = 0; x <= time.hour; x++) calcDay += obj.hour[x];
+                    obj.day[time.day] = calcDay;
+                    for (let x = 0; x <= time.day; x++) calcMonth += obj.day[x];
+                    obj.month[time.month] = calcMonth;
+
+                    for (let x = 0; x < obj.min.length; x++) lastHour += obj.min[x];
+                    for (let x = 0; x < obj.hour.length; x++) lastDay += obj.hour[x];
+                    for (let x = 0; x < obj.day.length; x++) last30Days += obj.day[x];
+                    for (let x = 0; x < obj.month.length; x++) lastMonth += obj.month[x];
+
+                    send("kwh_" + name + "_total", Math.round((obj.total / 1000) * 10) / 10, "kWh");
+                    send("kwh_" + name + "_hour", Math.round((lastHour / 1000) * 100) / 100, "kWh");
+                    send("kwh_" + name + "_day", Math.round((lastDay / 1000) * 100) / 100, "kWh");
+                    send("kwh_" + name + "_30days", Math.round((last30Days / 1000) * 10) / 10, "kWh");
+                    send("kwh_" + name + "_12months", Math.round((last30Days / 1000)), "kWh");
+                }
+                function timer() {    // called every minute
+                    if (time.hour == 3 && time.min == 0) {
+                        log("resetting daily watt meters", 0)
+                        cfg.sensor.watt.forEach(config => { state.recorder.watt[config.name].todayReset = true; })
+                    }
+                }
                 if (_push === "init") {
                     global.state[_name] = {               // initialize automation volatile memory
                         priority: { step: time.epoch, queue: [], skipLog: false, },
@@ -1351,62 +1389,30 @@ module.exports = {
                     else log("inverter automation is off");
                     write();
 
-
-                    log("initializing push constructors");
-                    for (let sensor of cfg.sensor.amp) push[sensor.entity] = push_constructor.sensor.amp(sensor);
-                    for (let sensor of cfg.sensor.volt) push[sensor.entity] = push_constructor.sensor.volt(sensor);
-                    for (let sensor of cfg.sensor.watt) push[sensor.entity] = push_constructor.sensor.watt(sensor);
-                    for (let sensor of cfg.sensor.kwh) push[sensor.entity] = push_constructor.sensor.kwh(sensor);
-                    for (let sensor of cfg.sensor.temp) push[sensor.entity] = push_constructor.sensor.temp(sensor);
-
-                    push[cfg.solar.inverterAuto] = push_constructor.inverterAuto();
-
-                    cfg.inverter.forEach((inverter, x) => {
-                        push[inverter.entity] = push_constructor.inverterOperation(x);
-                    });
-
-                    push[cfg.solar.priority.entityAuto] = push_constructor.priorityAuto();
-                    cfg.solar.priority.queue.forEach((queue, x) => {
-                        push[queue.entityAuto] = push_constructor.priorityQueueAuto(queue, x);
-                        queue.entity.forEach((entity, y) => {
-                            push[entity] = push_constructor.priorityQueue(queue, entity, x, y);
-                        })
-                    })
+                    constructor.init();
 
                     return;
-                } else push[_push.name]?.(_push.state, _push.name);
-                function recorder(obj, diff, name) {  // nv is written every 60 seconds
-                    let calcHour = 0, calcDay = 0, calcMonth = 0, lastHour = 0, lastDay = 0, last30Days = 0, lastMonth;
-                    if (!Array.isArray(obj.min) || obj.min.length != 60) obj.min = new Array(60).fill(0);
-                    if (!Array.isArray(obj.hour) || obj.hour.length != 24) obj.hour = new Array(24).fill(0);
-                    if (!Array.isArray(obj.day) || obj.day.length != 31) obj.day = new Array(31).fill(0);
-                    if (!Array.isArray(obj.month) || obj.month.length != 12) obj.month = new Array(12).fill(0);
-                    if (obj.total == undefined) obj.total = 0;
-                    if (obj.lastMin != time.min) { obj.min[time.min] = 0; obj.lastMin = time.min; }
-                    obj.min[time.min] += diff;
-                    for (let x = 0; x <= time.min; x++) calcHour += obj.min[x];
-                    obj.hour[time.hour] = calcHour;
-                    for (let x = 0; x <= time.hour; x++) calcDay += obj.hour[x];
-                    obj.day[time.day] = calcDay;
-                    for (let x = 0; x <= time.day; x++) calcMonth += obj.day[x];
-                    obj.month[time.month] = calcMonth;
-
-                    for (let x = 0; x < obj.min.length; x++) lastHour += obj.min[x];
-                    for (let x = 0; x < obj.hour.length; x++) lastDay += obj.hour[x];
-                    for (let x = 0; x < obj.day.length; x++) last30Days += obj.day[x];
-                    for (let x = 0; x < obj.month.length; x++) lastMonth += obj.month[x];
-
-                    send("kwh_" + name + "_total", Math.round((obj.total / 1000) * 10) / 10, "kWh");
-                    send("kwh_" + name + "_hour", Math.round((lastHour / 1000) * 100) / 100, "kWh");
-                    send("kwh_" + name + "_day", Math.round((lastDay / 1000) * 100) / 100, "kWh");
-                    send("kwh_" + name + "_30days", Math.round((last30Days / 1000) * 10) / 10, "kWh");
-                    send("kwh_" + name + "_12months", Math.round((last30Days / 1000)), "kWh");
-                }
-                function timer() {    // called every minute
-                    if (time.hour == 3 && time.min == 0) {
-                        log("resetting daily watt meters")
-                        cfg.sensor.watt.forEach(config => { state.recorder.watt[config.name].todayReset = true; })
+                } else push[_push?.name]?.(_push?.state, _push?.name);
+                if (_reload) {
+                    if (push) push.forIn((name) => {
+                        log("deleting constructor for: " + name);
+                        delete push[name];
+                    })
+                    if (_reload == "config") {
+                        ({ st, cfg, nv } = _pointers(_name));
+                        constructor.init();
                     }
+                    else {
+                        log("hot reload initiated");
+                        state.inverter.forEach(inverter => {
+                            clearTimeout(inverter.switchWattsTimer);
+                        });
+                        clearInterval(state.timer.write);
+                        clearInterval(state.timer.minute);
+                        clearInterval(state.timer.second);
+                        clearInterval(state.timer.priority);
+                    }
+                    return;
                 }
             } catch (error) { console.trace(error); process.exit(1); }
         }
