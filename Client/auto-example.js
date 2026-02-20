@@ -23,7 +23,7 @@ module.exports = {
     },
     config: { // this can be removed if loading externally or upon each global.config[_name] declaration 
         // if using this for automation config, create an object for each below
-        "---automation name here----": {},
+        "---automation name here----": {}, // the name here must match automation name below
         "---another automation name here----": {}
     },
 
@@ -213,10 +213,9 @@ module.exports = {
 
         },
     },
-
-
-
 }
+
+
 let _pointers = (_name) => {
     return {
         state: state[_name] ?? undefined,
