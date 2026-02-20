@@ -43,7 +43,7 @@ com = function () {
         //  console.log(buf);
         switch (buf.type) {
             case "state":       // incoming state change (from HA websocket service)
-                slog("receiving state update, entity: " + buf.data.name + " value: " + buf.data.state, 0);
+                slog("receiving state update, entity: " + buf.data.name + " state: " + buf.data.state, 0);
                 // if (buf.data?.name?.includes("input_button.")) console.log(buf.data)
                 // console.log(buf.data)
 
@@ -59,6 +59,7 @@ com = function () {
                 else if (typeof buf.data?.state === "string") {
                     if (buf.data.state.includes("remote_button_")) newEntity.state = null;
                     else if (buf.data.state.includes("toggle")) newEntity.state = null;
+                    else newEntity.state = buf.data.state;
                 } else newEntity.state = buf.data.state;
 
                 if (online == true && buf.data.state != null) {
