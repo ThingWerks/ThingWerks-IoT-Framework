@@ -155,27 +155,26 @@ module.exports = {
                 }, (60e3 - ((time.sec * 1e3) + time.mil)));
 
                 // any other initialization sequence here
+            }
+            else if (_push) push[_push.name]?.(_push.state, _push.name);
+            else if (_reload) {   // called after modification/reload of this automation file
+                if (push) push.forIn((name) => { delete push[name]; }) // destroy all push calls 
+                if (_reload == "config") {
+                    log("config hot reload initiated");
 
+                    // re-initialize/call your constructor function here
+                    // _push === "init" is not called on a config file reload
 
+                } else {
+                    log("automation hot reload initiated");
+                    ({ state, config, nv } = _pointers(_name));
 
-            } else
-                if (_reload) {   // called after modification/reload of this automation file
-                    if (global.push) push.forIn(name => { delete global.push[name]; }); // destroy all constructors 
-                    if (_reload === "config") { // only called if JSON config file is reloaded 
-                        log("hot config reload initiated");
-                        ({ state, config, nv } = _pointers(_name));
-                        //  reload all your constructors
-                    } else {
-                        log("hot reload initiated");
-                        /*
-                            automation reload logic
-    
-                            // clear automation timers and intervals and perform other cleanup logic needed for hot reload
-                            clearInterval(state.timer);
-                        */
-                    }
-                    return;
+                    // clear you event timers/intervals here.  ie. clearInterval(state.timer.second);
+                    // _push === "init" will be called again
+
                 }
+                return;
+            }
         },
 
 
@@ -186,6 +185,10 @@ module.exports = {
             try {
                 let { state, config, nv, log, save, send, push } = _pointers(_name);
 
+
+                // your program functions here
+
+
                 if (_push === "init") { // ran only once - your initialization procedure
                     global.config[_name] = {};  // initialize automation's configurations or from -c config File or from config object above
                     global.state[_name] = {};   // initialize automation's volatile memory
@@ -193,18 +196,23 @@ module.exports = {
                     global.push[_name] = {};    // initialize push functions 
                     ({ state, config, nv, push } = _pointers(_name)); // call pointers directly after config and state initialization 
 
+                    // your init logic here
 
                     return;
                 } else push[_push?.name]?.(_push?.state, _push?.name);    // called with every incoming push event
             } catch (error) { console.trace(error) }
             if (_reload) {   // called after modification/reload of this automation file
-                if (global.push) push.forIn((name, value) => { delete global.push[name]; }) // destroy all push calls 
+                if (push) push.forIn((name) => { delete push[name]; }) // destroy all push calls 
                 if (_reload == "config") {
+                    ({ state, config, nv } = _pointers(_name));
                     log("hot reload initiated");
-                    //clear you event timers here.  ie. clearInterval(state.timer.second);
+
+                    // re-initialize constructors here 
+
                 } else {
                     log("hot config reload initiated");
-                    ({ state, config, nv } = _pointers(_name));
+
+                    //clear you event timers here.  ie. clearInterval(state.timer.second);
 
                 }
                 return;
