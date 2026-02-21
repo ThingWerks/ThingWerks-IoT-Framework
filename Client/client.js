@@ -30,9 +30,9 @@ core = function (type, data, auto) {
         entity[data.name].stamp = time.stamp;
         automation.forIn(name => {
             if (auto != name) try {
-                if (data.owner.type == "TWIT")
+                if (data.owner?.type == "TWIT")
                     automation[name](name, { name: data.name, state: data.state });
-            } catch { }
+            } catch (e) { console.trace("error updating entity for automation: " + name + "\n", e); }
         })
     }
     udp.send(JSON.stringify({ name: moduleName, type, data, auto }), 65432, '127.0.0.1');
@@ -250,7 +250,7 @@ auto = {
     call: function (data) {
         for (const name in automation) {
             //   if (name in entitySubscribe[data.name].names)
-            try { automation[name](name, data); } catch (e) { console.trace(e); }
+            try { automation[name](name, data); } catch (e) { console.trace("error calling automation: " + name + "\n", e) }
         }
     },
     // clear only this module's automation names and the module cache (no global wipe)
