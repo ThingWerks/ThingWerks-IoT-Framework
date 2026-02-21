@@ -145,7 +145,210 @@ module.exports = { // exports added to clean up layout
                 }
             }
             let delivery = {
-                auto: function (x) {
+                auto: {
+                    control: function (x) {
+                        delivery.shared(x); // should be removed if all is synced in DD start/stop, not needed here
+                        let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                        if (auto.state) {
+                            if (!state.run) {
+                                if (!fault.flow) {
+                                    if (config.enable) {
+                                        if (!delivery.auto.online.idle.not_faulted.conditions(x))
+                                            delivery.auto.online.idle.not_faulted.faults(x);
+                                    }
+                                } else { delivery.auto.online.idle.faulted(x); }
+                            } else {
+                                if (!delivery.auto.online.run.conditions(x))
+                                    delivery.auto.online.run.faults(x);
+                            }
+                            delivery.auto.online.always(x);
+                        } else delivery.auto.offline(x);
+                    },
+                    online: {
+                        always: function (x) {
+                            let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                            if (!warn.tankLow && press.out.state.meters <= (press.out.cfg.warn)) {
+                                log(config.name + " - " + press.out.cfg.name + " is lower than expected (" + press.out.state.meters.toFixed(2)
+                                    + press.out.cfg.unit + ") - possible hardware failure or low performance", 2);
+                                warn.tankLow = true;
+                            }
+                        },
+                        run: {
+                            conditions: function (x) {
+                                let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                                if (press.out.cfg.unit == "m") {
+                                    if (press.out.state.meters >= config.press.stop) {
+                                        log(config.name + " - " + press.out.cfg.name + " is full - pump is stopping");
+                                        delivery.stop(x);
+                                        return true;
+                                    }
+                                } else if (state.turbo) {
+                                    if (press.out.state.psi >= config.press.turbo.stop) {
+                                        log(config.name + " - " + press.out.cfg.name + " turbo shutoff pressure reached - pump is stopping");
+                                        delivery.stop(x);
+                                        return true;
+                                    }
+                                } else if (state.profile != null) {
+                                    // if (config.pump[state.pump].flow?.runStop != undefined) return; // ether dont specify stop pressure or set it high
+                                    if (press.out?.state?.psi >= config.press?.output?.profile?.[state.profile]?.stop) {
+                                        log(config.name + " - " + press.out.cfg.name + " pump profile: " + state.profile
+                                            + " pressure reached: " + press.out.state.psi.toFixed(0) + " psi - pump is stopping");
+                                        delivery.stop(x);
+                                        return true;
+                                    }
+                                } else if (press.out.state.psi >= config.press?.output?.stop) {
+                                    log(config.name + " - " + press.out.cfg.name + " shutoff pressure reached - pump is stopping");
+                                    delivery.stop(x);
+                                    return true;
+                                }
+
+                                // faults were here before
+
+                                if (config.press.output.riseTime != undefined) delivery.check.press(x);
+
+                                if (flow != undefined) {
+                                    if (config.pump[state.pump].flow.stopFlow != undefined
+                                        && flow[state.pump].lm <= config.pump[state.pump].flow.stopFlow) {
+                                        log(config.name + " - stop flow rate reached - pump is stopping");
+                                        delivery.stop(x);
+                                        return true;
+                                    }
+                                    delivery.check.flow(x);
+                                }
+                            },
+                            faults: function (x) {
+                                let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                                if (config.pump[state.pump].press?.input?.sensor) {
+                                    if (entity[config.pump[state.pump].press?.input.sensor]
+                                        <= config.pump[state.pump].press?.input.minError) {
+                                        log(config.name + " - input tank level is too low " + press.in.state.meters
+                                            + "m - DD system shutting down", 3);
+                                        delivery.stop(x, true, "faulted");
+                                        return;
+                                    } else if (warn.inputLevel == false && entity[config.pump[state.pump].press?.input.sensor]
+                                        <= config.pump[state.pump].press?.input.minWarn) {
+                                        log(config.name + " - input tank level is getting low " + press.in.state.meters
+                                            + "m", 2);
+                                        warn.inputLevel = true;
+                                        return;
+                                    }
+                                }
+
+                                if (!flow && state.timer.timeoutOn == true && pump[state.pump].state === false) {
+                                    log(config.name + " - is out of sync - auto is on, system is RUN but pump is off", 2);
+                                    delivery.start(x);
+                                    return;
+                                }
+                                if (time.epoch - state.timer.run >= config.fault?.runLongError * 60) {
+                                    log(config.name + " - pump: " + pump[state.pump].name
+                                        + " - max runtime exceeded - DD system shutting down", 3);
+                                    delivery.stop(x, true, "faulted");
+                                    return;
+                                }
+                                if (!fault.runLong && time.epoch - state.timer.run >= config.fault?.runLongWarn * 60) {
+                                    log(config.name + " - pump: " + pump[state.pump].name
+                                        + " - runtime warning - current runtime: " + (time.epoch - state.timer.run), 2);
+                                    fault.runLong = true;
+                                    return;
+                                }
+                                if (press.in != undefined && press.in.state.meters <= config.press.input.minError) {
+                                    log(config.name + " - input tank level is too low - auto is shutting down", 3);
+                                    delivery.stop(x, true, "faulted");
+                                    return;
+                                }
+                            }
+                        },
+                        idle: {
+                            not_faulted: {
+                                conditions: function (x) {
+                                    let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                                    if (press.out.cfg.unit == "m") {
+                                        if (press.out.state.meters <= config.press.start) {
+                                            log(config.name + " - " + press.out.cfg.name + " is low (" + press.out.state.meters.toFixed(2)
+                                                + "m) - pump is starting");
+                                            delivery.start(x);
+                                            return true;
+                                        }
+                                    } else if (state.turbo) {
+                                        //  console.log("turbo ", press.out.state.psi)
+                                        if (press.out.state.psi <= config.press.turbo.start) {
+                                            log(config.name + " - " + press.out.cfg.name + " is low (" + press.out.state.psi.toFixed(0)
+                                                + "psi) - pump turbo is starting");
+                                            delivery.start(x);
+                                            return true;
+                                        }
+                                    } else if (state.profile != null) {
+                                        //  console.log("profile pressure: ", press.out.state.psi, " - starting pressure: "
+                                        //     + config.press.output.profile[state.profile].start)
+                                        if (press.out.state.psi <= config.press?.output?.profile?.[state.profile]?.start) {
+                                            log(config.name + " - " + press.out.cfg.name + " is low (" + press.out.state.psi.toFixed(0)
+                                                + "psi) - pump is starting with profile: " + state.profile);
+                                            delivery.start(x);
+                                            return true;
+                                        }
+                                    } else if (press.out.state.psi <= config.press.start) {
+                                        //  console.log("current pressure: ", press.out.state.psi)
+                                        log(config.name + " - " + press.out.cfg.name + " is low (" + press.out.state.psi.toFixed(0)
+                                            + "psi) - pump is starting");
+                                        delivery.start(x);
+                                        return true;
+                                    }
+                                },
+                                faults: function (x) {
+                                    let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                                    if (state.timer.timeoutOff == true) {  // after pump has been off for a while
+                                        if (pump[state.pump].state === true && state.sharedPump.run == false) {
+                                            log(config.name + " - pump running in HA/ESP but not here - switching pump ON", 2);
+                                            delivery.start(x, false);
+                                            return;
+                                        } else {
+                                            if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
+                                                && warn.flowFlush == false && state.sharedPump.shared == false) {
+                                                log(config.name + " - flow is detected (" + flow[state.pump].lm.toFixed(0)
+                                                    + "lpm) possible sensor damage or flush operation", 2);
+                                                warn.flowFlush = true;
+                                                delivery.stop(x, true, "faulted");
+                                                return;
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            faulted: function (x) {
+                                let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                                if (state.timer.timeoutOff == true) {
+                                    if (pump[state.pump].state === true
+                                        || flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError) {
+                                        log(config.name + " - pump is flow faulted but pump is still ON, stopping again", 3);
+                                        delivery.stop(x, true, "faulted");
+                                        return;
+                                    }
+                                }
+                            }
+                        },
+                    },
+                    offline: function (x) { // only faults
+                        let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                        if (state.timer.timeoutOff == true) {
+                            if (pump[state.pump].state === true && state.sharedPump.run == false) {        // this is mainly to sync the state of pump after a service restart
+                                log(config.name + " - is out of sync - auto is off but pump is on - switching auto ON", 2);
+                                send(auto.name, true);
+                                auto.state = true;
+                                delivery.start(x, false);
+                                return;
+                            }
+                            if (flow?.[state.pump]?.lm > config.pump[state.pump].flow.startError
+                                && warn.flowFlush == false && config.fault.flushWarning != false && state.sharedPump.shared == false) {
+                                warn.flowFlush = true;
+                                log(config.name + " - Auto is off but flow is detected (" + flow[state.pump].lm.toFixed(1)
+                                    + ") possible sensor damage or flush operation", 2);
+                                if (pump[state.pump].state === null || pump[state.pump].state == true) delivery.stop(x, true);
+                                return;
+                            }
+                        }
+                    },
+                },
+                auto_old: function (x) {
                     delivery.shared(x); // should be removed if all is synced in DD start/stop, not needed here
                     let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
                     switch (auto.state) {
@@ -243,32 +446,30 @@ module.exports = { // exports added to clean up layout
                                             delivery.stop(x);
                                             return;
                                         }
-
-                                        (function __faults__() {
-                                            if (config.pump[state.pump].press?.input?.sensor) {
-                                                if (entity[config.pump[state.pump].press?.input.sensor]
-                                                    <= config.pump[state.pump].press?.input.minError) {
-                                                    log(config.name + " - input tank level is too low " + press.in.state.meters
-                                                        + "m - DD system shutting down", 3);
-                                                    delivery.stop(x, true, "faulted");
-                                                    return;
-                                                } else if (warn.inputLevel == false && entity[config.pump[state.pump].press?.input.sensor]
-                                                    <= config.pump[state.pump].press?.input.minWarn) {
-                                                    log(config.name + " - input tank level is getting low " + press.in.state.meters
-                                                        + "m", 2);
-                                                    warn.inputLevel = true;
-                                                    return;
-                                                }
-                                            }
-                                        })();
-
-                                    } else if (press.out.state.psi >= config.press.stop) {
+                                    } else if (press.out.state.psi >= config.press?.output?.stop) {
                                         log(config.name + " - " + press.out.cfg.name + " shutoff pressure reached - pump is stopping");
                                         delivery.stop(x);
                                         return;
                                     }
 
                                     (function __faults__() {
+
+                                        if (config.pump[state.pump].press?.input?.sensor) {
+                                            if (entity[config.pump[state.pump].press?.input.sensor]
+                                                <= config.pump[state.pump].press?.input.minError) {
+                                                log(config.name + " - input tank level is too low " + press.in.state.meters
+                                                    + "m - DD system shutting down", 3);
+                                                delivery.stop(x, true, "faulted");
+                                                return;
+                                            } else if (warn.inputLevel == false && entity[config.pump[state.pump].press?.input.sensor]
+                                                <= config.pump[state.pump].press?.input.minWarn) {
+                                                log(config.name + " - input tank level is getting low " + press.in.state.meters
+                                                    + "m", 2);
+                                                warn.inputLevel = true;
+                                                return;
+                                            }
+                                        }
+
                                         if (!flow && state.timer.timeoutOn == true && pump[state.pump].state === false) {
                                             log(config.name + " - is out of sync - auto is on, system is RUN but pump is off", 2);
                                             delivery.start(x);
@@ -1136,7 +1337,7 @@ module.exports = { // exports added to clean up layout
                 st.timer.second = setInterval(() => {     // called every second  -  rerun this automation every second
                     sensor.flow.calc();
                     sensor.ha_push(state);
-                    for (let x = 0; x < cfg.dd.length; x++) if (cfg.dd[x].enable) delivery.auto(x);
+                    for (let x = 0; x < cfg.dd.length; x++) if (cfg.dd[x].enable) delivery.auto.control(x)  // delivery.auto_old(x);
                 }, 1e3);
                 setTimeout(() => {  // start minute timer aligned with system minute
                     timer(); sensor.flow.meter(); write();
@@ -1157,7 +1358,10 @@ module.exports = { // exports added to clean up layout
             }
             else if (_push) push[_push.name]?.(_push.state, _push.name);
             else if (_reload) {
-                if (push) push.forIn((name) => { delete push[name]; })
+                if (push) push.forIn((name) => {
+                    log("deleting constructor for: " + name);
+                    delete push[name];
+                })
                 if (_reload == "config") {
                     ({ st, cfg, nv } = _pointers(_name));
                     constructor.init();
