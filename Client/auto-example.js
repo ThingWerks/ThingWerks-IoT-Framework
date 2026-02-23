@@ -202,7 +202,10 @@ module.exports = {
                 }
                 else if (_push) push[_push.name]?.(_push.state, _push.name);    // called with every incoming push event
                 else if (_reload) {   // called after modification/reload of this automation file
-                    if (push) push.forIn((name) => { delete push[name]; }) // destroy all push calls 
+                    if (push) push.forIn((name) => {  // destroy all push calls 
+                        log("deleting constructor for: " + name, 1);
+                        delete push[name];
+                    })
                     if (_reload == "config") {
                         log("config hot reload initiated");
 
