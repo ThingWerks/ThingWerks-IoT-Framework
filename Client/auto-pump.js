@@ -147,7 +147,7 @@ module.exports = { // exports added to clean up layout
             let delivery = {
                 auto: {
                     control: function (x) {
-                        delivery.shared(x); // should be removed if all is synced in DD start/stop, not needed here
+                        delivery.check.shared(x); // should be removed if all is synced in DD start/stop, not needed here
                         let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
                         if (auto.state) {
                             if (!state.run) {
@@ -217,7 +217,7 @@ module.exports = { // exports added to clean up layout
                                                 log(config.name + " - pump: " + index + " - " + element.name
                                                     + " running in HA/ESP but not here - syncing state", 2);
                                                 delivery.start(x, true);
-                                                return true; 
+                                                return true;
                                             }
                                         }
 
@@ -350,16 +350,17 @@ module.exports = { // exports added to clean up layout
                 start: function (x, runAlready) {
                     let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
                     delivery.check.start_conditions(x);
+                    fault.flow = false;
+                    warn.runLong = false;
+                    state.run = true;
+                    state.cycleCount++;
+                    state.flow.check = false;
+                    state.flow.checkPassed = false;
+                    state.flow.checkRunDelay = false; // debounce reset trigger
+                    state.timer.run = time.epoch;
+                    state.timer.timeoutOn = false;
 
-                    if (config.ha.reserve != undefined) {
-                        if (entity[config.ha.reserve].state == true) {
-                            let pumpSelect = config.pump.findIndex(obj => obj.class === "reserve");
-                            if (pumpSelect == -1) {
-                                log(config.name + " - no reserve pump found - selecting pump 0 instead", 2);
-                            } else log(config.name + " - selecting reserve pump: " + config.pump[pumpSelect].name);
-                        }
-                        else state.pump = 0;
-                    } else state.pump = 0;
+                    setTimeout(() => { state.timer.timeoutOn = true }, 10e3);
 
                     if (press.out != undefined) {
                         if (press.out.cfg.unit == "m") state.pressStart = press.out.state.percent;
@@ -377,18 +378,6 @@ module.exports = { // exports added to clean up layout
                         }
                     }
 
-                    fault.flow = false;
-                    warn.runLong = false;
-                    state.run = true;
-                    state.cycleCount++;
-                    state.flow.check = false;
-                    state.flow.checkPassed = false;
-                    state.flow.checkRunDelay = false; // debounce reset trigger
-                    state.timer.run = time.epoch;
-                    state.timer.timeoutOn = false;
-
-                    setTimeout(() => { state.timer.timeoutOn = true }, 10e3);
-
 
                     if (flow.length > 0) {  // least 1 pump has a flow sensor
                         flow[state.pump].batch = nv.flow[config.pump[state.pump].flow.sensor].total;
@@ -404,6 +393,18 @@ module.exports = { // exports added to clean up layout
                     }
 
 
+                    if (config.control.reserve != undefined) {
+                        if (entity[config.control.reserve].state == true) {
+                            let pumpSelect = config.pump.findIndex(obj => obj.class === "reserve");
+                            if (pumpSelect == -1) {
+                                log(config.name + " - no reserve pump found - selecting pump 0 instead", 2);
+                            } else log(config.name + " - selecting reserve pump: " + config.pump[pumpSelect].name);
+                        }
+                        else state.pump = 0;
+                    } else state.pump = 0;
+
+
+
                     if (!runAlready) {
                         if (config.solenoid != undefined) {
                             log(config.name + " - opening solenoid");
@@ -411,8 +412,8 @@ module.exports = { // exports added to clean up layout
                             setTimeout(() => { startMotor(); }, 2e3);
                         } else startMotor();
                         function startMotor() {
-                            log(config.name + " - starting pump: " + pump[state.pump].cfg.name + " - cycle count: "
-                                + state.cycleCount + "  Time: " + (time.epoch - state.cycleTimer));
+                            log(config.name + " - " + color("cyan", "starting pump") + ": " + pump[state.pump].cfg.name
+                                + " - cycle count: " + state.cycleCount + "  Time: " + (time.epoch - state.cycleTimer));
                             send(pump[state.pump].cfg.entity, true);
                         }
                     }
@@ -429,14 +430,15 @@ module.exports = { // exports added to clean up layout
                     state.timer.timeoutOff = false;
                     pump[state.pump].state = false;
 
-                    delivery.shared(x);
+                    delivery.check.shared(x);
                     if (state.sharedPump.run == false) {
-                        lbuf = config.name + " - stopping pump: " + pump[state.pump].cfg.name + " - Runtime: "
-                            + hours + "h:" + minutes + "m:" + extraSeconds + "s";
+                        lbuf = config.name + " - " + color("cyan", "stopping pump") + ": " + pump[state.pump].cfg.name
+                            + " - Runtime: " + hours + "h:" + minutes + "m:" + extraSeconds + "s";
                         send(pump[state.pump].cfg.entity, false);
                     } else {
-                        lbuf = config.name + " - stopping " + pump[state.pump].cfg.name + " but pump still in use by "
-                            + cfg.dd[state.sharedPump.num].name + " - Runtime: " + hours + "h:" + minutes + "m:" + extraSeconds + "s";
+                        lbuf = config.name + " - " + color("cyan", "stopping ") + pump[state.pump].cfg.name
+                            + " but pump still in use by " + cfg.dd[state.sharedPump.num].name + " - Runtime: "
+                            + hours + "h:" + minutes + "m:" + extraSeconds + "s";
                     }
 
                     if (config.solenoid != undefined) {
@@ -465,9 +467,9 @@ module.exports = { // exports added to clean up layout
                         auto.state = false;
                         send(auto.name, false);
 
-                        if (config.ha.solar != undefined) {
-                            log(config.name + " faulted - solar pump automation: " + config.ha.solar + " - is going offline", 2);
-                            send(config.ha.solar, false);
+                        if (config.control.solar != undefined) {
+                            log(config.name + " faulted - solar pump automation: " + config.control.solar + " - is going offline", 2);
+                            send(config.control.solar, false);
                         }
 
                         clearTimeout(state.oneShot);
@@ -565,7 +567,8 @@ module.exports = { // exports added to clean up layout
                                 delivery.stop(x);
                                 return true;
                             } else if (flowLM < pumpConfig.startWarn && warn.flowDaily == false) {
-                                log(config.name + " - pump flow is lower than optimal (" + flowLM.toFixed(1) + "lm) - clean filter", 2);
+                                log(config.name + " - pump flow check " + color("yellow", "WARN") + " - flow not optimal ("
+                                    + flowLM.toFixed(1) + "lm) - clean filter", 2);
                                 state.flow.checkPassed = true;
                                 fault.flowRestarts = 0;
                                 warn.flowDaily = true;
@@ -698,37 +701,37 @@ module.exports = { // exports added to clean up layout
                         }
 
                     },
-                },
-                shared: function (x) {  // discovers if other systems are currently using this same pump
-                    let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x)
-                    state.sharedPump = { shared: null, run: false, num: null };
-                    for (let y = 0; y < cfg.dd[x].pump.length; y++) {
-                        try { pump[y].state = entity[cfg.dd[x].pump[y].entity]?.state; } // sync pump entity state with local state
-                        catch (error) {
-                            console.trace("shared pump lookup error: ", error);
-                            console.log("pump: ", pump[y]);
-                            console.log("entity: " + cfg.dd[x].pump[y].entity, entity[cfg.dd[x].pump[y].entity]);
+                    shared: function (x) {  // discovers if other systems are currently using this same pump
+                        let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x)
+                        state.sharedPump = { shared: null, run: false, num: null };
+                        for (let y = 0; y < cfg.dd[x].pump.length; y++) {
+                            try { pump[y].state = entity[cfg.dd[x].pump[y].entity]?.state; } // sync pump entity state with local state
+                            catch (error) {
+                                console.trace("shared pump lookup error: ", error);
+                                console.log("pump: ", pump[y]);
+                                console.log("entity: " + cfg.dd[x].pump[y].entity, entity[cfg.dd[x].pump[y].entity]);
+                            }
                         }
-                    }
-                    for (let y = 0; y < cfg.dd.length; y++) {
-                        if (y != x && pump[state.pump].cfg.entity
-                            == cfg.dd[y].pump[st.dd[y].state.pump].entity) { // if DD is not this DD and matches this DD's pump - its shared 
-                            if (st.dd[y].state.run == true) state.sharedPump.run = true; // the other DD is still using the pump
-                            else { setTimeout(() => { state.sharedPump.run = false; }, 10e3); }
-                            state.sharedPump.shared = true;
-                            state.sharedPump.num = y;
-                            break;
+                        for (let y = 0; y < cfg.dd.length; y++) {
+                            if (y != x && pump[state.pump].cfg.entity
+                                == cfg.dd[y].pump[st.dd[y].state.pump].entity) { // if DD is not this DD and matches this DD's pump - its shared 
+                                if (st.dd[y].state.run == true) state.sharedPump.run = true; // the other DD is still using the pump
+                                else { setTimeout(() => { state.sharedPump.run = false; }, 10e3); }
+                                state.sharedPump.shared = true;
+                                state.sharedPump.num = y;
+                                break;
+                            }
                         }
-                    }
+                    },
                 },
                 pointers: function (x) {
                     ({ st, cfg, nv } = _pointers(_name));
                     let state = st.dd[x].state, config = cfg.dd[x], press = {}, flow = [],
                         fault = st.dd[x].fault, warn = st.dd[x].warn, pump = [];
                     let auto = {
-                        get state() { return entity[config.ha.auto]?.state },
-                        set state(value) { entity[config.ha.auto].state = value; },
-                        name: config.ha.auto
+                        get state() { return entity[config.control.auto]?.state },
+                        set state(value) { entity[config.control.auto].state = value; },
+                        name: config.control.auto
                     }
 
                     if (config.pump[state.pump].press?.input?.sensor)
@@ -828,9 +831,12 @@ module.exports = { // exports added to clean up layout
                         log(" - TEST BUTTON - State:" + state);
                     }
                     cfg.dd.forEach((config, x) => {
-                        push[config.ha.auto] = constructor.auto(st.dd[x], x, config);
-                        push[config.ha.turbo] = constructor.turbo(st.dd[x], x, config);
-                        push[config.ha.profile] = constructor.profile(st.dd[x], x, config);
+                        if (config.control.auto)
+                            push[config.control.auto] = constructor.auto(st.dd[x], x, config);
+                        if (config.control.turbo)
+                            push[config.control.turbo] = constructor.turbo(st.dd[x], x, config);
+                        if (config.control.profile)
+                            push[config.control.profile] = constructor.profile(st.dd[x], x, config);
                         if (config.oneShot?.buttons) {
                             config.oneShot.buttons.forIn((name, value) => {
                                 log("loading constructor for oneshot entity: " + name, 0);
@@ -845,7 +851,7 @@ module.exports = { // exports added to clean up layout
                             if (!config.enable) {
                                 log(config.name + " - system disabled - cannot go online", 2);
                                 send(dd.auto.name, false);
-                                entity[config.ha?.auto] && (entity[config.ha.auto].state = false);
+                                entity[config.ha?.auto] && (entity[config.control.auto].state = false);
                                 return;
                             }
                             log(config.name + " - is going ONLINE");
@@ -920,7 +926,7 @@ module.exports = { // exports added to clean up layout
                                     + name + " - state: " + state, 2);
                                 return;
                             }
-                            if (entity[config.ha.auto].state) {
+                            if (entity[config.control.auto].state) {
                                 log(config.name + " - auto already online - ignoring one-shot request - trigger: "
                                     + name + " - state: " + state, 2);
                                 pumpUp();
@@ -929,7 +935,7 @@ module.exports = { // exports added to clean up layout
                             log(config.name + " - one shot operation - trigger: "
                                 + name + " - state: " + state + " - stopping in " + duration + " min");
                             timeout();
-                            send(config.ha.auto, true);
+                            send(config.control.auto, true);
                             pumpUp();
                         }
 
@@ -940,12 +946,12 @@ module.exports = { // exports added to clean up layout
                             }
                             log(config.name + " - starting system - triggered by: " + name + " - state: " + state);
                             dd.state.oneShot = false;
-                            send(config.ha.auto, true);
+                            send(config.control.auto, true);
                         }
 
                         else if (action === "stop") {
                             log(config.name + " - STOPPING system - triggered by: " + name + " - state: " + state);
-                            send(config.ha.auto, false);
+                            send(config.control.auto, false);
                         }
 
                         // =====================================
@@ -964,7 +970,7 @@ module.exports = { // exports added to clean up layout
                         function timeout() {
                             dd.state.oneShot = setTimeout(() => {
                                 log(config.name + " - stopping OneShot operation after " + duration + " minutes");
-                                send(config.ha.auto, false);
+                                send(config.control.auto, false);
                                 dd.state.oneShot = false;
                             }, (duration * 60 * 1e3));
                         }
@@ -1102,19 +1108,30 @@ module.exports = { // exports added to clean up layout
                             inputLevel: false,
                         },
                     })
-                    if (config.press != undefined && config.press.output != undefined
-                        && config.press.output.profile != undefined) {
-                        if (config.ha.profile != undefined && config.press.output.profile.length > 0) {
+
+
+
+
+                    if (config.press?.output?.profile != undefined) {  // concerning since both pumps and global profiles can exist
+                        if (config.control.profile != undefined && config.press.output.profile.length > 0) {
                             log(config.name + " - profile selector enabled");
-                            st.dd[x].state.profile = parseInt(entity[config.ha.profile]?.state);
+                            st.dd[x].state.profile = parseInt(entity[config.control.profile]?.state);
                         } else {
                             log(config.name + " - no profile entity - selecting profile 0");
                             st.dd[x].state.profile = 0;
                         }
                     }
-                    if (config.ha.turbo != undefined) {
-                        st.dd[x].state.turbo = entity[config.ha.turbo].state;
+
+
+                    if (config.control.turbo != undefined) {
+                        st.dd[x].state.turbo = entity[config.control.turbo].state;
                     }
+
+
+
+
+
+
                 });
 
                 sensor.flow.calc();
@@ -1138,15 +1155,11 @@ module.exports = { // exports added to clean up layout
                 }, 3600e3);
 
                 constructor.init();
-                cfg.fountain.forEach(config => {
-                    push[config.haAuto] = constructor.fountain();
-                });
-
             }
             else if (_push) push[_push.name]?.(_push.state, _push.name);
             else if (_reload) {
                 if (push) push.forIn((name) => {
-                    log("deleting constructor for: " + name);
+                    log("deleting constructor for: " + name, 0);
                     delete push[name];
                 })
                 if (_reload == "config") {
