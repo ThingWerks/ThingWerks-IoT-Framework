@@ -989,8 +989,8 @@ if (isMainThread) {
         fileWatchers[filePath] = filesWatcher;
     }
     function reloadConfig() {
-        fs.readFile(`${workingDir}/config.json`, (err, data) => {
-            if (err) { console.error("Error reading config.json:", err); return; }
+        fs.readFile(`${workingDir}/config-core.json`, (err, data) => {
+            if (err) { console.error("Error reading config-core.json:", err); return; }
             try {
                 const cfgTemp = JSON.parse(data);
                 cfg.logging = cfgTemp.logging;
@@ -1048,7 +1048,7 @@ if (isMainThread) {
                     }, 300);
                 }
             } catch (e) {
-                console.error("Error parsing config.json:", e);
+                console.error("Error parsing config-core.json:", e);
             }
         });
     }
@@ -1094,7 +1094,7 @@ if (isMainThread) {
                     break;
                 case "--install":
                     console.log("installing ThingWerks-Core service...");
-                    //  let exec = "ExecStart=nodemon " + workingDir + "/core.js -w " + workingDir + "/core.js -w " + workingDir + "/config.json --exitcrash --delay 5";
+                    //  let exec = "ExecStart=nodemon " + workingDir + "/core.js -w " + workingDir + "/core.js -w " + workingDir + "/config-core.json --exitcrash --delay 5";
                     let exec = "ExecStart=nodemon " + workingDir + "/core.js -w " + workingDir + "/core.js --exitcrash --delay 5";
                     let service = [
                         "[Unit]",
@@ -1137,16 +1137,16 @@ if (isMainThread) {
     }
     function boot(step) {
         switch (step) {
-            case 0:     // read config.json file
+            case 0:     // read config-core.json file
                 fs = require('fs');
                 exec = require('child_process').exec;
                 execSync = require('child_process').execSync;
                 workingDir = require('path').dirname(require.main.filename);
                 console.log("Loading config data...");
-                fs.readFile(workingDir + "/config.json", function (err, data) {
+                fs.readFile(workingDir + "/config-core.json", function (err, data) {
                     if (err) {
                         console.log("\x1b[31;1mCannot find config file, exiting\x1b[37;m"
-                            + "\nconfig.json file should be in same folder as core.js file");
+                            + "\nconfig-core.json file should be in same folder as core.js file");
                         process.exit();
                     }
                     else { cfg = JSON.parse(data); boot(1); }
@@ -1227,7 +1227,7 @@ if (isMainThread) {
                                 })
                         });
                 }, 4e3);
-                watcher((workingDir + "/config.json"), reloadConfig);
+                watcher((workingDir + "/config-core.json"), reloadConfig);
                 setTimeout(() => { log("TWIT Core is fully " + color("green", "ONLINE"), 0); }, 1e3);
                 break;
         }
