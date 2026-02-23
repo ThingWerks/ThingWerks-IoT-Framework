@@ -502,9 +502,9 @@ module.exports = {
                                             log(member.cfg.name + " - " + msg + " - hour: " + budget.hour
                                                 + (budget.volts ? " - minVolts: " + budget.volts : "") + " volts: " + volts
                                                 + (budget.amps ? " - minAmps: " + budget.amps : "") + " amps: " + amps
-                                                + (budget.solar ? " - minSolar: " + budget.solar : "") + " solar: " + solar.toFixed(1))
+                                                + (budget.solar ? " - minSolar: " + budget.solar : "") + " \nsolar: " + solar.toFixed(1)
                                                 + (budget.charge ? " - minCharge: " + budget.charge : "") + " charge: " + charge.toFixed(1)
-                                                + (budget.discharge ? " - maxDischarge: " + budget.discharge : "") + " \ndischarge : " + discharge.toFixed(1);
+                                                + (budget.discharge ? " - maxDischarge: " + budget.discharge : "") + " discharge : " + discharge.toFixed(1));
                                             member.budgetNotify = true;
                                         }
                                     }
@@ -610,10 +610,10 @@ module.exports = {
                                 for (let budget of member.cfg.on.budget) {
                                     if (time.hour == budget.hour) {
                                         // this is useless until discharge counter resets in the morning 
-                                        if ((!budget.discharge || discharge <= budget.discharge)
+                                        if ((!budget.discharge || discharge < budget.discharge)
                                             && (!budget.charge || charge >= budget.charge)
                                             && (!budget.solar || solar >= budget.solar)
-                                            && (!budget.amps || amps <= budget.amps)
+                                            && (!budget.amps || amps < budget.amps)
                                             && (!budget.volts || volts >= budget.volts)) {
                                             log(member.cfg.name + " - budget met or exceeded - hour: " + budget.hour
                                                 + (budget.volts ? " - minVolts: " + budget.volts : "") + " volts: " + volts
