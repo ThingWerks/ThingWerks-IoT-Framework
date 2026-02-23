@@ -527,7 +527,7 @@ telegram = {
             nv.telegram.push(buf);
             bot(msg.chat.id, 'registered');
             core(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
-            file.write.nv();
+//            file.write.nv();
         } else bot(msg.chat.id, 'already registered');
     },
     auth: function (msg) {
