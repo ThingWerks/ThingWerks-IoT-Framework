@@ -135,10 +135,10 @@ module.exports = {
                                     //  { hour: 14, volts: 55.0 },
                                     // { hour: 15, volts: 57.0 },
                                     // { hour: 16, volts: 56.5 },
-                                    { hour: 17, amps: 50, discharge: 9, charge: 32 },
-                                    { hour: 18, amps: 50, discharge: 10, charge: 32 },
-                                    { hour: 19, amps: 50, discharge: 11.5, charge: 32 },
-                                    { hour: 20, amps: 50, discharge: 12.5, charge: 32 },
+                                    { hour: 17, amps: 55, discharge: 9, charge: 32 },
+                                    { hour: 18, amps: 55, discharge: 10, charge: 32 },
+                                    { hour: 19, amps: 55, discharge: 11.5, charge: 32 },
+                                    { hour: 20, amps: 55, discharge: 12.5, charge: 32 },
                                 ],
                             },
                             off: {
@@ -267,11 +267,11 @@ module.exports = {
                     },
                     {
                         name: "grid_power",         // all inverters
-                        entity: ["pzem-daren_watts", "pzem-groogies_watts", "pzem-butsoy_watts"],
+                        entity: ["pzem-daren_watts", "pzem-alvarez_watts"],
                     },
                     {
                         name: "ram_water",         // all inverters
-                        entity: ["pzem-daren_watts", "pzem-groogies_watts", "pzem-butsoy_watts"],
+                        entity: ["pzem-ram-water_watts"],
                     },
                 ],
                 volt: [
