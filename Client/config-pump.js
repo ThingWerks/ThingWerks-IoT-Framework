@@ -84,7 +84,7 @@ module.exports = {
                 {   // DD system example
                     name: "Bubon",       // Demand Delivery system 2d
                     enable: true,
-                    ha: {
+                    control: {
                         auto: "input_boolean.auto_bubon",           // home assistant auto toggle ID number (specified above in cfg.ha config)
                         solar: "input_boolean.auto_solar_bubon",    // solar automation boolean/toggle
                         // turbo: 5,                                // secondary high stop pressure point
@@ -96,7 +96,7 @@ module.exports = {
                             "Switch Kitchen Pump": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
                             "Button Bodega Water Filtered": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
                             "Button Water Groogies": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
-                            "input_button.oneshot_bubon": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
+                            "input_button.oneshot_bubon": { oneShot: "any" },
                             "Button-eWeLink": { oneShot: ["toggle", true, false] },
                         },
                         extend: true,                                    // extend OneShot timer after last usage
@@ -113,6 +113,7 @@ module.exports = {
                                 startWarn: 11,      // min start flow before triggering notification (useful for filters)
                                 startError: 9,     // minimum flow rate pump must reach at start
                                 startWait: 6,       // seconds to wait before checking flow after pump starts
+                                // runWarn: 3,          // optional - flow rate during operation which will cause warning
                                 runError: 5,        // flow rate to fault 
                                 runStop: 10         // flow rate to stop 
                             },
@@ -147,7 +148,7 @@ module.exports = {
                 {                           // DD system example
                     name: "Irrigation",
                     enable: true,
-                    ha: {
+                    control: {
                         auto: "input_boolean.auto_irrigatiion",                 // home assistant auto toggle ID number (specified above in cfg.ha config)
                         // solar: "input_boolean.auto_solar_bubon",             // solar automation boolean/toggle
                         // turbo: 5,                                            // secondary high stop pressure point
@@ -171,12 +172,12 @@ module.exports = {
                             //  "Button-eWeLink": { oneShot: ["toggle", true, false], duration: 5 },
                         },
                         // durationEntity: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
-                        duration: 20,           // duration of oneShot in minutes
+                        duration: 10,           // duration of oneShot in minutes
                         pumpUp: true,           // top off the tank                   
                         interrupt: false,       // interrupt current pump operation if timeout reached
                         extend: true,           // extend OneShot timer after last usage
                         extendLiterMin: 30.0,   // minimum liters pumped to keep extending
-                        extendRetry: 2,         // extension short cycle evaluation allowance window    
+                        extendRetry: 2,         // extension short cycle allowance    
                     },
                     pump: [
                         {
@@ -209,7 +210,7 @@ module.exports = {
                         retryWait: 10,      // time in seconds to wait for retry
                         // retryFinal: 2,   // time in minutes to wait for final retry
                         runLongError: 40,   // max run time in minutes
-                        runLongWarn: 5,     // max run time in minutes
+                        runLongWarn: 30,     // max run time in minutes
                         cycleCount: 0,      // max cycle times per cycleTime window
                         cycleTime: 10,      // max cycleTime time window  (in seconds)
                         cycleMinFlow: 30,   // min water pumped per cycle
