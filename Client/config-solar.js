@@ -118,7 +118,6 @@ module.exports = {
                             name: "Ram-Water ATS",
                             enable: true,
                             voltsFloat: 58.2,
-
                             on: {
                                 time: { hour: 7, min: 0 },
                                 timeVoltsMin: 54.4,
@@ -138,9 +137,8 @@ module.exports = {
                                     // { hour: 16, volts: 56.5 },
                                     { hour: 17, amps: 50, discharge: 9, charge: 32 },
                                     { hour: 18, amps: 50, discharge: 10, charge: 32 },
-                                    { hour: 19, amps: 50, discharge: 11, charge: 32 },
-                                    { hour: 20, amps: 50, discharge: 12, charge: 32 },
-
+                                    { hour: 19, amps: 50, discharge: 11.5, charge: 32 },
+                                    { hour: 20, amps: 50, discharge: 12.5, charge: 32 },
                                 ],
                             },
                             off: {
@@ -161,7 +159,7 @@ module.exports = {
                                     //  { hour: 16, volts: 56.5 },
                                     { hour: 17, amps: -160, discharge: 10, charge: 32 },
                                     { hour: 18, amps: -160, discharge: 10.5, charge: 32 },
-                                    { hour: 19, amps: -160, discharge: 12, charge: 32 },
+                                    { hour: 19, amps: -160, discharge: 12.5, charge: 32 },
                                     { hour: 20, amps: -160, discharge: 13, charge: 32 },
                                 ],
                             },
