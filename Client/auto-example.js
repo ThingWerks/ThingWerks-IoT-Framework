@@ -58,8 +58,8 @@ module.exports = {
 
             function myAuto() {
 
-                // check the current state of an entity
-                log("my entity TEST has a state of: " + entity["test"].state);
+                // entities can be read on an interval 
+                log("my sensor now is: " + entity["my_sensor_name".state]);
 
                 // set the state of an any entity   
                 log("setting entity TEST's state to false");
@@ -89,9 +89,16 @@ module.exports = {
 
             if (_push === "init") { // ran only once
                 global.config[_name] = {    // initialize automation's configurations
-                    // static configuration can be put here for simplicity or
-                    // can be specified above on module.exports.config 
-                    // places into an external config file and specified  
+                    // static configuration can be put here for simplicity 
+                    // or can be specified above in module.exports.config 
+                    // or ca be put into an external config file and specified  with  client.js -n autoName -a autoFile.js -c configFile.js
+                    // see documentation for external config.js/.json file example 
+
+                    mySensors: [ // for factory function example
+                        { name: "my sensor 1", entity: "Home_Assistant_Entity1" },
+                        { name: "my sensor 2", entity: "Home_Assistant_Entity2" }
+                    ]
+
                 };
                 global.state[_name] = {     // initialize automation's volatile memory
                     timer: {},
@@ -113,48 +120,54 @@ module.exports = {
 
                 };
 
-                // you must call pointers directly after config, state and or NV initializations 
+                // you must call pointers directly after config, push,.state and or NV declarations in order to update pointer references 
                 ({ state, config, nv, push } = _pointers(_name));
+
 
                 //      PUSH METHOD 2: post declaration assignment:  
                 push["input_boolean.test"] = (newState, name) => {
                     log("entity " + name + ": is setting state to: " + newState);
                 }
 
-                //      PUSH METHOD 3: make constructor factory
-                someArray.forEach(element => {
-                    push[element] = factory.thing1(element, config,);
-                });
-                someArray2.forEach(element => {
-                    push[element] = factory.thing2(element, config, nv,);
-                });
 
-                let factory = {
-                    thing1: function (element, config,) { // pass whatever data is needed for the factory
-                        return (newState, name) => {
-                            // reference config. state or nv data directly in your push logic
-                            log("thing 1 entity " + name + ": is setting state to: " + newState);
-                        }
+                //      PUSH METHOD 3: use a factory function    \\ 
+                factory.init();  // call the factory init
+
+                let factory = { // push method/logic factory 
+                    init: function () {
+                        config.mySensors.forEach(mySensor => { // see config declaration above
+                            push[mySensor.entity] = this.sensor(mySensor);
+                        });
                     },
-                    thing2: function (element, config, nv,) { // 
+                    sensor: function (mySensor) { // pass whatever data is needed for the factory to create a method
                         return (newState, name) => {
-                            log("thing 2 entity " + name + ": is setting state to: " + newState);
+                            // reference config. state or nv data directly inside your push logic
+                            log("sensor: " + mySensor.name + " - entity: " + name + " - is setting state to: " + newState);
                             myFunction(newState, name);
                         }
                     },
                 }
 
 
+
+
+
                 // run my automation in some interval:
                 state.timer.myAuto = setInterval(() => { myAuto(); }, 1e3);
+                // your automation can use both push logic and interval logic
+                // for example a sensor can be read in an interval via the "entity" object, see  myAuto() function example
 
 
-                setTimeout(() => {  // start minute timer aligned with system minute
+
+
+                state.timer.minute = setTimeout(() => {  // start minute timer aligned with system minute
                     timer();
                     st.timer.minute = setInterval(() => { timer(); }, 60e3);
-                }, (60e3 - ((time.sec * 1e3) + time.mil)));
+                }, (60e3 - ((time.sec * 1e3) + time.mil))); // sync this minute with this PC's clock minute
 
                 // any other initialization sequence here
+
+
             }
             else if (_push) push[_push.name]?.(_push.state, _push.name);
             else if (_reload) {   // called after modification/reload of this automation file
@@ -163,15 +176,17 @@ module.exports = {
                     log("config hot reload initiated");
 
                     // re-initialize/call your constructor function here
-                    // _push === "init" is not called on a config file reload
+                    // _push === "init" is not called after a config file reload
 
                 } else {
                     log("automation hot reload initiated");
                     ({ state, config, nv } = _pointers(_name));
-
                     // clear you event timers/intervals here.  ie. clearInterval(state.timer.second);
-                    // _push === "init" will be called again
+                    // _push === "init" will be automatically called again to reinitialize your automation after this reload function
 
+                    // clearing  timers/intervals previously made in the INIT process - see above
+                    clearInterval(state.timer.myAuto);
+                    clearTimeout(state.timer.minute);
                 }
                 return;
             }
@@ -227,7 +242,7 @@ module.exports = {
     },
 }
 
-
+// dont touch the pointer helper
 let _pointers = (_name) => {
     return {
         state: state[_name] ?? undefined,
