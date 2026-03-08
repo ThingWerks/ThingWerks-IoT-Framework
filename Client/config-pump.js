@@ -114,8 +114,9 @@ module.exports = {
                                 startError: 9,     // minimum flow rate pump must reach at start
                                 startWait: 6,       // seconds to wait before checking flow after pump starts
                                 // runWarn: 3,          // optional - flow rate during operation which will cause warning
-                                runError: 5,        // flow rate to fault 
-                                runStop: 10         // flow rate to stop 
+                                //runError: 5,        // flow rate to fault 
+                                runStop: 10,         // flow rate to stop 
+                                pressStopMin: 60        // minimum stopping pressure     
                             },
                             input: {
 
@@ -132,6 +133,8 @@ module.exports = {
                             profile: [{ start: 22 }, { start: 45 }, { start: 50 }],
                             // profile: [{ start: 22, stop: 35 }, { start: 45, stop: 59 }, { start: 50, stop: 62 }],
                             riseTime: undefined,
+                            riseError: null,
+                            riseWarn: null,
                         },
                     },
                     fault: {
