@@ -272,9 +272,7 @@ module.exports = { // exports added to clean up layout
                                     return true;
                                 }
 
-                                // faults were here before
-
-                                if (config.press.output.riseTime != undefined) delivery.check.press(x);
+                                if (config.press.output.riseTime != undefined) delivery.check.press.rise(x);
 
                                 if (state.flow.check) {
                                     if (!state.flow.checkPassed) {
@@ -352,6 +350,8 @@ module.exports = { // exports added to clean up layout
                     delivery.check.start_conditions(x);
                     fault.flow = false;
                     warn.runLong = false;
+                    warn.flow = false;
+                    warn.rise = false;
                     state.run = true;
                     state.cycleCount++;
                     state.flow.check = false;
@@ -584,8 +584,22 @@ module.exports = { // exports added to clean up layout
 
                             if (pumpConfig.runStop != undefined) {
                                 if (flowLM <= pumpConfig.runStop) {
-                                    trigger((" - RUN flow stop (" + flowLM.toFixed(1) + "lm) - pump stopping - " + psi + " psi"), false);
+                                    if (press <= config.press?.output?.profile?.[state.profile]?.start) {
+                                        log(" - RUN flow stop (" + flowLM.toFixed(1) + "lm) - but tank still low - " + psi + " psi", 3);
+                                        delivery.stop(x, "faulted");
+                                        return true;
+                                    } else if (press <= config.pump[state.pump]?.pressStopMin) {
+                                        log(" - RUN flow stop (" + flowLM.toFixed(1) + "lm) - but did not meet minimum pressure - " + psi + " psi", 3);
+                                        delivery.stop(x, "faulted");
+                                        return true;
+                                    } else
+                                        trigger((" - RUN flow stop (" + flowLM.toFixed(1) + "lm) - pump stopping - " + psi + " psi"), false);
                                 } else state.flow.checkRunDelay = false;
+                            } else if (pumpConfig.runWarn != undefined) {
+                                if (flowLM < pumpConfig.runWarn && !warn.flow) {
+                                    log(" - RUN low flow (" + flowLM.toFixed(1) + "lm) - clean filter?");
+                                    warn.flow = true;
+                                }
                             } else if (pumpConfig.runError != undefined) {
                                 if (flowLM < pumpConfig.runError) {
                                     trigger((" - RUN low flow (" + flowLM.toFixed(1) + "lm) HA State: "
@@ -617,39 +631,43 @@ module.exports = { // exports added to clean up layout
                             }
                         },
                     },
-                    press: function (x) { // not yet in use
-
-                        let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
-
-                        if (time.epoch - state.timer.rise >= config.press.output.riseTime) {
-                            if (press.out.cfg.unit == "m") {
-                                log("checking pressure rise, starting: " + state.pressStart + "  current: " + press.out.state.percent
-                                    + "  difference: " + (press.out.state.percent - state.pressStart) + "%", 0);
-                                if (!(press.out.state.percent - state.pressStart) > config.press.outputRiseError) {
-                                    if (type == 0) log(config.name + " - tank level not rising - DD system shutting down", 3);
-                                    delivery.stop(x, "faulted");
-                                    return;
+                    press: {
+                        rise: function (x) { // not yet in use?
+                            let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
+                            if (time.epoch - state.timer.rise >= config.press.output.riseTime) {
+                                if (press.out.cfg.unit == "m") {
+                                    log("checking tank level rise, starting: " + state.pressStart + "  current: " + press.out.state.percent
+                                        + "  difference: " + (press.out.state.percent - state.pressStart) + "%", 0);
+                                    if (!(press.out.state.percent - state.pressStart) > config.press.out.riseError) {
+                                        log(config.name + " - tank level not rising - DD system shutting down", 3);
+                                        delivery.stop(x, "faulted");
+                                        return;
+                                    } else if (!(press.out.state.percent - state.pressStart) > config.press.out.riseWarn) {
+                                        if (!warn.rise) {
+                                            log(config.name + " - tank level rising slowly", 2);
+                                            warn.rise = true;
+                                        }
+                                    }
+                                    state.pressStart = press.out.state.percent;
                                 }
-                                else if (!(press.out.state.percent - state.pressStart) > config.press.outputRiseWarn) {
-                                    if (type == 0) log(config.name + " - tank level not rising", 2);
+                                if (press.out.cfg.unit == "psi") {
+                                    log("checking tank pressure rise, starting: " + state.pressStart + "  current: " + press.out.state.percent
+                                        + "  difference: " + (press.out.state.percent - state.pressStart) + "psi", 0);
+                                    if (!(press.out.state.psi - state.pressStart) > config.press.out.riseError) {
+                                        log(config.name + " - tank level not rising - DD system shutting down", 3);
+                                        delivery.stop(x, "faulted");
+                                        return;
+                                    } else if (!(press.out.state.psi - state.pressStart) > config.press.out.riseWarn) {
+                                        if (!warn.rise) {
+                                            log(config.name + " - tank pressure rising slowly", 2);
+                                            warn.rise = true;
+                                        }
+                                    }
+                                    state.pressStart = press.out.state.psi;
                                 }
-                                state.pressStart = press.out.state.percent;
+                                state.timer.rise = time.epoch;
                             }
-                            if (press.out.cfg.unit == "psi") {
-                                log("checking pressure rise, starting: " + state.pressStart + "  current: " + press.out.state.percent
-                                    + "  difference: " + (press.out.state.percent - state.pressStart) + "psi", 0);
-                                if (!(press.out.state.psi - state.pressStart) > config.press.outputRiseError) {
-                                    if (type == 0) log(config.name + " - tank level not rising - DD system shutting down", 3);
-                                    delivery.stop(x, "faulted");
-                                    return;
-                                }
-                                else if (!(press.out.state.psi - state.pressStart) > config.press.outputRiseWarn) {
-                                    if (type == 0) log(config.name + " - tank level not rising", 2);
-                                }
-                                state.pressStart = press.out.state.psi;
-                            }
-                            state.timer.rise = time.epoch;
-                        }
+                        },
                     },
                     start_conditions: function (x) { // check start requirements
                         let { state, config, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
@@ -1106,6 +1124,7 @@ module.exports = { // exports added to clean up layout
                             haLag: false,
                             tankLow: false,
                             inputLevel: false,
+                            rise: false,    // low level/pressure rise
                         },
                     })
 
