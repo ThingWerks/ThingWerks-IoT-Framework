@@ -433,17 +433,16 @@ module.exports = {
                 }
                 let priority = {
                     auto: function () {
-                        ({ st, cfg, nv } = _pointers(_name));
                         if (!state.priority.boot) {
                             state.priority.boot = true;
                             if (nv.battery[cfg.battery[0].name].floating)
-                                log("priority queue - system is going ONLINE - Battery Floating");
-                            else log("priority queue - system is going ONLINE");
+                                log("priority queue initializing - system is going ONLINE - Battery Floating");
+                            else log("priority queue initializing - system is going ONLINE");
                         }
                         for (let x = cfg.solar.priority.queue.length - 1; x > -1; x--) priority.onState(x);
                         for (let x = 0; x < cfg.solar.priority.queue.length; x++) priority.offState(x);
                     },
-                    onState: function (x) {
+                    onState: function (x) { // when the member is on
                         let { battery, volts, amps, sun } = priority.pointers();
                         let member = state.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
                         /*
@@ -475,71 +474,78 @@ module.exports = {
                             }
                         }
                         function checkConditions() {
+                            let budgetHour = false;
                             if (member.cfg.off.budget) {
-
-                                let discharge = nv.battery[cfg.battery[0].name].discharge.today / 1000.0;
-                                let charge = nv.battery[cfg.battery[0].name].charge.today / 1000.0;
+                                let discharge = battery.discharge.today / 1000.0;
+                                let charge = battery.charge.today / 1000.0;
                                 let solar = nv.sensor.watt[cfg.solar.priority.entitySolar].today / 1000.0;
+
                                 for (let budget of member.cfg.off.budget) {
                                     if (time.hour == (budget.hour)) {
+                                        budgetHour = true;
                                         //   if (member.cfg.name == "Ram-Water ATS")
                                         //    console.log("further processing hour: "+ budget.hour)
-
                                         // this is useless until discharge counter resets in the morning 
-                                        if (budget.discharge && discharge > budget.discharge) { abort("discharge budget exceeded"); break; }
-                                        if (budget.charge && charge < budget.charge) { abort("insufficient charging"); break; }
-                                        if (budget.solar && solar < budget.solar) { abort("insufficient solar harvest"); break; }
-                                        if (budget.volts && volts < budget.volts) { abort("low battery voltage"); break; }
-                                        if (budget.amps && amps < budget.amps) { abort("high discharge amps"); break; }
-
+                                        if (budget.discharge && discharge > budget.discharge) { triggerBudget("discharge budget exceeded"); break; }
+                                        if (budget.charge && charge < budget.charge) { triggerBudget("insufficient charging"); break; }
+                                        if (budget.solar && solar < budget.solar) { triggerBudget("insufficient solar harvest"); break; }
+                                        if (budget.volts && volts < budget.volts) { triggerBudget("low battery voltage"); break; }
+                                        if (budget.amps && amps < budget.amps) { triggerBudget("high discharge amps"); break; }
                                         // abort further processing if within budget
                                         member.delayStep = false;
                                         return;
-
                                     } else continue;
-                                    function abort(msg) {
-                                        if (!member.budgetNotify) {
+                                    function triggerBudget(msg) {
+                                        if (!member.delayStepBudget) {
+                                            member.delayTimerBudget = time.epoch;
+                                            member.delayStepBudget = true;
+                                        } else if (time.epoch - member.delayTimerBudget >= (member.cfg.delayOff != null
+                                            ? member.cfg.delayOff : cfg.solar.priority.delaySwitchOff)) {
                                             log(member.cfg.name + " - " + msg + " - hour: " + budget.hour
-                                                + (budget.volts ? " - minVolts: " + budget.volts : "") + " volts: " + volts
-                                                + (budget.amps ? " - minAmps: " + budget.amps : "") + " amps: " + amps
-                                                + (budget.solar ? " - minSolar: " + budget.solar : "") + " \nsolar: " + solar.toFixed(1)
-                                                + (budget.charge ? " - minCharge: " + budget.charge : "") + " charge: " + charge.toFixed(1)
-                                                + (budget.discharge ? " - maxDischarge: " + budget.discharge : "") + " discharge : " + discharge.toFixed(1));
-                                            member.budgetNotify = true;
+                                                + (budget.volts != null ? " - minVolts: " + budget.volts : "") + " volts: " + volts
+                                                + (budget.amps != null ? " - minAmps: " + budget.amps : "") + " amps: " + amps + "\n"
+                                                + (budget.solar != null ? " - minSolar: " + budget.solar : "") + " solar: " + solar.toFixed(1)
+                                                + (budget.charge != null ? " - minCharge: " + budget.charge : "") + " charge: " + charge.toFixed(1)
+                                                + (budget.discharge != null ? " - maxDischarge: " + budget.discharge : "") + " discharge : " + discharge.toFixed(1));
+                                            if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch;
+                                            member.delayStepBudget = false;
+                                            priority.send(x, false);
+                                            return true;
                                         }
                                     }
-
                                 }
-
                             }
 
-                            if (sun != undefined && member.cfg.off.sun != undefined) {
-                                if (sun <= member.cfg.off.sun) {
-                                    priority.trigger(x, "sun is low (" + sun + "v) - stopping ", false);
-                                    return;
-                                } else member.delayStep = false;
-                            } else if (member.cfg.off.amps != undefined) {
-                                if (volts < member.cfg.voltsFloat) {
-                                    //  console.log("volts: " + volts + " voltsFloat: " + member.cfg.voltsFloat)
-                                    if (amps <= member.cfg.off.amps) {
-                                        priority.trigger(x, "charge amps is too low (" + amps + "a) - stopping ", false);
+                            if (!budgetHour) {
+                                member.delayStepBudget = false;
+                                if (sun != undefined && member.cfg.off.sun != undefined) {
+                                    if (sun <= member.cfg.off.sun) {
+                                        priority.trigger(x, "sun is low (" + sun + "v) - stopping ", false);
                                         return;
                                     } else member.delayStep = false;
-                                } else if (amps <= member.cfg.off.ampsFloat) {
-                                    priority.trigger(x, "(floating) discharge amps is high (" + amps + "a) - stopping ", false);
-                                    return;
+                                } else if (member.cfg.off.amps != undefined) {
+                                    if (volts < member.cfg.voltsFloat || nv.battery[cfg.solar.priority.battery].floating == true) {
+                                        //  console.log("volts: " + volts + " voltsFloat: " + member.cfg.voltsFloat)
+                                        if (amps <= member.cfg.off.amps) {
+                                            priority.trigger(x, "charge amps is too low (" + amps + "a) - stopping ", false);
+                                            return;
+                                        } else member.delayStep = false;
+                                    } else if (amps <= member.cfg.off.ampsFloat) {
+                                        priority.trigger(x, "(floating) discharge amps is high (" + amps + "a) - stopping ", false);
+                                        return;
+                                    } else member.delayStep = false;
                                 } else member.delayStep = false;
-                            } else member.delayStep = false;
+                            }
                         }
                     },
-                    offState: function (x) { // when the inverter is off
+                    offState: function (x) { // when the member is off
                         let { battery, volts, amps, sun } = priority.pointers();
                         let member = state.priority.queue[x]; member.cfg = cfg.solar.priority.queue[x];
+                        let budgetHour = false;
                         if (member.cfg.entityAuto == undefined
                             || member.cfg.entityAuto != undefined
                             && entity[member.cfg.entityAuto].state == true) {
                             if (member.state == false) {
-
 
                                 if (member.cfg.enable == true) {
                                     if (member.cfg.inverter == undefined) {
@@ -549,23 +555,22 @@ module.exports = {
                                     } else if (state.inverter[member.cfg.inverter].state == true) checkVolts();
                                 }
 
-
                                 if (member.timerMinuteOff != time.epochMin) {
                                     //   log("priority queue - " + member.cfg.name + " - timer off minute");
                                     member.timerMinuteOff = time.epochMin;
                                     if (member.cfg.on?.time?.hour == time.hour && member.cfg.on?.time?.min == time.min) {
-                                        if (volts >= member.cfg.on.timeVoltsMin) {
+                                        if (member.cfg.on.timeVoltsMin && volts >= member.cfg.on.timeVoltsMin) {
                                             log("priority queue - " + member.cfg.name + " - start time reached - volts: " + volts);
                                             priority.send(x, true);
                                         } else {
-                                            log("priority queue - " + member.cfg.name + " - start time reached - " + volts + "v");
-                                            priority.send(x, true);
+                                            log("priority queue - " + member.cfg.name + " - start time reached - but voltage is too low - " + volts + "v");
+                                            return;
                                         }
                                     }
                                 }
+
                             }
                         }
-
 
                         function checkVolts() {
                             if (member.cfg.on.volts != undefined) {
@@ -575,60 +580,89 @@ module.exports = {
                             } else checkConditions()
                         }
                         function checkConditions() {
-                            if (sun != undefined && member.cfg.on.sun != undefined) {
-                                if (member.cfg.offAmpsFloat == undefined || member.cfg.offAmpsFloat != undefined
-                                    && nv.battery[cfg.solar.priority.battery].floating == true) {
-                                    if (sun >= member.cfg.on.sun) {
-                                        // console.log("checking sun: " + sun + " floating:" + nv.battery[config.battery].floating)
-                                        if (member.delayStepSun == false) {
-                                            member.delayTimerSun = time.epoch;
-                                            member.delayStepSun = true;
-                                            return;
-                                        } else if (time.epoch - member.delayTimerSun >= cfg.solar.priority.delaySwitchOn) {
-                                            log("priority queue - " + member.cfg.name + " - sun is high (" + sun + "v) - starting ");
-                                            priority.send(x, true);
-                                            return;
-                                        }
-                                    } else member.delayStepSun = false;
-                                }
-                            }
-                            if (member.cfg.on.amps != undefined) {
-                                if (amps >= member.cfg.on.amps) {
-                                    priority.trigger(x, "charge amps is high (" + amps + "a) volts: " + volts + " on-volts: "
-                                        + member.cfg.onVolts + " - starting ", true);
-                                    return;
-                                } else if (amps < member.cfg.on.amps) member.delayStep = false;
-                            } else if (member.cfg.on.volts != undefined) {
-                                priority.trigger(x, "battery volts is enough (" + volts + "v) - starting ", true);
-                                return;
-                            }
-
                             if (member.cfg.on.budget) {
-                                let discharge = nv.battery[cfg.battery[0].name].discharge.today / 1000.0;
-                                let charge = nv.battery[cfg.battery[0].name].charge.today / 1000.0;
-
+                                let discharge = battery.discharge.today / 1000.0;
+                                let charge = battery.charge.today / 1000.0;
+                                let solar = nv.sensor.watt[cfg.solar.priority.entitySolar].today / 1000.0;
                                 for (let budget of member.cfg.on.budget) {
                                     if (time.hour == budget.hour) {
+                                        budgetHour = true;
                                         // this is useless until discharge counter resets in the morning 
-                                        if ((!budget.discharge || discharge < budget.discharge)
-                                            && (!budget.charge || charge >= budget.charge)
-                                            && (!budget.solar || solar >= budget.solar)
-                                            && (!budget.amps || amps < budget.amps)
-                                            && (!budget.volts || volts >= budget.volts)) {
-                                            log(member.cfg.name + " - budget met or exceeded - hour: " + budget.hour
-                                                + (budget.volts ? " - minVolts: " + budget.volts : "") + " volts: " + volts
-                                                + (budget.volts ? " - minVolts: " + budget.volts : "") + " volts: " + amps
-                                                + (budget.solar ? " - minSolar: " + budget.solar : "") + " \nsolar: " + solar.toFixed(1)
-                                                + (budget.charge ? " - minCharge: " + budget.charge : "") + " charge: " + charge.toFixed(1)
-                                                + (budget.discharge ? " - maxDischarge: " + budget.discharge : "") + " discharge : " + discharge.toFixed(1));
-                                            member.budgetNotify = false;
-                                            member.delayStep = false;
-                                            priority.send(x, true);
-                                            return;
-                                        }
+                                        if ((budget.discharge == null || discharge < budget.discharge)
+                                            && (budget.charge == null || charge >= budget.charge)
+                                            && (budget.solar == null || solar >= budget.solar)
+                                            && ((budget.amps == null || amps >= budget.amps)
+                                                || (member.cfg.on.amps == null || amps >= member.cfg.on.amps))
+                                            && (budget.volts == null || volts >= budget.volts)) {
+
+                                            if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch - 30;
+                                            if (!member.delayStepBudget) {
+                                                member.delayTimerBudget = time.epoch;
+                                                member.delayStepBudget = true;
+                                            } else if (time.epoch - member.delayTimerBudget >= (member.cfg.delayOn != null
+                                                ? member.cfg.delayOn : cfg.solar.priority.delaySwitchOn)) {
+
+                                                log(member.cfg.name + " - budget met or exceeded - hour: " + budget.hour
+                                                    + (budget.volts != null ? " - minVolts: " + budget.volts : "") + " volts: " + volts + "\n"
+                                                    + (budget.volts != null ? " - minAmps: " + budget.volts : "") + " amps: " + amps
+                                                    + (budget.solar != null ? " - minSolar: " + budget.solar : "") + " solar: " + solar.toFixed(1)
+                                                    + (budget.charge != null ? " - minCharge: " + budget.charge : "") + " charge: " + charge.toFixed(1)
+                                                    + (budget.discharge != null ? " - maxDischarge: " + budget.discharge : "") + " discharge : " + discharge.toFixed(1));
+                                                if (time.epoch - member.budgetSwitchOn < 30) {
+                                                    log(member.cfg.name + " - last switch-on too recent - priority system shutting down", 3);
+                                                    send(cfg.solar.priority.entityAuto, false);
+                                                    return true;
+                                                } else {
+                                                    member.budgetSwitchOn = time.epoch;
+                                                    member.budgetNotify = false;
+                                                    member.delayStep = false;
+                                                    member.delayStepBudget = false;
+                                                    member.state = true;
+                                                    priority.send(x, true);
+                                                    return true;
+                                                }
+
+                                            }
+
+
+
+                                        } else member.delayStepBudget = false;
                                     } else continue;
                                 }
                             }
+
+                            if (!budgetHour) {
+                                member.delayStepBudget = false;
+                                if (sun != undefined && member.cfg.on.sun != undefined) {
+                                    if (member.cfg.offAmpsFloat == undefined || member.cfg.offAmpsFloat != undefined
+                                        && nv.battery[cfg.solar.priority.battery].floating == true) {
+                                        if (sun >= member.cfg.on.sun) {
+                                            // console.log("checking sun: " + sun + " floating:" + nv.battery[config.battery].floating)
+                                            if (member.delayStepSun == false) {
+                                                member.delayTimerSun = time.epoch;
+                                                member.delayStepSun = true;
+                                                return;
+                                            } else if (time.epoch - member.delayTimerSun >= cfg.solar.priority.delaySwitchOn) {
+                                                log("priority queue - " + member.cfg.name + " - sun is high (" + sun + "v) - starting ");
+                                                priority.send(x, true);
+                                                return;
+                                            }
+                                        } else member.delayStepSun = false;
+                                    }
+                                }
+                                if (member.cfg.on.amps != undefined) {
+                                    if (amps >= member.cfg.on.amps) {
+                                        priority.trigger(x, "charge amps is high (" + amps + "a) volts: " + volts + " on-volts: "
+                                            + member.cfg.onVolts + " - starting ", true);
+                                        return;
+                                    } else if (amps <= member.cfg.on.amps) member.delayStep = false;
+                                } else if (member.cfg.on.volts != undefined) {
+                                    priority.trigger(x, "battery volts is enough (" + volts + "v) - starting ", true);
+                                    return;
+                                }
+                            }
+
+                            
                         }
                     },
                     trigger: function (x, message, newState, isSun) {
@@ -658,6 +692,7 @@ module.exports = {
                                 ? ((member.cfg.delayOn != null) ? member.cfg.delayOn : cfg.solar.priority.delaySwitchOn)
                                 : ((member.cfg.delayOff != null) ? member.cfg.delayOff : cfg.solar.priority.delaySwitchOff))) {
                                 log("priority queue - " + member.cfg.name + " - " + message);
+                                if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch;
                                 if (newState) member.budgetNotify = false;
                                 priority.send(x, newState);
                                 return;
@@ -676,18 +711,19 @@ module.exports = {
                         state.priority.step = time.epoch;
                     },
                     pointers: function () {
-                        let battery = cfg.battery[cfg.battery.findIndex(battery => battery.name === cfg.solar.priority.battery)];
-                        let volts = Math.round(entity[battery.sensorVolt]?.state * 10) / 10;
+                        let battery = nv.battery[cfg.solar.priority.battery] ?? nv.battery[0];
+                        let batteryConfig = cfg.battery[cfg.battery.findIndex(batt => batt.name === cfg.solar.priority.battery)];
+                        let volts = Math.round(entity[batteryConfig.sensorVolt]?.state * 10) / 10;
                         let sun = Math.round(entity[cfg.solar.sunlight]?.state * 100) / 100;
                         let amps;
                         if (cfg.solar.priority.battery != undefined) {
-                            if (Array.isArray(battery.sensorAmp)) {
+                            if (Array.isArray(batteryConfig.sensorAmp)) {
                                 let temp = 0;
-                                for (let y = 0; y < battery.sensorAmp.length; y++) {
-                                    temp += Math.round(entity[battery.sensorAmp[y]]?.state * 10) / 10;
+                                for (let y = 0; y < batteryConfig.sensorAmp.length; y++) {
+                                    temp += Math.round(entity[batteryConfig.sensorAmp[y]]?.state * 10) / 10;
                                     amps = temp;
                                 }
-                            } else amps = Math.round(entity[battery.sensorAmp]?.state * 10) / 10;
+                            } else amps = Math.round(entity[batteryConfig.sensorAmp]?.state * 10) / 10;
                         }
                         return { battery, volts, sun, amps }
                     },
@@ -1047,7 +1083,7 @@ module.exports = {
                                     //  console.log("testing entity: "+ config.name + " - sum: " + sum)
                                     if (config.solarPower == true) {
                                         let batWatts = entity[config.batteryWatt].state;
-                                        if (Math.sign(batWatts) == -1 && batWatts <= ((sum) * -1)) {
+                                        if (Math.sign(batWatts) == -1 && batWatts <= (sum * -1)) {
                                             send("watt_" + config.name, 0, "kW");
                                         } else {
                                             if (Number.isFinite(batWatts))
@@ -1132,21 +1168,21 @@ module.exports = {
                             if (sensor.entity) push[sensor.entity] = constructor.sensor.temp(sensor);
 
                         if (cfg.solar.inverterAuto)
-                            push[cfg.solar.inverterAuto] = constructor.inverterAuto();
+                            push[cfg.solar.inverterAuto] = constructor.inverter.auto();
 
                         cfg.inverter.forEach((inverter, x) => {
                             if (inverter.entity)
-                                push[inverter.entity] = constructor.inverterOperation(x);
+                                push[inverter.entity] = constructor.inverter.operation(x);
                         });
 
                         if (cfg.solar.priority.entityAuto)
-                            push[cfg.solar.priority.entityAuto] = constructor.priorityAuto();
+                            push[cfg.solar.priority.entityAuto] = constructor.priority.auto();
 
                         cfg.solar.priority.queue.forEach((queue, x) => {
                             if (queue.entityAuto)
-                                push[queue.entityAuto] = constructor.priorityQueueAuto(queue, x);
+                                push[queue.entityAuto] = constructor.priority.queueAuto(queue, x);
                             queue.entity.forEach((entity, y) => {
-                                push[entity] = constructor.priorityQueue(queue, entity, x, y);
+                                push[entity] = constructor.priority.queue(queue, entity, x, y);
                             })
                         })
                     },
@@ -1274,64 +1310,72 @@ module.exports = {
                             }
                         },
                     },
-                    inverterAuto: function () {
-                        return (newState, name) => {
-                            if (newState) log("inverter auto going online");
-                            else log("inverter auto going offline");
-                            for (let x = 0; x < cfg.inverter.length; x++) {
-                                if (entity[cfg.inverter[x].entity].state) {
-                                    log("inverter: " + cfg.inverter[x].name + " - inverter ON - syncing ATS with inverter operational state");
-                                    syncInverter(x, true);
-                                } else {
-                                    log("inverter: " + cfg.inverter[x].name + " - inverter OFF - syncing ATS with inverter operational state");
-                                    syncInverter(x, false);
-                                    state.inverter[x].step = time.epoch - cfg.solar.cycleError - 5;
-                                    state.inverter[x].stepPower = time.epoch - cfg.solar.cycleError - 5;
+                    inverter: {
+                        auto: function () {
+                            return (newState, name) => {
+                                if (newState) log("inverter auto going online");
+                                else log("inverter auto going offline");
+                                for (let x = 0; x < cfg.inverter.length; x++) {
+                                    if (entity[cfg.inverter[x].entity].state) {
+                                        log("inverter: " + cfg.inverter[x].name + " - inverter ON - syncing ATS with inverter operational state");
+                                        syncInverter(x, true);
+                                    } else {
+                                        log("inverter: " + cfg.inverter[x].name + " - inverter OFF - syncing ATS with inverter operational state");
+                                        syncInverter(x, false);
+                                        state.inverter[x].step = time.epoch - cfg.solar.cycleError - 5;
+                                        state.inverter[x].stepPower = time.epoch - cfg.solar.cycleError - 5;
+                                    }
                                 }
-                            }
-                            function syncInverter(x, tState) {
-                                state.inverter[x].state = tState;
-                                // solar.nightMode(x);
-                                solar.power(x, tState);
-                                state.inverter[x].warn.manualPowerOn = false;
-                            }
-                        }
-                    },
-                    inverterOperation: function (x) {
-                        return (newState, name) => {
-                            if (cfg.inverter[x].enable) {
-                                if (state.inverter[x].state != "faulted" && state.inverter[x].state != state) {
-                                    log("inverter: " + cfg.inverter[x].name + " - operational state entity switching to - syncing power/switches: " + newState);
-                                    state.inverter[x].state = newState;
+                                function syncInverter(x, tState) {
+                                    state.inverter[x].state = tState;
                                     // solar.nightMode(x);
-                                    solar.power(x, newState, null, true);
+                                    solar.power(x, tState);
                                     state.inverter[x].warn.manualPowerOn = false;
                                 }
                             }
+                        },
+                        operation: function (x) {
+                            return (newState, name) => {
+                                if (cfg.inverter[x].enable) {
+                                    if (state.inverter[x].state != "faulted" && state.inverter[x].state != state) {
+                                        log("inverter: " + cfg.inverter[x].name + " - operational state entity switching to - syncing power/switches: " + newState);
+                                        state.inverter[x].state = newState;
+                                        // solar.nightMode(x);
+                                        solar.power(x, newState, null, true);
+                                        state.inverter[x].warn.manualPowerOn = false;
+                                    }
+                                }
 
-                        }
+                            }
+                        },
                     },
-                    priorityAuto: function () {
-                        return (newState, name) => {
-                            if (newState) log("priority queue - auto going ONLINE");
-                            else log("priority queue - auto going offline");
-                            state.priority.step = time.epoch;
-                        }
-                    },
-                    priorityQueue: function (priority, entity, x, y) {
-                        return (newState, name) => {
-                            if (!state.priority.skipLog)
-                                log("syncing priority queue: " + priority.name + "  with entity: " + entity + " - new state: " + newState);
-                            state.priority.queue[x].state = newState;
-                            state.priority.step = time.epoch;
-                            state.priority.skipLog = false;
-                        }
-                    },
-                    priorityQueueAuto: function (priority) {
-                        return (newState, name) => {
-                            if (newState) log("priority queue member" + priority.name + " going online");
-                            else log("priority queue member " + priority.name + " going offline");
-                        }
+                    priority: {
+                        auto: function () {
+                            return (newState, name) => {
+                                log("priority queue - auto entity toggle - state: " + newState);
+                                state.priority.delayStep = false;
+                                state.priority.delayStepSun = false;
+                                state.priority.delayStepBudget = false;
+                                cfg.solar.priority.queue.forEach((element, index) => {
+                                    state.priority.queue[index].budgetSwitchOn = null;
+                                });
+                            }
+                        },
+                        queue: function (priority, entity, x, y) {
+                            return (newState, name) => {
+                                if (!state.priority.skipLog)
+                                    log("syncing priority queue: " + priority.name + "  with entity: " + entity + " - new state: " + newState);
+                                state.priority.queue[x].state = newState;
+                                state.priority.step = time.epoch;
+                                state.priority.skipLog = false;
+                            }
+                        },
+                        queueAuto: function (priority) {
+                            return (newState, name) => {
+                                if (newState) log("priority queue member" + priority.name + " going online");
+                                else log("priority queue member " + priority.name + " going offline");
+                            }
+                        },
                     },
                     example: function (config) {
                         return (newState, name) => {
@@ -1398,8 +1442,8 @@ module.exports = {
                     });
                     cfg.solar.priority.queue.forEach(_ => {
                         state.priority.queue.push({
-                            state: null, delayStep: false, delayStepSun: false, delayTimer: time.epoch, delayTimerSun: time.epoch,
-                            boot: false, timerMinuteOn: null, timerMinuteOff: null, budgetNotify: false
+                            state: null, delayStep: false, delayStepBudget: false, delayStepSun: false, delayTimer: time.epoch, delayTimerSun: time.epoch,
+                            delayTimerBudget: time.epoch, boot: false, timerMinuteOn: null, timerMinuteOff: null, budgetNotify: false
                         })
                     });
                     cfg.battery.forEach(_ => {
@@ -1452,7 +1496,7 @@ module.exports = {
                         delete push[name];
                     })
                     if (_reload == "config") {
-                        ({ st, cfg, nv } = _pointers(_name));
+                        ({ state, cfg, nv } = _pointers(_name));
                         constructor.init();
                     }
                     else {
