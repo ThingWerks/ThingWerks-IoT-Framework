@@ -1,4 +1,5 @@
 #!/usr/bin/node
+let twit = require("./twit.js").framework;
 module.exports = {
     entity: {
         subscribe: [    // entities to subscribe to 
@@ -32,7 +33,8 @@ module.exports = {
 
         // choose any name for automation 
         "---automation name here----": function (_name, _push, _reload) {
-            let { state, config, nv, log, write, push } = _pointers(_name);
+            let { state, config, nv, log, write, push, send, tool } = twit(_name);
+
 
             /*  common functions and those called by push events or the init function need to go in this area. 
             ie. before   if (_push === "init"){}
@@ -171,11 +173,14 @@ module.exports = {
             }
             else if (_push) push[_push.name]?.(_push.state, _push.name);
             else if (_reload) {   // called after modification/reload of this automation file
-                if (push) push.forIn((name) => { delete push[name]; }) // destroy all push calls 
+                if (push) push.forIn((name) => {  // destroy all push calls 
+                    log("deleting constructor for: " + name, 0);
+                    delete push[name];
+                }) 
                 if (_reload == "config") {
                     log("config hot reload initiated");
 
-                    // re-initialize/call your constructor function here
+                    // re-initialize/call your constructor function here  -  for example   factory.init();
                     // _push === "init" is not called after a config file reload
 
                 } else {
@@ -198,7 +203,7 @@ module.exports = {
         // create another automation if needed - same logic applies
         "---another automation name here----": function (_name, _push, _reload) {
             try {
-                let { state, config, nv, log, save, send, push } = _pointers(_name);
+                let { state, config, nv, log, write, push, send, tool } = twit(_name);
 
 
                 // your program functions here
@@ -240,17 +245,4 @@ module.exports = {
             } catch (error) { console.trace(error); process.exit(1); }
         },
     },
-}
-
-// dont touch the pointer helper
-let _pointers = (_name) => {
-    return {
-        state: state[_name] ?? undefined,
-        config: config[_name] ?? undefined,
-        nv: nv[_name] ?? undefined,
-        push: push[_name] ||= {},
-        log: (m, l) => slog(m, l, _name),
-        write: () => writeNV(_name),
-        send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
-    }
 }
