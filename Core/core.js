@@ -352,7 +352,7 @@ if (isMainThread) {
                             } else if (buf.type == "register") {
                                 log("client - " + color("purple", buf.name) + " - is Re-Registring", 3);
                             } else if (state.client[buf.name].port != info.port) {
-                                log("client - " + color("purple", buf.name) + " - is unrecognized - updating", 3,2);
+                                log("client - " + color("purple", buf.name) + " - is unrecognized - updating", 3, 2);
                                 state.client[buf.name] = { address: info.address, port: info.port, entities: [] };
                             }
                             if (state.client[buf.name]) state.client[buf.name].update = time.epoch;
@@ -499,8 +499,8 @@ if (isMainThread) {
 
                         // Just in case: catch any 'error' event from the underlying stream
                         bot.on('error', (error) => {
-                           // const msg = String(error?.stack || error);
-                      //      log("Telegram general error: " + msg.split('\n')[0], 3);
+                            // const msg = String(error?.stack || error);
+                            //      log("Telegram general error: " + msg.split('\n')[0], 3);
                             log("Telegram general error: " + error, 3);
                         });
 
@@ -511,7 +511,7 @@ if (isMainThread) {
                             else logs.tg[logs.tgStep] = msg;
                             logs.tgStep = (logs.tgStep + 1) % 101;
                             state.client.forIn((name, value) => {
-                               // console.log(state.client[name])
+                                // console.log(state.client[name])
                                 if (state.client[name].telegram)
                                     udp.send(JSON.stringify({ type: "telegram", class: "agent", data: msg }), state.client[name].port);
                             })
@@ -519,7 +519,7 @@ if (isMainThread) {
 
                         bot.on('callback_query', (msg) => {
                             state.client.forIn((name, value) => {
-                              //  console.log(name)
+                                //  console.log(name)
                                 if (name.telegram)
                                     udp.send(JSON.stringify({ type: "telegram", class: "callback", data: msg }), state.client[name].port);
                             })
@@ -1222,8 +1222,8 @@ if (isMainThread) {
                     if (cfg.telegram?.enable)
                         cfg.telegram?.users?.forEach(user => {
                             bot.sendMessage(user, "ThingWerks Core just went ONLINE")
-                                .catch(error => { 
-                                  //  console.log(error); 
+                                .catch(error => {
+                                    //  console.log(error); 
                                 })
                         });
                 }, 4e3);
@@ -1251,9 +1251,7 @@ if (isMainThread) {
             udp.send(JSON.stringify({ type, data }), port);
         };
         if (cfg.webDiag) express = require("express")();
-        if (cfg.homeAssistant) {
-            WebSocketClient = require('websocket').client;
-        }
+        if (cfg.homeAssistant) WebSocketClient = require('websocket').client;
         Object.defineProperty(Object.prototype, "forIn", {
             value: function (callback) {
                 for (const key in this) {
@@ -1420,14 +1418,14 @@ if (isMainThread) {
                                 && !message.includes("failed to connect, trying to reconnect...")) {
 
                                 bot.sendMessage(cfg.telegram.users[x], buf).catch(error => {
-                                    log("telegram sending error"); 
-                                   
+                                    log("telegram sending error");
+
                                 })
                             }
                         } else bot.sendMessage(cfg.telegram.users[x], buf).catch(error => { log("telegram sending error"); })
                     }
-                } catch (error) { 
-                   // console.log(error, "\nmessage: " + message + "  - Mod: " + mod) 
+                } catch (error) {
+                    // console.log(error, "\nmessage: " + message + "  - Mod: " + mod) 
                 }
             }
         }
