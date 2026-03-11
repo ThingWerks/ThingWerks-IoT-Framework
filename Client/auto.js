@@ -1,5 +1,6 @@
 #!/usr/bin/node
-module.exports(_shared) = {
+let twit = require("./twit.js").framework;
+module.exports = {
     entity: {
         subscribe: [],
         create: [],
@@ -14,7 +15,9 @@ module.exports(_shared) = {
     automation: {
         "---automation name here----": function (_name, _push, _reload) {
             try {
-                let { state, config, nv, log, save, send, push } = _pointers(_name);
+                let { state, config, nv, log, write, push, send, tool } = twit(_name);
+
+
 
                 /*
         
@@ -27,7 +30,7 @@ module.exports(_shared) = {
                     global.state[_name] = {};   // initialize automation's volatile memory
                     global.nv[_name] ||= {};    // initialize automation's non-volatile memory
                     global.push[_name] = { "myEntity": () => { console.log("test") } };    // initialize push functions 
-                    ({ state, config, nv, push } = _pointers(_name)); // call pointers directly after global declarations
+                    ({ state, config, nv, push } = twit(_name)); // call pointers directly after global declarations
 
                     /*
         
@@ -42,16 +45,20 @@ module.exports(_shared) = {
                 }
                 else if (_push) push[_push.name]?.(_push.state, _push.name);
                 else if (_reload) {   // called after modification/reload of this automation file
-                    if (push) push.forIn((name) => { delete push[name]; }) // destroy all push calls 
+                    if (push) push.forIn((name) => {  // destroy all push calls 
+                        log("deleting constructor for: " + name, 0);
+                        delete push[name];
+                    })
                     if (_reload == "config") {
                         log("config hot reload initiated");
 
                         // re-initialize/call your constructor function here
+                        //   for example   constructor.init();
                         // _push === "init" is not called on a config file reload
 
                     } else {
                         log("automation hot reload initiated");
-                        ({ state, config, nv } = _pointers(_name));
+                        ({ state, config, nv } = twit(_name));
 
                         // clear you event timers/intervals here.  ie. clearInterval(state.timer.second);
                         // _push === "init" will be called again
@@ -62,15 +69,4 @@ module.exports(_shared) = {
             } catch (error) { console.trace(error); process.exit(1); } // quite the process on error is usually safer than continue running 
         },
     },
-}
-let _pointers = (_name) => {
-    return {
-        state: state[_name] ?? undefined,
-        config: config[_name] ?? undefined,
-        nv: nv[_name] ?? undefined,
-        push: push[_name] ||= {},
-        log: (m, l) => slog(m, l, _name),
-        write: () => writeNV(_name),
-        send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
-    }
 }
