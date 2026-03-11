@@ -8,7 +8,8 @@ cd /apps/twit
 ```
 ### Setup Client: 
 - [download TWIT client.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client.js)
-- Copy `client.js` file to `/apps/twit`
+- [download Framework file twit.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/twit.js)
+- Copy `client.js` and `twit.js` files to `/apps/twit` or other directory
 - [Review the TWIT Client Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Client-Programming-Guide)
 - you must create an automation file before starting the TWIT Client   
 ### Run and Test Client
