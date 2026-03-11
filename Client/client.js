@@ -1,147 +1,3 @@
-bot = function (id, data, obj) {
-    core(JSON.stringify({ type: "telegram", obj: { class: "send", id, data, obj } }), 65432, '127.0.0.1');
-};
-slog = function (message, level, system) {
-    if (level == undefined) level = 1;
-    if (!system) core("log", { message, mod: (moduleName + "-Client"), level });
-    else core("log", { message, mod: system, level });
-};
-writeNV = function (name) {  // write non-volatile memory to the disk
-    let lname = name.toLocaleLowerCase();
-    timer.fileWriteLast ||= time.epoch;
-    clearTimeout(timer.fileWrite);
-    if (time.epoch - timer.fileWriteLast > 9) writeFile();
-    else timer.fileWrite = setTimeout(() => { writeFile(); }, 10e3);
-    function writeFile() {
-        // slog("writing NV data...");
-        timer.fileWriteLast = time.epoch;
-        fs.writeFile(workingDir + "/nv-" + lname + "-bak.json", JSON.stringify(global.nv[name], null, 2), function () {
-            fs.copyFile(workingDir + "/nv-" + lname + "-bak.json", workingDir + "/nv-" + lname + ".json", (err) => {
-                if (err) throw err;
-            });
-        });
-    }
-}
-core = function (type, data, auto) {
-    if (type == "state") {
-        entity[data.name] ||= { state: null };
-        entity[data.name].state = data.state;
-        entity[data.name].update = time.epochMil;
-        entity[data.name].stamp = time.stamp;
-        automation.forIn(name => {
-            if (auto != name) try {
-                if (data.owner?.type == "TWIT")
-                    automation[name](name, { name: data.name, state: data.state });
-            } catch (e) { console.trace("error updating entity for automation: " + name + "\n", e); }
-        })
-    }
-    udp.send(JSON.stringify({ name: moduleName, type, data, auto }), 65432, '127.0.0.1');
-}
-com = function () {
-    udp.on('message', function (data, info) {
-        let buf = JSON.parse(data);
-        //  console.log(buf);
-        switch (buf.type) {
-            case "state":       // incoming state change (from HA websocket service)
-                slog("receiving state update, entity: " + buf.data.name + " state: " + buf.data.state, 0);
-                // if (buf.data?.name?.includes("input_button.")) console.log(buf.data)
-                // console.log(buf.data)
-
-                entity[buf.data.name] ||= {};
-                let newEntity = entity[buf.data.name];
-                newEntity.owner = buf.data?.owner;
-                newEntity.update = time.epochMil;
-                newEntity.stamp = time.stamp;
-
-                // do not locally store entity states for ZHA and HA buttons
-                //if (buf.data.name?.includes("input_button.")) newEntity.state = null;
-                if (buf.data.name?.toLowerCase().includes("button")) newEntity.state = null;
-                else if (typeof buf.data?.state === "string") {
-                    if (buf.data.state.includes("remote_button_")) newEntity.state = null;
-                    else if (buf.data.state.includes("toggle")) newEntity.state = null;
-                    else newEntity.state = buf.data.state;
-                } else newEntity.state = buf.data.state;
-
-                if (online == true && buf.data.state != null) {
-                    automation.forIn(name => {
-                        try { automation[name](name, { name: buf.data.name, state: buf.data.state }); }
-                        catch (error) { console.trace("automation state push failed: ", error); }
-                    })
-                }// else console.log(buf.data)
-                break;
-            case "fetchReply":        // Incoming HA Fetch result
-                slog("received fetch reply");
-                if (online == false) sys.boot(3);
-                break;
-            case "reRegister":          // reregister request from server
-                if (online == true) {
-                    slog("server lost sync, reregistering...");
-                    setTimeout(() => { register(); }, 500);
-                }
-                break;
-            case "proceed":
-                if (online == false) setTimeout(() => { sys.boot(2); }, 1e3);
-                else slog("reregisterion successful");
-                break;
-            case "diag":                // incoming diag refresh request, then reply object
-                function safeStringify(obj) {
-                    const seen = new WeakSet();
-                    return JSON.stringify(obj, (key, value) => {
-                        // ... (Your circular/timeout logic remains the same)
-                        if (typeof value === "object" && value !== null) {
-                            if (seen.has(value)) return "[Circular]";
-                            seen.add(value);
-                            if (value._idleNext !== undefined && value._idlePrev !== undefined) {
-                                return "[Timeout]";
-                            }
-                        }
-                        return value;
-                    }, null); // <-- Use null or omit the argument to remove formatting
-                }
-                udp.send(safeStringify({ type: "diag", clientName: moduleName, state, nv, config, entitySubscribe, entity }), 65432, '127.0.0.1');
-                // console.log(state)
-                //core(JSON.stringify({ type: "diag", obj: { state, nv: nv, config } }), 65432, '127.0.0.1');
-                break;
-            case "telegram":
-                switch (buf.class) {
-                    case "agent":
-                        slog("receiving telegram message: " + buf.data.text, 0);
-                        user.telegram.agent(buf.data);
-                        break;
-                    case "callback":
-                        user.telegram.callback(buf.data);
-                        break;
-                }
-                break;
-            case "log": console.log(buf.data); break;
-        }
-    });
-}
-register = function (update) {/////no update?
-    slog("trying to register with TWIT Core");
-    console.log()
-    let obj = {
-        entities: {
-            subscribe: entitySubscribe ?? undefined,
-            create: entityCreate ?? undefined,
-            sync: entitySync ?? undefined,
-        },
-        telegram: user?.telegram?.agent ? true : false
-    };
-    core((update ? "registerUpdate" : "register"), obj);
-    if (user?.telegram?.agent) {
-        slog("registering client as Telegram agent");
-        if (!nv.telegram) nv.telegram ||= [];
-        else for (let x = 0; x < nv.telegram.length; x++)
-            core("telegram", { class: "sub", id: nv.telegram[x].id });
-    }
-}
-fetch = function () {
-    // register(true);
-    state.cache = {};
-    if (entitySubscribe) core("fetch");
-    // if (config.esp?.subscribe) core(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
-}
 checkArgs = function () {
     const args = process.argv.slice(2);
     const map = {};
@@ -246,6 +102,128 @@ checkArgs = function () {
         }
     }
 }
+com = {
+    udp: function () {
+        udp.on('message', function (data, info) {
+            let buf = JSON.parse(data);
+            //  console.log(buf);
+            switch (buf.type) {
+                case "state":       // incoming state change (from HA websocket service)
+                    slog("receiving state update, entity: " + buf.data.name + " state: " + buf.data.state, 0);
+                    // if (buf.data?.name?.includes("input_button.")) console.log(buf.data)
+                    // console.log(buf.data)
+
+                    entity[buf.data.name] ||= {};
+                    let newEntity = entity[buf.data.name];
+                    newEntity.owner = buf.data?.owner;
+                    newEntity.update = time.epochMil;
+                    newEntity.stamp = time.stamp;
+
+                    // do not locally store entity states for ZHA and HA buttons
+                    //if (buf.data.name?.includes("input_button.")) newEntity.state = null;
+                    if (buf.data.name?.toLowerCase().includes("button")) newEntity.state = null;
+                    else if (typeof buf.data?.state === "string") {
+                        if (buf.data.state.includes("remote_button_")) newEntity.state = null;
+                        else if (buf.data.state.includes("toggle")) newEntity.state = null;
+                        else newEntity.state = buf.data.state;
+                    } else newEntity.state = buf.data.state;
+
+                    if (online == true && buf.data.state != null) {
+                        automation.forIn(name => {
+                            try { automation[name](name, { name: buf.data.name, state: buf.data.state }); }
+                            catch (error) { console.trace("automation state push failed: ", error); }
+                        })
+                    }// else console.log(buf.data)
+                    break;
+                case "fetchReply":        // Incoming HA Fetch result
+                    slog("received fetch reply");
+                    if (online == false) sys.boot(3);
+                    break;
+                case "reRegister":          // reregister request from server
+                    if (online == true) {
+                        slog("server lost sync, reregistering...");
+                        setTimeout(() => { com.register(); }, 500);
+                    }
+                    break;
+                case "proceed":
+                    if (online == false) setTimeout(() => { sys.boot(2); }, 1e3);
+                    else slog("reregisterion successful");
+                    break;
+                case "diag":                // incoming diag refresh request, then reply object
+                    function safeStringify(obj) {
+                        const seen = new WeakSet();
+                        return JSON.stringify(obj, (key, value) => {
+                            // ... (Your circular/timeout logic remains the same)
+                            if (typeof value === "object" && value !== null) {
+                                if (seen.has(value)) return "[Circular]";
+                                seen.add(value);
+                                if (value._idleNext !== undefined && value._idlePrev !== undefined) {
+                                    return "[Timeout]";
+                                }
+                            }
+                            return value;
+                        }, null); // <-- Use null or omit the argument to remove formatting
+                    }
+                    udp.send(safeStringify({ type: "diag", clientName: moduleName, state, nv, config, entitySubscribe, entity }), 65432, '127.0.0.1');
+                    // console.log(state)
+                    //core(JSON.stringify({ type: "diag", obj: { state, nv: nv, config } }), 65432, '127.0.0.1');
+                    break;
+                case "telegram":
+                    switch (buf.class) {
+                        case "agent":
+                            slog("receiving telegram message: " + buf.data.text, 0);
+                            user.telegram.agent(buf.data);
+                            break;
+                        case "callback":
+                            user.telegram.callback(buf.data);
+                            break;
+                    }
+                    break;
+                case "log": console.log(buf.data); break;
+            }
+        });
+    },
+    register: function (update) {/////no update?
+        slog("trying to register with TWIT Core");
+        console.log()
+        let obj = {
+            entities: {
+                subscribe: entitySubscribe ?? undefined,
+                create: entityCreate ?? undefined,
+                sync: entitySync ?? undefined,
+            },
+            telegram: user?.telegram?.agent ? true : false
+        };
+        com.core((update ? "registerUpdate" : "register"), obj);
+        if (user?.telegram?.agent) {
+            slog("registering client as Telegram agent");
+            if (!nv.telegram) nv.telegram ||= [];
+            else for (let x = 0; x < nv.telegram.length; x++)
+                com.core("telegram", { class: "sub", id: nv.telegram[x].id });
+        }
+    },
+    fetch: function () {
+        // register(true);
+        state.cache = {};
+        if (entitySubscribe) com.core("fetch");
+        // if (config.esp?.subscribe) com.core(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
+    },
+    core: function (type, data, auto) {
+        if (type == "state") {
+            entity[data.name] ||= { state: null };
+            entity[data.name].state = data.state;
+            entity[data.name].update = time.epochMil;
+            entity[data.name].stamp = time.stamp;
+            automation.forIn(name => {
+                if (auto != name) try {
+                    if (data.owner?.type == "TWIT")
+                        automation[name](name, { name: data.name, state: data.state });
+                } catch (e) { console.trace("error updating entity for automation: " + name + "\n", e); }
+            })
+        }
+        udp.send(JSON.stringify({ name: moduleName, type, data, auto }), 65432, '127.0.0.1');
+    },
+}
 auto = {
     call: function (data) {
         for (const name in automation) {
@@ -298,10 +276,10 @@ auto = {
             if (config.heartbeat[name].timer) clearInterval(member.timer);
             config.heartbeat[name].timer = setInterval(() => {
                 if (config.heartbeat[name].state == false) {
-                    core("state", { name, state: true }); config.heartbeat[name].state = true;
+                    com.core("state", { name, state: true }); config.heartbeat[name].state = true;
                 }
                 else {
-                    core("state", { name, state: false }); config.heartbeat[name].state = false;
+                    com.core("state", { name, state: false }); config.heartbeat[name].state = false;
                 }
             }, (value));
         }
@@ -344,7 +322,7 @@ auto = {
         delete require.cache[configPath];
         auto.loadConfig(configPath, true);
         slog("updating core/client entity registrations...");
-        setTimeout(() => { register(); fetch(); }, 2e3);
+        setTimeout(() => { com.register(); com.fetch(); }, 2e3);
     },
     // load a module and register its automations (records which names belong to the file)
     load: function (automationFile, internal) {
@@ -436,7 +414,7 @@ auto = {
             console.log(`Successfully reloaded and restarted automation: ${path.parse(automationFilePath).name}`);
 
             console.log("updating core/client entity registrations...");
-            setTimeout(() => { register(); fetch(); }, 2e3);
+            setTimeout(() => { com.register(); com.fetch(); }, 2e3);
 
         } catch (error) {
             console.error(`Failed to reload automation file "${automationFilePath}":`, error.message);
@@ -494,7 +472,7 @@ user = {        // user configurable block - Telegram
             else if (msg.text == nv.telegram.password) telegram.sub(msg);
             else if (msg.text == "/start") bot("give me the passcode");
             else bot("i don't know you, go away");
-            function bot(text) { core("telegram", { class: "send", id: msg.from.id, text }); }
+            function bot(text) { com.core("telegram", { class: "send", id: msg.from.id, text }); }
         },
         callback: function (msg) {  // enter a two character code to identify your callback "case" 
             let code = msg.data.slice(0, 2);
@@ -519,15 +497,15 @@ user = {        // user configurable block - Telegram
     },
 }
 telegram = {
-    bot: function bot(text) { core("telegram", { class: "send", id: msg.from.id, text }); },
+    bot: function bot(text) { com.core("telegram", { class: "send", id: msg.from.id, text }); },
     sub: function (msg) {
         let buf = { user: msg.from.first_name + " " + msg.from.last_name, id: msg.from.id }
         if (!telegram.auth(msg)) {
             slog("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
             nv.telegram.push(buf);
             bot(msg.chat.id, 'registered');
-            core(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
-//            file.write.nv();
+            com.core(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
+            //            file.write.nv();
         } else bot(msg.chat.id, 'already registered');
     },
     auth: function (msg) {
@@ -573,6 +551,22 @@ sys = {         // ______________________system area, don't need to touch anythi
         online = false;
         timer = { fileWriteLast: null, };
         fileWatchers = {};
+        udp = require('dgram').createSocket('udp4');
+        slog = function (message, level, system) {
+            if (level == undefined) level = 1;
+            if (!system) com.core("log", { message, mod: (moduleName + "-Client"), level });
+            else com.core("log", { message, mod: system, level });
+        };
+        sys.lib();
+        sys.boot(0);
+    },
+    lib: function () {
+        fs = require('fs');
+        path = require('path');
+        exec = require('child_process').exec;
+        execSync = require('child_process').execSync;
+        scriptName = path.basename(__filename).slice(0, -3);
+        workingDir = path.dirname(require.main.filename) + "/";
         time = {
             boot: null,
             get epochMil() { return Date.now(); },
@@ -627,15 +621,6 @@ sys = {         // ______________________system area, don't need to touch anythi
             return vbuf;
         }
         time.startTime();
-        fs = require('fs');
-        // events = require('events');
-        // em = new events.EventEmitter();
-        exec = require('child_process').exec;
-        execSync = require('child_process').execSync;
-        workingDir = require('path').dirname(require.main.filename) + "/";
-        path = require('path');
-        scriptName = path.basename(__filename).slice(0, -3);
-        udp = require('dgram').createSocket('udp4');
         Object.defineProperty(Object.prototype, "forIn", {
             value: function (callback) {
                 for (const key in this) {
@@ -685,8 +670,26 @@ sys = {         // ______________________system area, don't need to touch anythi
                 }
             }
         };
-        round = function (x, precision) { return Math.round(x * precision) / precision }
-        sys.boot(0);
+        file = {
+            write: function (name, prefix) {  // write non-volatile memory to the disk
+                let lname = name.toLocaleLowerCase();
+                if (prefix != null) prefix += "-";
+                else prefix = "";
+                timer.fileWriteLast ||= time.epoch;
+                clearTimeout(timer.fileWrite);
+                if (time.epoch - timer.fileWriteLast > 9) writeFile();
+                else timer.fileWrite = setTimeout(() => { writeFile(); }, 10e3);
+                function writeFile() {
+                    // slog("writing NV data...");
+                    timer.fileWriteLast = time.epoch;
+                    fs.writeFile(workingDir + "/" + prefix + lname + "-bak.json", JSON.stringify(global.nv[name], null, 2), function () {
+                        fs.copyFile(workingDir + "/" + prefix + lname + "-bak.json", workingDir + "/" + prefix + lname + ".json", (err) => {
+                            if (err) throw err;
+                        });
+                    });
+                }
+            }
+        }
     },
     boot: function (step) {
         switch (step) {
@@ -696,11 +699,11 @@ sys = {         // ______________________system area, don't need to touch anythi
                 setTimeout(() => { time.sync(); time.boot++; sys.boot(1); }, 1e3);
                 break;
             case 1:
-                com();
-                register();
+                com.udp();
+                com.register();
                 bootWait = setInterval(() => {
                     console.log("core registration failed, retrying...");
-                    register();
+                    com.register();
                 }, 10e3);
                 break;
             case 2:
@@ -708,10 +711,10 @@ sys = {         // ______________________system area, don't need to touch anythi
                 slog("registered with TWIT Core");
                 if (entitySubscribe) {
                     slog("fetching entities from core");
-                    core("fetch");
+                    com.core("fetch");
                     bootWait = setInterval(() => {
                         slog("core entity fetch is failing, retrying...", 2);
-                        core("fetch");
+                        com.core("fetch");
                     }, 10e3);
                 } else sys.boot(4);
                 break;
@@ -723,8 +726,8 @@ sys = {         // ______________________system area, don't need to touch anythi
                     slog(name + " automation initializing...");
                 }
                 auto.call("init");
-                fetch();
-                setInterval(() => { core("heartbeat"); time.boot++; }, 1e3);
+                com.fetch();
+                setInterval(() => { com.core("heartbeat"); time.boot++; }, 1e3);
                 break;
         }
     },
