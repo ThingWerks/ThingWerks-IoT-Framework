@@ -412,27 +412,27 @@ module.exports = {
                         if (cfg.battery != undefined) {
                             battery = config.battery[config.battery.findIndex(battery => battery.name === cfg.battery)];
                             if (battery.sensorVolt != undefined)
-                                voltsBat = tool.round(entity[battery.sensorVolt].state, 10);
+                                voltsBat =tool.round(entity[battery.sensorVolt].state, 10);
                             if (battery.sensorAmp != undefined) {
                                 if (Array.isArray(battery.sensorAmp)) {
                                     let temp = 0;
                                     for (let y = 0; y < battery.sensorAmp.length; y++) {
                                         temp += parseFloat(entity[battery.sensorAmp[y]].state);
-                                        ampsBat = tool.round(temp, 10);
+                                        ampsBat =tool.round(temp, 10);
                                     }
-                                } else ampsBat = tool.round(entity[battery.sensorAmp].state, 10);
+                                } else ampsBat =tool.round(entity[battery.sensorAmp].state, 10);
                             }
                             if (battery.sensorWatt != undefined)
-                                wattsSolar = tool.round(entity[battery.sensorWatt].state, 1000);
+                                wattsSolar =tool.round(entity[battery.sensorWatt].state, 1000);
                         }
                         if (cfg.gridWatt != undefined)
-                            gridWatts = tool.round(entity[cfg.gridWatt].state, 1000);
+                            gridWatts =tool.round(entity[cfg.gridWatt].state, 1000);
                         if (cfg.inverterVolts != undefined)
                             inverterVolts = ~~parseFloat(entity[cfg.inverterVolts].state);
                         if (cfg.inverterWatts != undefined)
-                            inverterWatts = tool.round(entity[cfg.inverterWatts].state, 1000);
+                            inverterWatts =tool.round(entity[cfg.inverterWatts].state, 1000);
                         if (config.solar.sunlight != undefined)
-                            sun = tool.round(entity[config.solar.sunlight].state, 100);
+                            sun =tool.round(entity[config.solar.sunlight].state, 100);
                         return { voltsBat, inverterVolts, ampsBat, sun, inverterWatts, gridWatts, wattsSolar, battery, cfg, inverter: state.inverter[x] };
                     },
                 }
@@ -719,17 +719,17 @@ module.exports = {
                     pointers: function () {
                         let battery = nv.battery[config.solar.priority.battery] ?? nv.battery[0];
                         let batteryConfig = config.battery[config.battery.findIndex(batt => batt.name === config.solar.priority.battery)];
-                        let volts = tool.round(entity[batteryConfig.sensorVolt]?.state, 10);
-                        let sun = tool.round(entity[config.solar.sunlight]?.state, 100);
+                        let volts = Math.round(entity[batteryConfig.sensorVolt]?.state * 10) / 10;
+                        let sun = Math.round(entity[config.solar.sunlight]?.state * 100) / 100;
                         let amps;
                         if (config.solar.priority.battery != undefined) {
                             if (Array.isArray(batteryConfig.sensorAmp)) {
                                 let temp = 0;
                                 for (let y = 0; y < batteryConfig.sensorAmp.length; y++) {
-                                    temp += tool.round(entity[batteryConfig.sensorAmp[y]]?.state, 10);
+                                    temp += Math.round(entity[batteryConfig.sensorAmp[y]]?.state * 10) / 10;
                                     amps = temp;
                                 }
-                            } else amps = tool.round(entity[batteryConfig.sensorAmp]?.state, 10);
+                            } else amps = Math.round(entity[batteryConfig.sensorAmp]?.state * 10) / 10;
                         }
                         return { battery, volts, sun, amps }
                     },
@@ -745,7 +745,7 @@ module.exports = {
                         if (config.sensor.temp[cfg.sensor.temp].CtoF) {
                             temp = (Math.round((9 / 5 * state.sensor.temp[cfg.sensor.temp] + 32) * 10) / 10)
                         }
-                        else temp = tool.round(state.sensor.temp[cfg.sensor.temp], 10);
+                        else temp = Math.round(state.sensor.temp[cfg.sensor.temp] * 10) / 10
                         switch (fan.run) {
                             case false:
                                 if (temp >= cfg.temp.on) {
@@ -936,7 +936,7 @@ module.exports = {
                         for (let x = 0; x < config.battery.length; x++) {
                             let cfg = config.battery[x], bat = state.battery[x], name = config.battery[x].name,
                                 amps = ~~entity[cfg.sensorAmp]?.state,
-                                volts = tool.round(entity[cfg.sensorVolt].state, 100),
+                                volts = Math.round(entity[cfg.sensorVolt].state * 100) / 100,
                                 watts = entity[cfg.sensorWatt]?.state,
                                 harvest = nv.sensor.watt[config.solar.priority.entitySolar]?.today / 1000.0;
                             if (nv.battery[name] == undefined) {
@@ -1050,7 +1050,7 @@ module.exports = {
                                 const next = config.soc[cfg.socTable][i + 1];
                                 if (voltage <= current.voltage && voltage > next.voltage) {
                                     percent = next.percent + (voltage - next.voltage) * (current.percent - next.percent) / (current.voltage - next.voltage);
-                                    return tool.round(percent, 10);
+                                    return Math.round(percent * 10) / 10;
                                 }
                             }
                         }
@@ -1069,7 +1069,7 @@ module.exports = {
                                         //   else sum += (entity[cfg.entity[y]].state * -1)
                                     }
                                 }
-                                amps.state = (tool.round(sum, 10));
+                                amps.state = (Math.round(sum * 10) / 10);
                                 amps.update = time.epoch;
                                 // console.log("entity: " + cfg.name + " -  state: " + amps.state)
                                 send("amp_" + cfg.name, amps.state, "A");
@@ -1213,7 +1213,7 @@ module.exports = {
                                     else amps.state = final;
                                 } else amps.state = parseFloat(data);
                                 if (amps.state != null && Number.isFinite(amps.state)) {
-                                    send("amp_" + cfg.name, tool.round(amps.state, 10), "A");
+                                    send("amp_" + cfg.name, Math.round(amps.state * 10) / 10, "A");
                                 }
                                 amps.update = time.epoch;
                             };
@@ -1245,11 +1245,11 @@ module.exports = {
                                     }
                                     volts.state = final;
                                     if (volts.state != null && Number.isFinite(volts.state))
-                                        send("volt_" + cfg.name, tool.round(final, 10), "V");
+                                        send("volt_" + cfg.name, Math.round(final * 10) / 10, "V");
                                 } else if (cfg.multiplier != undefined) {
                                     volts.state = voltage * cfg.multiplier;
                                     if (volts.state != null && Number.isFinite(volts.state))
-                                        send("volt_" + cfg.name, tool.round(volts.state, 10), "V");
+                                        send("volt_" + cfg.name, Math.round(volts.state * 10) / 10, "V");
                                 } else volts.state = voltage;
                                 volts.update = time.epoch;
                             };
