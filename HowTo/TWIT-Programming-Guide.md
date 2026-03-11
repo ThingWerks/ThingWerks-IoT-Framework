@@ -49,6 +49,14 @@ Follow the [auto-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framew
 - `log()`           - logging function 
   - `log("message", severityLevel)` or `log("message")`
   - 0 debug, 1 event (default), 2 warning, 3 error
+
+### Tool/Helper Functions
+- `debounce()`  - general debouncing (resolution 1 second)
+  - `debounce("debouncerName", delay, ()=>{ /* your callback here */ })`
+  - `debounce.reset("debouncerName")` - reset the debouncer
+- `tool.round()` - round float to speccific decimal 
+  - `tool.round(myFloat, 100)` - output ie 123.12 rounded to 100ths
+
 ### Home Assistant Helpers
 - Create Helpers in Home Assistant to control or manage your automations or processes.
 - "Toggle" or `input_boolean` is useful to control operational states of your automations.
