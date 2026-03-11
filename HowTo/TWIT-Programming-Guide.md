@@ -44,8 +44,8 @@ Follow the [auto-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framew
 - `send()`          - set any entity state
   - `send(entityName, value, unit, haIpAddress)`  
   - normal TWIT, HA, ESP: `send("testLED", true)` or `send("testLED", 122,12)`
-  - HA Sensor (uses REST API): `send("input_number.test", 20, "psi", "10.10.0.1")`
-  - HA Sensor but core has multiple HA Servers: `send("input_number.test", 20, "psi", "10.10.0.1")`
+  - HA Sensor (uses REST API): `send("input_number.test", 20, "psi")`
+  - HA Sensor but TWIT Core has multiple HA Servers (include IP address): `send("input_number.test", 20, "psi", "10.10.0.1")`
 - `log()`           - logging function 
   - `log("message", severityLevel)` or `log("message")`
   - 0 debug, 1 event (default), 2 warning, 3 error
