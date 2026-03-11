@@ -1,4 +1,5 @@
 #!/usr/bin/node
+let twit = require("./twit.js").framework;
 module.exports = {
     entity: {
         subscribe: [],
@@ -13,7 +14,7 @@ module.exports = {
     automation: {
         Compound: function (_name, _push, _reload) {
             try {
-                let { st, cfg, nv, log, write, send, push } = _pointers(_name);
+                let { state, config, nv, log, write, send, push, tool } = twit(_name);
                 function timer() {
                     if (time.hour == 5 && time.min == 15) {
                         log("Lights - Outside Lights - Turning OFF");
@@ -32,7 +33,7 @@ module.exports = {
                         send("clear-oneShot", 0);
                         send("input_boolean.auto_bubon", true);
                     }
-                    if (time.hour == 17 && time.min == 30) {
+                    if (time.hour == 17 && time.min == 45) {
                         log("Lights - Outside Lights - Turning ON");
                         send("input_boolean.lights_stairs", true);
                         send("switch.lights_bodega_front_2", true);
@@ -54,21 +55,21 @@ module.exports = {
                 if (_push === "init") {
                     global.state[_name] = { boot: false, timer: null };
                     global.config[_name] ||= {};
-                    ({ st, cfg, nv, push } = _pointers(_name));
+                    ({ state, config, nv, push } = twit(_name));
                     log("automation is starting");
                     setTimeout(() => {  // start minute timer aligned with system minute
                         timer();
-                        st.timer = setInterval(() => { timer(); }, 60e3);
+                        state.timer = setInterval(() => { timer(); }, 60e3);
                     }, (60e3 - ((time.sec * 1e3) + time.mil)));
                     return;
                 }
                 else if (_push) push[_push.name]?.(_push.state, _push.name);
                 else if (_reload) {
                     if (push) push.forIn((name) => { delete push[name]; })
-                    if (_reload == "config") { ({ st, cfg, nv } = _pointers(_name)); }
+                    if (_reload == "config") { ({ state, config, nv } = twit(_name)); }
                     else {
                         log("hot reload initiated");
-                        clearInterval(st.timer);
+                        clearInterval(state.timer);
                     }
                     return;
                 }
@@ -76,15 +77,4 @@ module.exports = {
             } catch (error) { console.trace(error); process.exit(1); }
         },
     },
-}
-let _pointers = (_name) => { // don't touch 
-    return {
-        st: state[_name] ?? undefined,
-        cfg: config[_name] ?? undefined,
-        nv: nv[_name] ?? undefined,
-        push: push[_name] ||= {},
-        log: (m, l) => slog(m, l, _name),
-        write: () => writeNV(_name),
-        send: (name, state, unit, address) => { core("state", { name, state, unit, address }, _name) },
-    }
 }
