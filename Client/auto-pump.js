@@ -5,7 +5,7 @@ module.exports = { // exports added to clean up layout
         Pumper: function (_name, _push, _reload) {
             let { state, config, nv, log, write, send, push, tool } = twit(_name);
             let sensor = {
-                ha_push: function () {
+                update: function () {
                     ({ state, config, nv } = twit(_name));
                     let sendDelay = 0;
                     let list = ["_total", "_hour", "_day", "_lm", "_today"];
@@ -17,7 +17,7 @@ module.exports = { // exports added to clean up layout
                         let value = [nv.flow[flowName].total, entity[flowNameEntity].hour, entity[flowNameEntity].day
                             , entity[flowNameEntity].lm, nv.flow[flowName].today];
                         for (let y = 0; y < 5; y++)
-                            HAsend(flowNameEntity + list[y], Number(value[y]).toFixed(((unit[y] == "m3") ? 2 : 0)), unit[y]);
+                            core_send(flowNameEntity + list[y], Number(value[y]).toFixed(((unit[y] == "m3") ? 2 : 0)), unit[y]);
                     }
                     for (let x = 0; x < config.sensor.press.length; x++) {
                         let calc = { percent: [], sum: 0 },
@@ -53,9 +53,9 @@ module.exports = { // exports added to clean up layout
                         entity[name].meters = (calc.meters < 0.0) ? 0 : Number(calc.meters.toFixed(2));
                         entity[name].percent = (calc.percent[2] < 0.0) ? 0 : calc.percent[2];
                         entity[name].update = time.epoch;
-                        HAsend(name + "_percent", entity[name].percent.toFixed(0), '%');
-                        HAsend(name + "_meters", entity[name].meters.toFixed(2), 'm');
-                        HAsend(name + "_psi", entity[name].psi.toFixed(0), 'psi');
+                        core_send(name + "_percent", entity[name].percent.toFixed(0), '%');
+                        core_send(name + "_meters", entity[name].meters.toFixed(2), 'm');
+                        core_send(name + "_psi", entity[name].psi.toFixed(0), 'psi');
                         /*  
                       send("cdata", {
                           name: cfg.name,
@@ -67,7 +67,7 @@ module.exports = { // exports added to clean up layout
                       });
                       */
                     }
-                    function HAsend(name, value, unit) { setTimeout(() => { send(name, value, unit) }, sendDelay); sendDelay += 25; };
+                    function core_send(name, value, unit) { setTimeout(() => { send(name, value, unit) }, sendDelay); sendDelay += 25; };
                 },
                 flow: {
                     calc: function () {
@@ -299,22 +299,36 @@ module.exports = { // exports added to clean up layout
                                         return;
                                     }
                                 }
-
+                                if (flow) {
+                                    // console.log("has flow: ", st.flow.batch)
+                                    if (st.flow.batch >= cfg.fault?.runFlowWarn && !warn.volume) {
+                                        log(cfg.name + " - pump: " + pump[st.pump].name
+                                            + " - flow volume warning - current flow: " + st.flow.batch.toFixed(3) + " m3", 2);
+                                        warn.volume = true;
+                                        return;
+                                    }
+                                    if (st.flow.batch >= cfg.fault?.runFlowError) {
+                                        log(cfg.name + " - pump: " + pump[st.pump].name
+                                            + " - flow volume exceeded - current flow: " + st.flow.batch, 3);
+                                        delivery.stop(x, "faulted");
+                                        return;
+                                    }
+                                }
                                 if (!flow && st.timer.timeoutOn == true && pump[st.pump].state === false) {
                                     log(cfg.name + " - is out of sync - auto is on, system is RUN but pump is off", 2);
                                     delivery.start(x);
                                     return;
                                 }
-                                if (time.epoch - st.timer.run >= cfg.fault?.runLongError * 60) {
+                                if (time.epoch - st.timer.runMax >= cfg.fault?.runLongError * 60) {
                                     log(cfg.name + " - pump: " + pump[st.pump].name
                                         + " - max runtime exceeded - DD system shutting down", 3);
                                     delivery.stop(x, "faulted");
                                     return;
                                 }
-                                if (!fault.runLong && time.epoch - st.timer.run >= cfg.fault?.runLongWarn * 60) {
+                                if (!warn.runLong && time.epoch - st.timer.runMax >= cfg.fault?.runLongWarn * 60) {
                                     log(cfg.name + " - pump: " + pump[st.pump].name
-                                        + " - runtime warning - current runtime: " + (time.epoch - st.timer.run), 2);
-                                    fault.runLong = true;
+                                        + " - runtime warning - current runtime: " + (time.epoch - st.timer.runMax), 2);
+                                    warn.runLong = true;
                                     return;
                                 }
                                 if (press.in != undefined && press.in.state.meters <= cfg.press.input.minError) {
@@ -351,14 +365,17 @@ module.exports = { // exports added to clean up layout
                     delivery.check.start_conditions(x);
                     fault.flow = false;
                     warn.runLong = false;
+                    warn.volume = false;
                     warn.flow = false;
                     warn.rise = false;
                     st.run = true;
                     st.cycleCount++;
+                    st.flow.batch = 0;
                     st.flow.check = false;
                     st.flow.checkPassed = false;
                     st.flow.checkRunDelay = false; // debounce reset trigger
                     st.timer.run = time.epoch;
+                    st.timer.runMax = time.epoch;
                     st.timer.timeoutOn = false;
 
                     setTimeout(() => { st.timer.timeoutOn = true }, 10e3);
@@ -370,10 +387,10 @@ module.exports = { // exports added to clean up layout
 
                     if (st.oneShot !== false) {
                         st.oneShotCount += 1;
-                        if (cfg.oneShot.interrupt) {
-                            log(cfg.name + " - terminating OneShot timer");
-                            clearTimeout(st.oneShot);
-                        } else if (cfg.oneShot.extend) {
+                        if (cfg.buttons.interrupt) {
+                            log(cfg.name + " - NOT pausing OneShot timer - interrupt enabled");
+                            // clearTimeout(st.oneShot);
+                        } else if (cfg.buttons.extend) {
                             log(cfg.name + " - pausing OneShot timer");
                             clearTimeout(st.oneShot);
                         }
@@ -478,13 +495,13 @@ module.exports = { // exports added to clean up layout
                     }
 
 
-                    if (st.oneShot !== false && cfg.oneShot?.extend) {
+                    if (st.oneShot !== false && cfg.buttons?.extend) {
                         let duration;
-                        if (cfg.oneShot.extendLiterMin) {
-                            if ((tFlow * 1000) < cfg.oneShot.extendLiterMin) {
-                                if (cfg.oneShot.extendRetry) {
-                                    if (st.oneShotCount < cfg.oneShot.extendRetry) {
-                                        log(cfg.name + " - OneShot minimum (" + cfg.oneShot.extendLiterMin
+                        if (cfg.buttons.extendLiterMin) {
+                            if ((tFlow * 1000) < cfg.buttons.extendLiterMin) {
+                                if (cfg.buttons.extendRetry) {
+                                    if (st.oneShotCount < cfg.buttons.extendRetry) {
+                                        log(cfg.name + " - OneShot minimum (" + cfg.buttons.extendLiterMin
                                             + "L) batch flow not reached - attempt: " + st.oneShotCount);
                                         clearTimeout(st.oneShot);
                                     } else {
@@ -501,7 +518,7 @@ module.exports = { // exports added to clean up layout
                                     return;
                                 }
                             } else {
-                                if (cfg.oneShot.extendRetry) {
+                                if (cfg.buttons.extendRetry) {
                                     log(cfg.name + " - OneShot minimum batch flow reached - resetting retry counter");
                                     st.oneShotCount = 0;
                                 } else {
@@ -513,8 +530,8 @@ module.exports = { // exports added to clean up layout
 
                         log(cfg.name + " - extending OneShot timer");
                         clearTimeout(st.oneShot);
-                        if (cfg.oneShot.durationEntity) duration = Math.trunc(entity[cfg.oneShot.durationEntity].state);
-                        else if (cfg.oneShot.duration) duration = cfg.oneShot.duration;
+                        if (cfg.buttons.durationEntity) duration = Math.trunc(entity[cfg.buttons.durationEntity].state);
+                        else if (cfg.buttons.duration) duration = cfg.buttons.duration;
                         st.oneShot = setTimeout(() => {
                             log(cfg.name + " - stopping OneShot operation after " + duration + " minutes of inactivity");
                             send(auto.name, false);
@@ -528,6 +545,9 @@ module.exports = { // exports added to clean up layout
                             let { st, cfg, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
                             let flowLM = flow[st.pump].lm, pumpConfig = cfg.pump[st.pump].flow, psi = press.out.state.psi.toFixed(0);
                             log(cfg.name + " - checking pump flow");
+
+                            st.flow.batch += nv.flow[cfg.pump[st.pump].flow.sensor].total - flow[st.pump].batch;
+
                             if (flowLM < pumpConfig.startError) {
                                 fault.flow = true;
                                 if (cfg.fault.retryCount && cfg.fault.retryCount > 0) {
@@ -579,10 +599,10 @@ module.exports = { // exports added to clean up layout
                                 fault.flowRestarts = 0;
                             }
                         },
-                        run: function (x) {
+                        run: function (x) { // some flow fault conditions are in  delivery.auto.online.run.fault
                             let { st, cfg, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
                             let flowLM = flow[st.pump].lm, pumpConfig = cfg.pump[st.pump].flow, psi = press.out.state.psi.toFixed(0);
-
+                            st.flow.batch += (flowLM / 60) / 1000; // increment the current  batch
                             if (pumpConfig.runStop != undefined) {
                                 if (flowLM <= pumpConfig.runStop) {
                                     if (press <= cfg.press?.output?.profile?.[st.profile]?.start) {
@@ -848,20 +868,20 @@ module.exports = { // exports added to clean up layout
                     }
                     config.dd.forEach((cfg, x) => {
                         if (cfg.control.auto)
-                            push[cfg.control.auto] = constructor.auto(state.dd[x], x, cfg );
+                            push[cfg.control.auto] = constructor.auto(state.dd[x], x, cfg);
                         if (cfg.control.turbo)
-                            push[cfg.control.turbo] = constructor.turbo(state.dd[x], x, cfg );
+                            push[cfg.control.turbo] = constructor.turbo(state.dd[x], x, cfg);
                         if (cfg.control.profile)
-                            push[cfg.control.profile] = constructor.profile(state.dd[x], x, cfg );
-                        if (cfg.oneShot?.buttons) {
-                            cfg.oneShot.buttons.forIn((name, value) => {
+                            push[cfg.control.profile] = constructor.profile(state.dd[x], x, cfg);
+                        if (cfg.buttons?.entities) {
+                            cfg.buttons.entities.forIn((name, value) => {
                                 log("loading constructor for oneShot entity: " + name, 0);
-                                push[name] = constructor.oneShot(state.dd[x], x, cfg, value);
+                                push[name] = constructor.buttons(state.dd[x], x, cfg, value);
                             })
                         }
                     });
                 },
-                auto: function (dd, index, cfg ) {
+                auto: function (dd, index, cfg) {
                     return (st) => {
                         if (st) {
                             if (!cfg.enable) {
@@ -891,7 +911,7 @@ module.exports = { // exports added to clean up layout
                         }
                     };
                 },
-                oneShot: function (dd, index, cfg, button) {
+                buttons: function (dd, index, cfg, button) {
                     return (st, name) => {
                         let action = null,
                             duration = null;
@@ -921,10 +941,10 @@ module.exports = { // exports added to clean up layout
                         clearTimeout(dd.state.oneShot);
 
                         if (duration == null) {
-                            if (cfg.oneShot.durationEntity && entity[cfg.oneShot.durationEntity]?.state)
-                                duration = Math.trunc(entity[cfg.oneShot.durationEntity].state);
-                            else if (cfg.oneShot.duration)
-                                duration = cfg.oneShot.duration;
+                            if (cfg.buttons.durationEntity && entity[cfg.buttons.durationEntity]?.state)
+                                duration = Math.trunc(entity[cfg.buttons.durationEntity].state);
+                            else if (cfg.buttons.duration)
+                                duration = cfg.buttons.duration;
                             else {
                                 log(cfg.name + " - no duration in entity or global - ignoring button press from: "
                                     + name + " - state: " + st, 2);
@@ -945,6 +965,20 @@ module.exports = { // exports added to clean up layout
                             if (entity[cfg.control.auto].state) {
                                 log(cfg.name + " - auto already online - ignoring one-shot request - trigger: "
                                     + name + " - state: " + st, 2);
+                                if (cfg.buttons.extendPressOneShot && cfg.buttons.interrupt) {
+                                    log(cfg.name + " - interrupt enabled but extending one-shot timeout", 1);
+                                    timeout();
+                                }
+                                if (cfg.buttons.extendPressRuntime) {
+                                    if (cfg.fault.runLongError || cfg.fault.runLongWarn) {
+                                        log(cfg.name + " - restarting max runtime timer", 1);
+                                        dd.timer.runMax = time.epoch;
+                                    }
+                                    if (cfg.fault.runFlowError || cfg.fault.runFlowWarn) {
+                                        log(cfg.name + " - restarting max flow counter", 1);
+                                        dd.timer.runMax = time.epoch;
+                                    }
+                                }
                                 pumpUp();
                                 return;
                             }
@@ -974,7 +1008,7 @@ module.exports = { // exports added to clean up layout
                         // HELPERS
                         // =====================================
                         function pumpUp() {
-                            if (cfg.oneShot.pumpUp) {
+                            if (cfg.buttons.pumpUp) {
                                 if (!dd.state.run) {
                                     log(cfg.name + " - starting Pump Up - trigger: " + name + " - state: " + state, 1);
                                     delivery.start(index);
@@ -992,7 +1026,7 @@ module.exports = { // exports added to clean up layout
                         }
                     };
                 },
-                turbo: function (dd, index, cfg ) {
+                turbo: function (dd, index, cfg) {
                     return (st, name) => {
                         log(cfg.name + " - Turbo operation triggered by: " + name);
                         if (st == true) {
@@ -1005,7 +1039,7 @@ module.exports = { // exports added to clean up layout
                         return;
                     };
                 },
-                profile: function (dd, index, cfg ) {
+                profile: function (dd, index, cfg) {
                     return (st, name) => {
                         log(cfg.name + " - pump profile change triggered by: " + name + " - new state: " + ~~state);
                         dd.state.profile = parseInt(st);
@@ -1024,7 +1058,7 @@ module.exports = { // exports added to clean up layout
                         }
                     };
                 },
-                example: function (dd, index, cfg ) {
+                example: function (dd, index, cfg) {
                     return (st, name) => {
 
 
@@ -1093,6 +1127,7 @@ module.exports = { // exports added to clean up layout
                             heartbeat: false,
                             sharedPump: {},
                             flow: {
+                                batch: 0,
                                 check: false,
                                 checkPassed: false,
                                 checkRunDelay: false,
@@ -1104,6 +1139,7 @@ module.exports = { // exports added to clean up layout
                                 timeoutOn: false,
                                 flow: null, // for run flow fault delay
                                 run: time.epoch,
+                                runMax: time.epoch,
                                 rise: time.epoch,
                             },
 
@@ -1115,6 +1151,7 @@ module.exports = { // exports added to clean up layout
                             inputLevel: false,
                         },
                         warn: {
+                            volume: false,  // max batch volume
                             flow: false,
                             flowDaily: false,
                             flowFlush: false,
@@ -1153,11 +1190,11 @@ module.exports = { // exports added to clean up layout
 
                 sensor.flow.calc();
                 sensor.flow.meter();
-                sensor.ha_push();
+                sensor.update();
 
                 state.timer.second = setInterval(() => {     // called every second  -  rerun this automation every second
                     sensor.flow.calc();
-                    sensor.ha_push();
+                    sensor.update();
                     for (let x = 0; x < config.dd.length; x++) if (config.dd[x].enable) delivery.auto.control(x)  // delivery.auto_old(x);
                 }, 1e3);
                 setTimeout(() => {  // start minute timer aligned with system minute
@@ -1185,14 +1222,16 @@ module.exports = { // exports added to clean up layout
                 }
                 else {
                     log("hot reload initiated");
-                    clearInterval(state.timer.hour);
-                    clearInterval(state.timer.minute);
-                    clearInterval(state.timer.second);
-                    state.dd.forEach(element => {
-                        clearTimeout(element.state.flow.timerRestart);
-                        clearTimeout(element.state.flow.timerCheck);
-                        clearTimeout(element.state.oneShot);
-                    });
+                    try {
+                        clearInterval(state.timer.hour);
+                        clearInterval(state.timer.minute);
+                        clearInterval(state.timer.second);
+                        state.dd.forEach(element => {
+                            clearTimeout(element.state.flow.timerRestart);
+                            clearTimeout(element.state.flow.timerCheck);
+                            clearTimeout(element.state.oneShot);
+                        });
+                    } catch { log("hot reload - error clearing timers", 2); }
                 }
                 return;
             }
