@@ -412,27 +412,27 @@ module.exports = {
                         if (cfg.battery != undefined) {
                             battery = config.battery[config.battery.findIndex(battery => battery.name === cfg.battery)];
                             if (battery.sensorVolt != undefined)
-                                voltsBat =tool.round(entity[battery.sensorVolt].state, 10);
+                                voltsBat = tool.round(entity[battery.sensorVolt].state, 10);
                             if (battery.sensorAmp != undefined) {
                                 if (Array.isArray(battery.sensorAmp)) {
                                     let temp = 0;
                                     for (let y = 0; y < battery.sensorAmp.length; y++) {
                                         temp += parseFloat(entity[battery.sensorAmp[y]].state);
-                                        ampsBat =tool.round(temp, 10);
+                                        ampsBat = tool.round(temp, 10);
                                     }
-                                } else ampsBat =tool.round(entity[battery.sensorAmp].state, 10);
+                                } else ampsBat = tool.round(entity[battery.sensorAmp].state, 10);
                             }
                             if (battery.sensorWatt != undefined)
-                                wattsSolar =tool.round(entity[battery.sensorWatt].state, 1000);
+                                wattsSolar = tool.round(entity[battery.sensorWatt].state, 1000);
                         }
                         if (cfg.gridWatt != undefined)
-                            gridWatts =tool.round(entity[cfg.gridWatt].state, 1000);
+                            gridWatts = tool.round(entity[cfg.gridWatt].state, 1000);
                         if (cfg.inverterVolts != undefined)
                             inverterVolts = ~~parseFloat(entity[cfg.inverterVolts].state);
                         if (cfg.inverterWatts != undefined)
-                            inverterWatts =tool.round(entity[cfg.inverterWatts].state, 1000);
+                            inverterWatts = tool.round(entity[cfg.inverterWatts].state, 1000);
                         if (config.solar.sunlight != undefined)
-                            sun =tool.round(entity[config.solar.sunlight].state, 100);
+                            sun = tool.round(entity[config.solar.sunlight].state, 100);
                         return { voltsBat, inverterVolts, ampsBat, sun, inverterWatts, gridWatts, wattsSolar, battery, cfg, inverter: state.inverter[x] };
                     },
                 }
@@ -937,8 +937,8 @@ module.exports = {
                             let cfg = config.battery[x], bat = state.battery[x], name = config.battery[x].name,
                                 amps = ~~entity[cfg.sensorAmp]?.state,
                                 volts = Math.round(entity[cfg.sensorVolt].state * 100) / 100,
-                                watts = entity[cfg.sensorWatt]?.state,
-                                harvest = nv.sensor.watt[config.solar.priority.entitySolar]?.today / 1000.0;
+                                watts = entity[cfg.sensorWatt]?.state;
+
                             if (nv.battery[name] == undefined) {
                                 log("initializing NV memory for - Battery: " + name);
                                 nv.battery[name] = {
@@ -946,6 +946,10 @@ module.exports = {
                                     charge: { total: 0, today: 0 }, discharge: { total: 0, today: 0 }
                                 };
                             }
+
+                            let harvest = nv.sensor.watt[config.solar.priority.entitySolar]?.today / 1000.0,
+                                charge = nv.battery[name].charge.today / 1000.0;
+
                             if (entity[cfg.sensorVolt]) {
                                 if (!nv.battery[name].fullCharge && volts >= cfg.voltsFullCharge) {
                                     log("battery - " + cfg.name + " - recording charge cycle: " + volts + "v");
@@ -960,7 +964,7 @@ module.exports = {
                                             bat.floatStep = true;
                                         } else if (time.epoch - bat.floatTimer >= 30) {
                                             log("battery - " + cfg.name + " - charger is floating: " + volts + "v - solar: "
-                                                + harvest + "kwh - charge: " + nv.battery[name].charge.today + " kwh");
+                                                + harvest.toFixed(1) + "kwh - charge: " + charge.toFixed(1) + " kwh");
                                             if (cfg.voltsFullCharge == null) nv.battery[name].cycles++;
                                             nv.battery[name].floating = true;
                                             bat.floatStep = false;
@@ -1055,96 +1059,103 @@ module.exports = {
                             }
                         }
                     },
-                    sensor: function () {     // calc watts based on amp/volt sensors 
-                        for (let x = 0; x < config.sensor.amp.length; x++) {
-                            let cfg = config.sensor.amp[x], sum = 0;
-                            entity[cfg.name] ||= {};
-                            let amps = entity[cfg.name];
-                            if (cfg.entity > 1) {
-                                for (let y = 0; y < cfg.entity.length; y++) {
-                                    let value = parseFloat(entity[cfg.entity[y]].state)
-                                    if (Number.isFinite(value)) {
-                                        if (cfg.combineNegative === true) { sum += entity[cfg.entity[y]].state }
-                                        else if (Math.sign(value) != -1) { sum += entity[cfg.entity[y]].state }
-                                        //   else sum += (entity[cfg.entity[y]].state * -1)
-                                    }
-                                }
-                                amps.state = (Math.round(sum * 10) / 10);
-                                amps.update = time.epoch;
-                                // console.log("entity: " + cfg.name + " -  state: " + amps.state)
-                                send("amp_" + cfg.name, amps.state, "A");
-                            }
-                        }
-                        for (let x = 0; x < config.sensor.watt.length; x++) {
-                            let sum = 0, cfg = config.sensor.watt[x];
-                            state.recorder.watt[cfg.name] ||= { min: null, wh: 0 };
-                            entity[cfg.name] ||= {};
-                            let watts = entity[cfg.name];
-                            let whFinal = 0;
-                            if (cfg.entity != undefined) {
-                                if (cfg.entity.length > 1 || cfg.solarPower == true) {
+                    sensor: {     // calc watts based on amp/volt sensors 
+                        amp: function () {
+                            for (let x = 0; x < config.sensor.amp.length; x++) {
+                                let cfg = config.sensor.amp[x], sum = 0;
+                                entity[cfg.name] ||= {};
+                                let amps = entity[cfg.name];
+                                if (cfg.entity > 1) {
                                     for (let y = 0; y < cfg.entity.length; y++) {
-                                        let value = parseFloat(entity[cfg.entity[y]]?.state)
+                                        let value = parseFloat(entity[cfg.entity[y]].state)
                                         if (Number.isFinite(value)) {
                                             if (cfg.combineNegative === true) { sum += entity[cfg.entity[y]].state }
                                             else if (Math.sign(value) != -1) { sum += entity[cfg.entity[y]].state }
                                             //   else sum += (entity[cfg.entity[y]].state * -1)
                                         }
                                     }
-                                    //  console.log("testing entity: "+ cfg.name + " - sum: " + sum)
-                                    if (cfg.solarPower == true) {
-                                        let batWatts = entity[cfg.batteryWatt].state;
-                                        if (Math.sign(batWatts) == -1 && batWatts <= (sum * -1)) {
-                                            send("watt_" + cfg.name, 0, "kW");
-                                        } else {
-                                            if (Number.isFinite(batWatts))
-                                                watts.state = batWatts + sum;
-                                            send("watt_" + cfg.name, ((batWatts + sum) / 1000).toFixed(2), "kW");
+                                    amps.state = (Math.round(sum * 10) / 10);
+                                    amps.update = time.epoch;
+                                    // console.log("entity: " + cfg.name + " -  state: " + amps.state)
+                                    send("amp_" + cfg.name, amps.state, "A");
+                                }
+                            }
+                        },
+                        watt: function () {
+                            for (let x = 0; x < config.sensor.watt.length; x++) {
+                                let sum = 0, cfg = config.sensor.watt[x];
+                                state.recorder.watt[cfg.name] ||= { min: null, wh: 0 };
+                                entity[cfg.name] ||= {};
+                                let watts = entity[cfg.name];
+                                let whFinal = 0;
+
+                                if (cfg.entity != undefined) {
+                                    if (cfg.entity.length > 1 || cfg.solarPower == true) {
+                                        for (let y = 0; y < cfg.entity.length; y++) {
+                                            let value = parseFloat(entity[cfg.entity[y]]?.state)
+                                            if (Number.isFinite(value)) {
+                                                if (cfg.combineNegative === true) { sum += entity[cfg.entity[y]].state }
+                                                else if (Math.sign(value) != -1) { sum += entity[cfg.entity[y]].state }
+                                                //   else sum += (entity[cfg.entity[y]].state * -1)
+                                            }
                                         }
-                                    } else {
-                                        watts.state = ~~sum;
-                                        send("watt_" + cfg.name, (sum / 1000).toFixed(2), "kW");
+                                        //  console.log("testing entity: "+ cfg.name + " - sum: " + sum)
+                                        if (cfg.solarPower == true) {
+                                            let batWatts = entity[cfg.batteryWatt].state;
+                                            if (Math.sign(batWatts) == -1 && batWatts <= (sum * -1)) {
+                                                send("watt_" + cfg.name, 0, "kW");
+                                            } else {
+                                                if (Number.isFinite(batWatts))
+                                                    watts.state = batWatts + sum;
+                                                send("watt_" + cfg.name, ((batWatts + sum) / 1000).toFixed(2), "kW");
+                                            }
+                                        } else {
+                                            watts.state = ~~sum;
+                                            send("watt_" + cfg.name, (sum / 1000).toFixed(2), "kW");
+                                        }
                                     }
+                                } else if (cfg.sensorAmp != undefined && cfg.sensorVolt != undefined) { // for volt/amp calc
+                                    let amps = entity[cfg.sensorAmp].state, volts = entity[cfg.sensorVolt]?.state;
+                                    if (Number.isFinite(volts * amps)) watts.state = volts * amps;
+                                    else (watts.state = 0.0);
+                                    send("watt_" + cfg.name, (watts.state / 1000).toFixed(2), "kW");
                                 }
-                            } else if (cfg.sensorAmp != undefined && cfg.sensorVolt != undefined) { // for volt/amp calc
-                                let amps = entity[cfg.sensorAmp].state, volts = entity[cfg.sensorVolt]?.state;
-                                if (Number.isFinite(volts * amps)) watts.state = volts * amps;
-                                else (watts.state = 0.0);
-                                send("watt_" + cfg.name, (watts.state / 1000).toFixed(2), "kW");
-                            }
 
-                            if (Number.isFinite(watts.state) && Math.sign(watts.state) != -1)
-                                state.recorder.watt[cfg.name].wh += watts.state;
-                            if (state.recorder.watt[cfg.name].min == null) {
-                                if (cfg.record) log("starting recorder for watt sensor - " + cfg.name);
-                                state.recorder.watt[cfg.name].min = time.min;
-                            } else if (time.min != state.recorder.watt[cfg.name].min) {
-                                whFinal = ((state.recorder.watt[cfg.name].wh / 60) / 60);
-                                nv.sensor.watt[cfg.name].total += whFinal;
-                                if (cfg.record !== false) {
-                                    if (!nv.sensor.watt[cfg.name]) {
-                                        log("initializing NV memory for - watt sensor: " + cfg.name);
-                                        nv.sensor.watt[cfg.name] = { total: 0, today: 0, min: [], hour: [], day: [], month: [] };
+                                if (Number.isFinite(watts.state) && Math.sign(watts.state) != -1)
+                                    state.recorder.watt[cfg.name].wh += watts.state;
+
+                                if (state.recorder.watt[cfg.name].min == null) {
+                                    if (cfg.record) log("starting recorder for watt sensor - " + cfg.name);
+                                    state.recorder.watt[cfg.name].min = time.min;
+                                } else if (time.min != state.recorder.watt[cfg.name].min) {
+                                    whFinal = ((state.recorder.watt[cfg.name].wh / 60) / 60);
+                                    nv.sensor.watt[cfg.name].total += whFinal;
+                                    if (cfg.record !== false) {
+                                        if (!nv.sensor.watt[cfg.name]) {
+                                            log("initializing NV memory for - watt sensor: " + cfg.name);
+                                            nv.sensor.watt[cfg.name] = { total: 0, today: 0, min: [], hour: [], day: [], month: [] };
+                                        }
+                                        recorder(nv.sensor.watt[cfg.name], whFinal, cfg.name);
                                     }
-                                    recorder(nv.sensor.watt[cfg.name], whFinal, cfg.name);
+
+
+                                    if (state.recorder.watt[cfg.name].todayReset) {
+                                        log("resetting daily watt meter for: " + cfg.name, 0);
+                                        nv.sensor.watt[cfg.name].today = 0;
+                                        state.recorder.watt[cfg.name].todayReset = false;
+                                    }
+
+                                    nv.sensor.watt[cfg.name].today += whFinal;
+                                    send("kwh_" + cfg.name + "_today", (nv.sensor.watt[cfg.name].today / 1000).toFixed(2), "kWh");
+                                    // console.log("watts today:" + nv.sensor.watt[cfg.name].today)
+
+                                    state.recorder.watt[cfg.name].wh = 0;
+                                    state.recorder.watt[cfg.name].min = time.min;
                                 }
 
-
-                                if (state.recorder.watt[cfg.name].todayReset) {
-                                    log("resetting daily watt meter for: " + cfg.name, 0);
-                                    nv.sensor.watt[cfg.name].today = 0;
-                                    state.recorder.watt[cfg.name].todayReset = false;
-                                }
-                                nv.sensor.watt[cfg.name].today += whFinal;
-                                send("kwh_" + cfg.name + "_today", (nv.sensor.watt[cfg.name].today / 1000).toFixed(2), "kWh");
-                                // console.log("watts today:" + nv.sensor.watt[cfg.name].today)
-
-                                state.recorder.watt[cfg.name].wh = 0;
-                                state.recorder.watt[cfg.name].min = time.min;
+                                watts.update = time.epoch;
                             }
-
-                            watts.update = time.epoch;
-                        }
+                        },
                     },
                     solarPower: function () { // old code map/to predict how sun readings correspond to wattage potential
                         if (state.sunlight[sunConverted] == undefined) {
@@ -1201,17 +1212,16 @@ module.exports = {
                         amp: function (cfg) {
                             return (state, name) => {
                                 let amps = entity[cfg.name] ||= {};
-                                let data = state;
                                 let factor = 0, corrected = 0, final = 0;
                                 if (cfg.multiplier != undefined) {
-                                    amps.state = parseFloat(data) * cfg.multiplier;
+                                    amps.state = parseFloat(state) * cfg.multiplier;
                                 } else if (cfg.scale != undefined) {
                                     factor = cfg.rating / (cfg.scale / 2);
-                                    corrected = parseFloat(data) - cfg.zero;
+                                    corrected = parseFloat(state) - cfg.zero;
                                     final = corrected * factor;
                                     if (cfg.inverted == true) amps.state = (final * -1);
                                     else amps.state = final;
-                                } else amps.state = parseFloat(data);
+                                } else amps.state = parseFloat(state);
                                 if (amps.state != null && Number.isFinite(amps.state)) {
                                     send("amp_" + cfg.name, Math.round(amps.state * 10) / 10, "A");
                                 }
@@ -1221,8 +1231,7 @@ module.exports = {
                         volt: function (cfg) {
                             return (state, name) => {
                                 let volts = entity[cfg.name] ||= {};
-                                let data = state;
-                                let final = null, voltage = parseFloat(data);
+                                let final = null, voltage = parseFloat(state);
                                 const table = cfg.table;
                                 if (table !== undefined) {
                                     const firstPoint = table[0];
@@ -1257,10 +1266,9 @@ module.exports = {
                         watt: function (cfg) {
                             return (state, name) => {
                                 let watts = entity[cfg.name] ||= {};
-                                let data = state;
                                 let newData;
-                                if (cfg.multiplier != undefined) newData = parseFloat(data) * cfg.multiplier;
-                                else newData = parseFloat(data);
+                                if (cfg.multiplier != undefined) newData = parseFloat(state) * cfg.multiplier;
+                                else newData = parseFloat(state);
                                 if (Number.isFinite(watts.state)) {
                                     watts.state = newData;
                                     send("watt_" + cfg.name, ~~watts.state, "W");
@@ -1306,13 +1314,12 @@ module.exports = {
                         temp: function (cfg) {
                             return (state, name) => {
                                 let temp = entity[cfg.name] ||= {};
-                                let data = state;
                                 if (cfg.multiplier != undefined) {
-                                    temp.state = parseFloat(data) * cfg.multiplier;
+                                    temp.state = parseFloat(state) * cfg.multiplier;
                                     if (temp.state != null && Number.isFinite(temp.state))
                                         send("temp_" + cfg.name, Math.round(temp.state * 10) / 10, cfg.unit);
                                 } else {
-                                    temp.state = parseFloat(data);
+                                    temp.state = parseFloat(state);
                                 }
                             }
                         },
@@ -1424,8 +1431,8 @@ module.exports = {
                 }
                 function timer() {    // called every minute
                     if (time.hour == 3 && time.min == 0) {
-                        log("resetting daily watt meters", 0);
-                        config.sensor.watt.forEach(config => { state.recorder.watt[cfg.name].todayReset = true; })
+                        log("timer - resetting daily watt meters", 0);
+                        config.sensor.watt.forEach(cfg => { state.recorder.watt[cfg.name].todayReset = true; })
                         config.battery.forEach(element => { nv.battery[element.name].fullCharge = false; });
                     }
                 }
@@ -1472,21 +1479,19 @@ module.exports = {
                         nv.battery ||= {};
                     })();
                     log("solar automation system starting");
-                    setTimeout(() => {
-                        state.timer.second = setInterval(() => {
-                            check.sensor(); check.battery(); check.grid();
-                            if (config.solar.inverterAuto != undefined && entity[config.solar.inverterAuto]?.state == true) {
-                                solar.auto();
-                                // if  (state.welder.detect == false) 
-                            }
-                            if (config.fan != undefined && config.fan.sensor.temp != undefined) check.temp();
-                        }, 1e3);      // set minimum rerun time, otherwise this automation function will only be called on ESP and HA events
-                        setTimeout(() => {
-                            state.timer.priority = setInterval(() => {
-                                if (entity[config.solar.priority.entityAuto]?.state == true) priority.auto();
-                            }, 1e3);
-                        }, 3e3);
-                    }, 3e3);
+
+                    state.timer.second = setInterval(() => {
+                        check.sensor.amp();
+                        check.sensor.watt();
+                        check.battery();
+                        check.grid();
+                        if (entity[config.solar?.inverterAuto]?.state == true) {
+                            solar.auto();
+                            // if  (state.welder.detect == false) 
+                        }
+                        if (config.fan?.sensor?.temp != undefined) check.temp();
+                        if (entity[config.solar?.priority?.entityAuto]?.state == true) priority.auto();
+                    }, 1e3);
 
                     setTimeout(() => {  // start minute timer aligned with system minute
                         timer();
