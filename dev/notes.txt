@@ -1,0 +1,43 @@
+
+priority fast cycle shutdown - global rapid cycle detection 
+
+implement budget time slot coefficient 
+
+how to shutdown 8kw if low solar performance 
+how to insure ATS doesnt switch unless 8k is online
+how to make discharge counter linked to a previous float condition
+
+record how many kw since float condition started, is it consistent 
+reattempt discharge capacity estimation algorithm 
+reevaluate rams ESP code, how does disconnection effect run operation
+
+check solar temp/fan control 
+battery efficiency should be 30 days calculation 
+
+core config should have include/exclude esp disconnect notif
+add client log file dumping 
+
+pumper
+pressure stop?
+pressure rise time?
+                        minRise: 22,
+                        minRiseTime: 20,
+                        minFall: 15
+
+
+make daytime push oneshot stay on, nights have timer
+internal TWI Logging to file, last 7 days
+
+setup central telegram server (web hook)
+
+move telegram into auto file/config? telegram APP??
+
+make only ESP and logging options reload on core config changes
+	disable service config file watcher? optional? 
+	process.quit() if ha changes?
+need to remotely enable core debugs for ZHA issue
+
+pump selection using find index for "reserve, tandem, swap" 
+make pumps, flow check ets, independant of DD 
+make DD oneshot, single press is full on (optional) time?
+test DD input low tank fail. wont start in LTH
