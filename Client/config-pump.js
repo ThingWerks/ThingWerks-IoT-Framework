@@ -91,8 +91,8 @@ module.exports = {
                         profile: "input_number.profile_bubon",      // pressure profile
                         // reserve: 9,                              // ha entity for reserve tank/pump
                     },
-                    oneShot: {
-                        buttons: {// single shot pump automation run button, must be array 
+                    buttons: {
+                        entities: {// single shot pump automation run button, must be array 
                             "Switch Kitchen Pump": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
                             "Button Bodega Water Filtered": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
                             "Button Water Groogies": { oneShot: "remote_button_short_press", stop: "remote_button_long_press" },
@@ -125,9 +125,6 @@ module.exports = {
                         },
                     ],
                     press: {
-                        input: {
-
-                        },
                         output: {
                             sensor: "bubon", // pressure sensor number (in cfg.sensor.press block)
                             profile: [{ start: 22 }, { start: 45 }, { start: 50 }],
@@ -143,6 +140,7 @@ module.exports = {
                         retryFinal: 1,      // time in minutes to wait for final retry
                         runLongError: 10,   // max run time in minutes
                         runLongWarn: 5,     // max run time in minutes
+                      //  runFlowWarn: .002,     // max flow volume in m3
                         // cycleCount: 0,   // max cycle times per cycleTime window
                         //  cycleTime: 10,  // max cycleTime time window  (in seconds)
                         flushWarning: false,
@@ -159,8 +157,8 @@ module.exports = {
                         // reserve: 9,                                          // ha entity for reserve tank/pump
 
                     },
-                    oneShot: {
-                        buttons: { // single shot pump automation run button, must be array 
+                    buttons: {
+                        entities: { // single shot pump automation run button, must be array 
                             /*
                             old buttons:
                                 "remote_button_short_press" "remote_button_short_press" "remote_button_double_press"
@@ -181,6 +179,8 @@ module.exports = {
                         extend: true,           // extend OneShot timer after last usage
                         extendLiterMin: 30.0,   // minimum liters pumped to keep extending
                         extendRetry: 2,         // extension short cycle allowance    
+                        extendPressOneShot: false,  // allow extending oneshot timeout on repeat button press - no effect if interrupt is not enabled 
+                        extendPressRuntime: true,   // extend the max runtime 
                     },
                     pump: [
                         {
@@ -214,6 +214,8 @@ module.exports = {
                         // retryFinal: 2,   // time in minutes to wait for final retry
                         runLongError: 40,   // max run time in minutes
                         runLongWarn: 30,     // max run time in minutes
+                        // runFlowError: 40,   // max flow volume in m3
+                        // runFlowWarn: 0.005,     // max flow volume in m3
                         cycleCount: 0,      // max cycle times per cycleTime window
                         cycleTime: 10,      // max cycleTime time window  (in seconds)
                         cycleMinFlow: 30,   // min water pumped per cycle
