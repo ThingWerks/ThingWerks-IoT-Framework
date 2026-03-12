@@ -16,9 +16,9 @@ module.exports = {
                         registry = global.state[_name]._debounce ||= {};
                         gate = registry[key] ||= { active: false, start: 0 };
                         if (!gate.active) {
-                            gate.start = Date.now() / 1000; // time.epoch
+                            gate.start = time.epoch; // time.epoch
                             gate.active = true;
-                        } else if (Date.now() / 1000 - gate.start >= delay) {
+                        } else if (time.epoch - gate.start >= delay) {
                             callback();
                             gate.active = false;
                         }
