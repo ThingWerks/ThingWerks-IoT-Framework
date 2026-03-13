@@ -104,12 +104,17 @@ checkArgs = function () {
 }
 com = {
     udp: function () {
+        console.log("starting UDP client");
         udp.on('message', function (data, info) {
             let buf = JSON.parse(data);
             //  console.log(buf);
             switch (buf.type) {
                 case "state":       // incoming state change (from HA websocket service)
+
+                    ///////////////////////////////////core should trigger debugging in client and this should be console log, any others??
                     slog("receiving state update, entity: " + buf.data.name + " state: " + buf.data.state, 0);
+
+
                     // if (buf.data?.name?.includes("input_button.")) console.log(buf.data)
                     // console.log(buf.data)
 
@@ -202,12 +207,6 @@ com = {
                 com.core("telegram", { class: "sub", id: nv.telegram[x].id });
         }
     },
-    fetch: function () {
-        // register(true);
-        state.cache = {};
-        if (entitySubscribe) com.core("fetch");
-        // if (config.esp?.subscribe) com.core(JSON.stringify({ type: "espFetch" }), 65432, '127.0.0.1');
-    },
     core: function (type, data, auto) {
         if (type == "state") {
             entity[data.name] ||= { state: null };
@@ -227,6 +226,7 @@ com = {
 auto = {
     call: function (data) {
         for (const name in automation) {
+            if (data == "init") slog(name + " automation initializing...");
             //   if (name in entitySubscribe[data.name].names)
             try { automation[name](name, data); } catch (e) { console.trace("error calling automation: " + name + "\n", e) }
         }
@@ -255,7 +255,7 @@ auto = {
         configData.heartbeat ||= {};
         configData?.entity?.heartbeat?.forIn((name, value) => {
             if (name in config?.heartbeat) {
-                if (config.heartbeat[name]?.internal != value) {
+                if (config.heartbeat[name]?.interval != value) {
                     console.log("heartbeat - changed - updating timer for: " + name);
                     createTimer(name, value);
                 }
@@ -322,7 +322,7 @@ auto = {
         delete require.cache[configPath];
         auto.loadConfig(configPath, true);
         slog("updating core/client entity registrations...");
-        setTimeout(() => { com.register(); com.fetch(); }, 2e3);
+        setTimeout(() => { com.register(); com.core("fetch"); }, 2e3);
     },
     // load a module and register its automations (records which names belong to the file)
     load: function (automationFile, internal) {
@@ -414,7 +414,7 @@ auto = {
             console.log(`Successfully reloaded and restarted automation: ${path.parse(automationFilePath).name}`);
 
             console.log("updating core/client entity registrations...");
-            setTimeout(() => { com.register(); com.fetch(); }, 2e3);
+            setTimeout(() => { com.register(); com.core("fetch"); }, 2e3);
 
         } catch (error) {
             console.error(`Failed to reload automation file "${automationFilePath}":`, error.message);
@@ -596,6 +596,16 @@ sys = {         // ______________________system area, don't need to touch anythi
                 }
                 syncAndSchedule();
             },
+            format: function (seconds) {
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const remainingSeconds = seconds % 60;
+                let result = '';
+                if (hours > 0) result += `${hours.toString()}h `;
+                if (minutes > 0) result += `${minutes.toString()}m `;
+                result += remainingSeconds.toString() + "s";
+                return result;
+            }
         };
         color = function (color, input, ...option) {   //  ascii color function for terminal colors
             if (input == undefined) input = '';
@@ -695,7 +705,6 @@ sys = {         // ______________________system area, don't need to touch anythi
         switch (step) {
             case 0:
                 checkArgs();
-
                 setTimeout(() => { time.sync(); time.boot++; sys.boot(1); }, 1e3);
                 break;
             case 1:
@@ -708,25 +717,19 @@ sys = {         // ______________________system area, don't need to touch anythi
                 break;
             case 2:
                 clearInterval(bootWait);
-                slog("registered with TWIT Core");
-                if (entitySubscribe) {
-                    slog("fetching entities from core");
+                slog("registered with TWIT Core - now fetching entities");
+                com.core("fetch");
+                bootWait = setInterval(() => {
+                    slog("core entity fetch is failing, retrying...", 2);
                     com.core("fetch");
-                    bootWait = setInterval(() => {
-                        slog("core entity fetch is failing, retrying...", 2);
-                        com.core("fetch");
-                    }, 10e3);
-                } else sys.boot(4);
+                }, 10e3);
                 break;
             case 3:
                 slog("core fetch complete");
                 clearInterval(bootWait);
                 online = true;
-                for (const name in automation) {
-                    slog(name + " automation initializing...");
-                }
                 auto.call("init");
-                com.fetch();
+                com.core("fetch");
                 setInterval(() => { com.core("heartbeat"); time.boot++; }, 1e3);
                 break;
         }
