@@ -35,6 +35,16 @@ time = {
         }
         syncAndSchedule();
     },
+    format: function (seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remainingSeconds = seconds % 60;
+        let result = '';
+        if (hours > 0) result += `${hours.toString()}h `;
+        if (minutes > 0) result += `${minutes.toString()}m `;
+        result += remainingSeconds.toString() + "s";
+        return result;
+    }
 };
 color = function (color, input, ...option) {   //  ascii color function for terminal colors
     if (input == undefined) input = '';
