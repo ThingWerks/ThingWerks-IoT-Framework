@@ -8,6 +8,7 @@ module.exports = {
             "input_number.profile_bubon",
             "input_number.timer_oneshot_bubon",
             "input_number.timer_oneshot_irrigation",
+            "input_number.flowstop_irrigation",
 
             "input_button.oneshot_irrigation",
             "input_button.oneshot_bubon",
@@ -99,9 +100,17 @@ module.exports = {
                             "input_button.oneshot_bubon": { oneShot: "any" },
                             "Button-eWeLink": { oneShot: ["toggle", true, false] },
                         },
-                        extend: true,                                    // extend OneShot timer after last usage
-                        // durationEntity: "input_number.timer_oneshot_bubon",  // REQUIRED - single shot pump run time length
-                        duration: 10, // duration of oneShot in minutes
+                        extend: true,   // extend OneShot timer after last usage
+                        // durationEntity: "input_number.timer_oneshot_bubon",      // ETHER - single shot pump run time length
+                        duration: 10,           // duration of oneShot in minutes   // ETHER - single shot pump run time length
+
+                        //  pumpUp: true,           // top off the tank           `        
+                        //  interrupt: false,       // interrupt current pump operation if timeout reached
+                        //  extend: true,           // extend OneShot timer after last usage
+                        //  extendLiterMin: 30.0,   // minimum liters pumped to keep extending
+                        //  extendRetry: 2,         // extension short cycle allowance    
+                        //  extendPressOneShot: false,  // allow extending oneShot timeout on repeat button press - no effect if interrupt is not enabled 
+                        //  extendPressRuntime: true,   // extend the max runtime 
                     },
                     pump: [
                         {
@@ -113,8 +122,6 @@ module.exports = {
                                 startWarn: 11,      // min start flow before triggering notification (useful for filters)
                                 startError: 9,     // minimum flow rate pump must reach at start
                                 startWait: 6,       // seconds to wait before checking flow after pump starts
-                                // runWarn: 3,          // optional - flow rate during operation which will cause warning
-                                //runError: 5,        // flow rate to fault 
                                 runStop: 10,         // flow rate to stop 
                                 pressStopMin: 60        // minimum stopping pressure     
                             },
@@ -140,7 +147,7 @@ module.exports = {
                         retryFinal: 1,      // time in minutes to wait for final retry
                         runLongError: 10,   // max run time in minutes
                         runLongWarn: 5,     // max run time in minutes
-                      //  runFlowWarn: .002,     // max flow volume in m3
+                        //  runFlowWarn: .002,     // max flow volume in m3
                         // cycleCount: 0,   // max cycle times per cycleTime window
                         //  cycleTime: 10,  // max cycleTime time window  (in seconds)
                         flushWarning: false,
@@ -151,10 +158,11 @@ module.exports = {
                     enable: true,
                     control: {
                         auto: "input_boolean.auto_irrigatiion",                 // home assistant auto toggle ID number (specified above in cfg.ha config)
+                        // flowStop: "input_number.flowstop_irrigation",        // entity for flow volume stop
                         // solar: "input_boolean.auto_solar_bubon",             // solar automation boolean/toggle
                         // turbo: 5,                                            // secondary high stop pressure point
                         //   profile: "input_number.profile_bubon",             // pressure profile
-                        // reserve: 9,                                          // ha entity for reserve tank/pump
+                        // reserve: 9,                                          // entity for reserve tank/pump
 
                     },
                     buttons: {
@@ -174,7 +182,7 @@ module.exports = {
                         },
                         // durationEntity: "input_number.timer_oneshot_irrigation",  // REQUIRED - single shot pump run time length
                         duration: 10,           // duration of oneShot in minutes
-                        pumpUp: true,           // top off the tank                   
+                        pumpUp: true,           // top off the tank           `        
                         interrupt: false,       // interrupt current pump operation if timeout reached
                         extend: true,           // extend OneShot timer after last usage
                         extendLiterMin: 30.0,   // minimum liters pumped to keep extending
@@ -191,8 +199,6 @@ module.exports = {
                                 startWarn: 40,          // min start flow before triggering notification (useful for filters)
                                 startError: 10,         // REQUIRED - minimum flow rate pump must reach at start
                                 startWait: 6,           // seconds to wait before checking flow after pump starts
-                                // runWarn: 3,          // optional - flow rate during operation which will cause warning
-                                // runError: 3,         // optional - flow rate during operation which will cause fault
                                 runStop: 5,             // flow rate to gracefully stop pump
                             },
                             press: {
@@ -213,11 +219,11 @@ module.exports = {
                         retryWait: 10,      // time in seconds to wait for retry
                         // retryFinal: 2,   // time in minutes to wait for final retry
                         runLongError: 40,   // max run time in minutes
-                        runLongWarn: 30,     // max run time in minutes
-                        // runFlowError: 40,   // max flow volume in m3
-                        // runFlowWarn: 0.005,     // max flow volume in m3
-                        cycleCount: 0,      // max cycle times per cycleTime window
-                        cycleTime: 10,      // max cycleTime time window  (in seconds)
+                        // runLongWarn: 1,  // max run time in minutes
+                        // runFlowError: 40,// max flow volume in m3
+                        runFlowWarn: 0.150, // max flow volume in m3
+                        cycleCount: 1,      // max cycle times per cycleTime window
+                        cycleTime: 30,      // max cycleTime time window  (in seconds)
                         cycleMinFlow: 30,   // min water pumped per cycle
                         flushWarning: false,
                     },
