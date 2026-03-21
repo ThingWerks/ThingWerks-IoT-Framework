@@ -99,14 +99,14 @@ module.exports = {
                             entityAuto: null,       // entity to control this members activation
                             // inverter: 0          // optional - which inverter carries the load - if not specified, inverter 0 is used
                             on: {
-                                time: { hour: 5, min: 45 },
+                                time: { hour: 5, min: 55 },
                                 timeVoltsMin: 54.0,
                                 // amps: 20.0,
                                 // sun: 0.5,
                                 // volts: 54.0,     // battery level to turn on system - in addition to sunlight if configured
                             },
                             off: {
-                                time: { hour: 21, min: 5 },
+                                time: { hour: 21, min: 16 },
                                 // sun: 2.35,       // sunlight level to deactivate this system - independent of battery level
                                 // amps: -15.0,
                                 // ampsFloat: -30.0,
@@ -119,50 +119,54 @@ module.exports = {
                             enable: true,
                             voltsFloat: 58.2,
                             entity: ["solar-ram-relay1-water"],
+                            required: ["solar-relay5-inverter-10kw"],
                             on: {
-                                // time: { hour: 7, min: 0 },
+                                 time: { hour: 6, min: 0 },
                                 timeVoltsMin: 54.4,
                                 //  sun: 3.0,
                                 delay: 10,
-                                amps: 160.0,  // hour 10 is applicable from 9:00-9:59 
+                                //  battery: "main", optional if not in solar/priority
                                 budget: [ // hour, charge, discharge, solar, volts
                                     { hour: 6, solar: 0.5, volts: 54.5 },
                                     { hour: 7, solar: 1.0, volts: 55.0 },
                                     { hour: 8, solar: 4.0, volts: 56.0 },
-                                    { hour: 9, solar: 11.0, volts: 56.0 },
-                                    { hour: 10, solar: 22.0, charge: 10.0 },
-                                    { hour: 11, solar: 39.0, charge: 16.0 },
-                                    { hour: 12, solar: 50.0, charge: 20.0 },
-                                    { hour: 13, solar: 55.0, charge: 28.0 },
+                                    { hour: 9, solar: 11.0, amps: 50.0, volts: 56.0 },
+                                    { hour: 10, solar: 22.0, amps: 160.0, charge: 10.0 },
+                                    { hour: 11, solar: 39.0, amps: 160.0, charge: 16.0 },
+                                    { hour: 12, solar: 50.0, amps: 160.0, charge: 20.0 },
+                                    { hour: 13, solar: 55.0, amps: 100.0, charge: 28.0 },
                                     { hour: 14, solar: 60.0 },
                                     { hour: 15, solar: 65.0 },
                                     { hour: 16, solar: 70.0 },
-                                    { hour: 17, amps: -55, discharge: 9.5, charge: 31 },
-                                    { hour: 18, amps: -55, discharge: 10.5, charge: 31 },
-                                    { hour: 19, amps: -55, discharge: 13.5, charge: 32 },
-                                    { hour: 20, amps: -55, discharge: 14.5, charge: 32 },
+                                    { hour: 17, amps: -55, discharge: 9.5, },
+                                    { hour: 18, amps: -55, discharge: 11.5, },
+                                    { hour: 19, amps: -55, discharge: 15.0, },
+                                    { hour: 20, amps: -55, discharge: 16.5, },
+                                    { hour: 21, amps: -55, discharge: 17.5, },
                                 ],
                             },
                             off: {
-                                time: { hour: 21, min: 0 },
+                                time: { hour: 21, min: 15 },
                                 amps: 90.0,
                                 ampsFloat: -160.0,
+                                delay: 5,
                                 budget: [ // hour, charge, discharge, solar, volts
                                     { hour: 6, volts: 54.0 },
-                                    { hour: 7, solar: 0.5, volts: 54.3, amps: -100 },           // 0kw      0.65kw      55.2v
-                                    { hour: 8, solar: 3.3, volts: 54.5, amps: -100 },           // 2.3kw    5kw         56.78v
-                                    { hour: 9, solar: 8.0, volts: 55.2, amps: -100 },           // 7.2kw    12kw        56.88v
-                                    { hour: 10, solar: 18.0, charge: 8.0 },                      // 10kw     22kw        57v         
-                                    { hour: 11, solar: 33.0, charge: 14.0 },                      // 15kw     34kw        57v
-                                    { hour: 12, solar: 45.0, charge: 19.0 },                      // 20kw     42kw        57.2v
-                                    { hour: 13, solar: 50.0, charge: 22.0 },                      // 24kw     50kw        57.2v
+                                    { hour: 7, solar: 0.5, volts: 54.3, amps: -120 },           // 0kw      0.65kw      55.2v
+                                    { hour: 8, solar: 3.3, volts: 54.5, amps: -120 },           // 2.3kw    5kw         56.78v
+                                    { hour: 9, solar: 8.0, volts: 55.2, amps: -120 },           // 7.2kw    12kw        56.88v
+                                    { hour: 10, solar: 18.0, amps: -100, charge: 8.0 },                      // 10kw     22kw        57v         
+                                    { hour: 11, solar: 33.0, amps: -100, charge: 14.0 },                      // 15kw     34kw        57v
+                                    { hour: 12, solar: 45.0, amps: -100, charge: 19.0 },                      // 20kw     42kw        57.2v
+                                    { hour: 13, solar: 50.0, amps: -100, charge: 22.0 },                      // 24kw     50kw        57.2v
                                     { hour: 14, solar: 55.0 },
                                     { hour: 15, solar: 60.0 },
                                     { hour: 16, solar: 65.0 },
-                                    { hour: 17, amps: -160, discharge: 10.0, charge: 30 },
-                                    { hour: 18, amps: -160, discharge: 11.0, charge: 30 },
-                                    { hour: 19, amps: -160, discharge: 14.0, charge: 30 },
-                                    { hour: 20, amps: -160, discharge: 16.0, charge: 30 },
+                                    { hour: 17, amps: -140, discharge: 10.0, },
+                                    { hour: 18, amps: -140, discharge: 14.0, },
+                                    { hour: 19, amps: -140, discharge: 16.0, },
+                                    { hour: 20, amps: -140, discharge: 20.0, },
+                                    { hour: 21, amps: -140, discharge: 22.0, },
                                 ],
                             },
                         },
