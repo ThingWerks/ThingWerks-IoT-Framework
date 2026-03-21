@@ -303,13 +303,15 @@ module.exports = { // exports added to clean up layout
                                     // console.log("has flow: ", st.flow.batch)
                                     if (st.flow.batch >= cfg.fault?.runFlowWarn && !warn.volume) {
                                         log(cfg.name + " - pump: " + pump[st.pump].name
-                                            + " - flow volume warning - current flow: " + st.flow.batch.toFixed(3) + " m3", 2);
+                                            + " - " + color("yellow", "high flow volume") + " - current runtime: " + time.format(time.epoch - st.timer.runMax)
+                                            + " - total volume: " + help.flow(st.flow.batch), 2);
                                         warn.volume = true;
                                         return;
                                     }
                                     if (st.flow.batch >= cfg.fault?.runFlowError) {
                                         log(cfg.name + " - pump: " + pump[st.pump].name
-                                            + " - flow volume exceeded - current flow: " + st.flow.batch, 3);
+                                            + " - " + color("red", "max flow volume") + " - runtime: " + time.format(time.epoch - st.timer.runMax)
+                                            + " - total volume: " + help.flow(st.flow.batch), 3);
                                         delivery.stop(x, "faulted");
                                         return;
                                     }
@@ -320,14 +322,16 @@ module.exports = { // exports added to clean up layout
                                     return;
                                 }
                                 if (time.epoch - st.timer.runMax >= cfg.fault?.runLongError * 60) {
-                                    log(cfg.name + " - pump: " + pump[st.pump].name
-                                        + " - max runtime exceeded - DD system shutting down", 3);
+                                    log(cfg.name + " - pump: " + pump[st.pump].name + " - " + color("red", "max runtime exceeded")
+                                        + ": " + time.format(time.epoch - st.timer.runMax) + " - " + color("red", "SHUT DOWN"), 3);
                                     delivery.stop(x, "faulted");
                                     return;
                                 }
                                 if (!warn.runLong && time.epoch - st.timer.runMax >= cfg.fault?.runLongWarn * 60) {
                                     log(cfg.name + " - pump: " + pump[st.pump].name
-                                        + " - runtime warning - current runtime: " + (time.epoch - st.timer.runMax), 2);
+                                        + " - " + color("yellow", "long runtime") + " - current runtime: "
+                                        + time.format(time.epoch - st.timer.runMax)
+                                        + " - total volume: " + help.flow(st.flow.batch), 2);
                                     warn.runLong = true;
                                     return;
                                 }
@@ -362,7 +366,7 @@ module.exports = { // exports added to clean up layout
                 },
                 start: function (x, runAlready) {
                     let { st, cfg, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
-                    delivery.check.start_conditions(x);
+                    if (delivery.check.start_conditions(x)) return;
                     fault.flow = false;
                     warn.runLong = false;
                     warn.volume = false;
@@ -399,7 +403,7 @@ module.exports = { // exports added to clean up layout
 
                     if (flow.length > 0) {  // least 1 pump has a flow sensor
                         flow[st.pump].batch = nv.flow[cfg.pump[st.pump].flow.sensor].total;
-                        if (runAlready) {
+                        if (runAlready) { // skip flow check delay
                             log(cfg.name + " - flow meter reenabled");
                             st.flow.check = true;
                             st.flow.checkPassed = true;
@@ -431,18 +435,14 @@ module.exports = { // exports added to clean up layout
                         } else startMotor();
                         function startMotor() {
                             log(cfg.name + " - " + color("cyan", "starting pump") + ": " + pump[st.pump].config.name
-                                + " - cycle count: " + st.cycleCount + "  Time: " + (time.epoch - st.cycleTimer));
+                                + " - cycle count: " + st.cycleCount + "  Time: " + (time.epoch - st.timer.cycle));
                             send(pump[st.pump].config.entity, true);
                         }
                     }
                 },
                 stop: function (x, faulted) {
                     let { st, cfg, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
-                    let runTime = time.epoch - st.timer.run,
-                        hours = Math.floor(runTime / 60 / 60),
-                        minutes = Math.floor(runTime / 60),
-                        extraSeconds = runTime % 60, lbuf, tFlow;
-
+                    let lbuf, tFlow;
 
                     st.run = false;
                     st.timer.timeoutOff = false;
@@ -451,12 +451,12 @@ module.exports = { // exports added to clean up layout
                     delivery.check.shared(x);
                     if (st.sharedPump.run == false) {
                         lbuf = cfg.name + " - " + color("cyan", "stopping pump") + ": " + pump[st.pump].config.name
-                            + " - Runtime: " + hours + "h:" + minutes + "m:" + extraSeconds + "s";
+                            + " - Runtime: " + time.format(time.epoch - st.timer.run);
                         send(pump[st.pump].config.entity, false);
                     } else {
                         lbuf = cfg.name + " - " + color("cyan", "stopping ") + pump[st.pump].config.name
                             + " but pump still in use by " + config.dd[st.sharedPump.num].name + " - Runtime: "
-                            + hours + "h:" + minutes + "m:" + extraSeconds + "s";
+                            + time.format(time.epoch - st.timer.run);
                     }
 
                     if (cfg.solenoid != undefined) {
@@ -466,12 +466,12 @@ module.exports = { // exports added to clean up layout
                         }, 4e3);
                     }
 
+
+
                     if (flow != undefined) {
                         //  st.flow.check = false;
                         tFlow = nv.flow[cfg.pump[st.pump].flow.sensor].total - flow[st.pump].batch;
-                        log(lbuf + " - pumped "
-                            + ((tFlow < 2.0) ? ((tFlow * 1000).toFixed(1) + "L") : (tFlow.toFixed(2) + "m3"))
-                            + " - Average: "
+                        log(lbuf + " - pumped " + help.flow(tFlow) + " - Average: "
                             + ((tFlow * 1000) / (time.epoch - st.timer.run) * 60).toFixed(1) + "lm");
                     } else log(lbuf);
 
@@ -610,7 +610,8 @@ module.exports = { // exports added to clean up layout
                                         delivery.stop(x, "faulted");
                                         return true;
                                     } else if (press <= cfg.pump[st.pump]?.pressStopMin) {
-                                        log(" - RUN flow stop (" + flowLM.toFixed(1) + "lm) - but did not meet minimum pressure - " + psi + " psi", 3);
+                                        log(" - RUN flow stop (" + flowLM.toFixed(1) + "lm) - but did not meet minimum pressure - "
+                                            + psi + " psi", 3);
                                         delivery.stop(x, "faulted");
                                         return true;
                                     } else
@@ -618,7 +619,7 @@ module.exports = { // exports added to clean up layout
                                 } else st.flow.checkRunDelay = false;
                             } else if (pumpConfig.runWarn != undefined) {
                                 if (flowLM < pumpConfig.runWarn && !warn.flow) {
-                                    log(" - RUN low flow (" + flowLM.toFixed(1) + "lm) - clean filter?");
+                                    log(cfg.name + " - RUN low flow (" + flowLM.toFixed(1) + "lm) - clean filter?");
                                     warn.flow = true;
                                 }
                             } else if (pumpConfig.runError != undefined) {
@@ -633,12 +634,16 @@ module.exports = { // exports added to clean up layout
                                 } else st.flow.checkRunDelay = false;
                             }
 
+
+                            if (st.flow.batch >= (entity[cfg.control.flowStop]?.state / 1000)) {
+                                log(cfg.name + " - RUN flow volume stop - total: " + help.flow(st.flow.batch)
+                                    + " - pump stopping - " + psi + " psi");
+                                delivery.stop(x);
+                                return true;
+                            }
+
                             function trigger(msg, error) {
-                                if (st.flow.checkRunDelay == false) {
-                                    st.timer.flow = time.epoch;
-                                    st.flow.checkRunDelay = true;
-                                    return;
-                                } else if (time.epoch - st.timer.flow >= 3) {
+                                tool.debounce("flow_check_run", 3, () => {
                                     if (error) {
                                         log(cfg.name + msg, 3);
                                         delivery.stop(x, "faulted");
@@ -648,7 +653,7 @@ module.exports = { // exports added to clean up layout
                                         delivery.stop(x);
                                         return true;
                                     }
-                                }
+                                })
                             }
                         },
                     },
@@ -699,19 +704,26 @@ module.exports = { // exports added to clean up layout
                             log(cfg.name + " - config error - you must configure ether 'Flow runStop' or 'Press output profile stop'", 3);
                             send(auto.name, false);
                             auto.state = false;
-                            return;
+                            return true;
                         }
 
+
                         if (st.cycleCount == 0) {
-                            st.cycleTimer = time.epoch;
+                            st.timer.cycle = time.epoch;
                             st.timer.rise = time.epoch;
-                        } else if (st.cycleCount > cfg.fault.cycleCount) {
-                            if (time.epoch - st.cycleTimer < cfg.fault.cycleTime) {
-                                log(cfg.name + " - pump is cycling to frequently - DD system shutting down", 3);
+                            log(cfg.name + " - pump first cycle - resetting timer");
+                        } else if (st.cycleCount >= cfg.fault.cycleCount) {
+                            if (time.epoch - st.timer.cycle < cfg.fault.cycleTime) {
+                                log(cfg.name + " - " + color("red", "pump is over cycling - cycle: ") + st.cycleCount
+                                    + " in " + (time.epoch - st.timer.cycle) + "s - " + color("red", "SHUT DOWN"), 3);
                                 send(auto.name, false);
                                 auto.state = false;
-                                return;
-                            } else { st.cycleTimer = time.epoch; st.cycleCount = 0; }
+                                return true;
+                            } else {
+                                log(cfg.name + " - pump cycle timer window expired - resetting cycle");
+                                st.timer.cycle = time.epoch;
+                                st.cycleCount = 0;
+                            }
                         }
 
 
@@ -724,7 +736,7 @@ module.exports = { // exports added to clean up layout
                                 send(auto.name, false);
                                 auto.state = false;
                                 fault.inputLevel = true;
-                                return;
+                                return true;
                             } else if (warn.inputLevel == false && entity[cfg.pump[st.pump].press?.input?.sensor]
                                 <= cfg.pump[st.pump].press?.input?.minWarn) {
                                 log(cfg.name + " - DD input tank level is getting low " + press.in.state.meters
@@ -736,7 +748,7 @@ module.exports = { // exports added to clean up layout
                             log(cfg.name + " - input tank level is too low - DD system shutting down", 3);
                             send(auto.name, false);
                             auto.state = false;
-                            return;
+                            return true;
                         }
 
                     },
@@ -897,7 +909,7 @@ module.exports = { // exports added to clean up layout
                             dd.fault.inputLevel = false;
                             dd.warn.tankLow = false;
                             dd.warn.inputLevel = false;
-                            dd.state.cycleTimer = time.epoch;
+                            dd.state.timer.cycle = time.epoch;
                             dd.state.cycleCount = 0;
                             clearTimeout(dd.state.flow.timerRestart);
                         } else {
@@ -972,11 +984,11 @@ module.exports = { // exports added to clean up layout
                                 if (cfg.buttons.extendPressRuntime) {
                                     if (cfg.fault.runLongError || cfg.fault.runLongWarn) {
                                         log(cfg.name + " - restarting max runtime timer", 1);
-                                        dd.timer.runMax = time.epoch;
+                                        dd.state.timer.runMax = time.epoch;
                                     }
                                     if (cfg.fault.runFlowError || cfg.fault.runFlowWarn) {
                                         log(cfg.name + " - restarting max flow counter", 1);
-                                        dd.timer.runMax = time.epoch;
+                                        dd.state.timer.runMax = time.epoch;
                                     }
                                 }
                                 pumpUp();
@@ -1075,6 +1087,12 @@ module.exports = { // exports added to clean up layout
                     for (const name in nv.flow) { nv.flow[name].today = 0; }  // reset daily low meters
                 }
             }
+            help = {
+                flow: function (flow) {
+                    if (flow < 2.0) return (flow * 1000).toFixed(0) + "L";
+                    else return flow.toFixed(2) + "m3";
+                },
+            }
             if (_push === "init") {
                 log("initializing pumper config and state")
                 global.state[_name] = { init: true, dd: [], fountain: [], timer: {}, pump: {} };
@@ -1141,6 +1159,7 @@ module.exports = { // exports added to clean up layout
                                 run: time.epoch,
                                 runMax: time.epoch,
                                 rise: time.epoch,
+                                cycle: time.epoch,
                             },
 
                         },
