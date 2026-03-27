@@ -648,156 +648,158 @@ if (isMainThread) {
                     thread.ha.postMessage({ type: "config", cfg: cfg.homeAssistant });
                 }
             },
-            esp: function () {
-                threadAssignments = {};              // threadAssignments[threadID] = { [name]: cfg, ... }
-                const MAX_PER_THREAD = 10;
-                const WORKER_SCRIPT = __filename;    // assumes worker code (case "esp") lives in same file
+            esp: {
+                init: function () {
+                    threadAssignments = {};              // threadAssignments[threadID] = { [name]: cfg, ... }
+                    const MAX_PER_THREAD = 10;
+                    const WORKER_SCRIPT = __filename;    // assumes worker code (case "esp") lives in same file
 
-                function distributeESPDevices(devicesObj) {
-                    const devices = devicesObj || {};
-                    const deviceNames = Object.keys(devices);
-                    const deviceCount = deviceNames.length;
-                    const threadCount = Math.max(1, Math.ceil(deviceCount / cfg.esp.max_devices_per_thread));
+                    function distributeESPDevices(devicesObj) {
+                        const devices = devicesObj || {};
+                        const deviceNames = Object.keys(devices);
+                        const deviceCount = deviceNames.length;
+                        const threadCount = Math.max(1, Math.ceil(deviceCount / cfg.esp.max_devices_per_thread));
 
-                    // create empty assignment objects and workers
-                    for (let tid = 0; tid < threadCount; tid++) {
-                        threadAssignments[tid] = {}; // <-- now object, not array
-                        newWorkerThread(tid, true);
+                        // create empty assignment objects and workers
+                        for (let tid = 0; tid < threadCount; tid++) {
+                            threadAssignments[tid] = {}; // <-- now object, not array
+                            newWorkerThread(tid, true);
+                        }
+
+                        // assign devices to threads and send initial config
+                        deviceNames.forEach((name, idx) => {
+                            const config = devices[name];
+                            if (!cfg) return;
+                            config.name = name;
+
+                            const tid = Math.floor(idx / cfg.esp.max_devices_per_thread);
+                            threadAssignments[tid][name] = config; // store by name key
+
+                            if (!thread.esp[tid]) newWorkerThread(tid, true);
+
+                            thread.esp[tid].postMessage({ type: "config", esp: config, threadID: tid });
+                        });
                     }
 
-                    // assign devices to threads and send initial config
-                    deviceNames.forEach((name, idx) => {
-                        const config = devices[name];
-                        if (!cfg) return;
-                        config.name = name;
+                    // USAGE:
+                    distributeESPDevices(cfg.esp.devices);
+                    // console.log(threadAssignments)
 
-                        const tid = Math.floor(idx / cfg.esp.max_devices_per_thread);
-                        threadAssignments[tid][name] = config; // store by name key
+                    function newWorkerThread(threadID, boot = true) {
+                        if (boot) log("initializing ESP worker thread: " + threadID, 1);
+                        else log("re-initializing crashed ESP worker thread: " + threadID, 0);
 
-                        if (!thread.esp[tid]) newWorkerThread(tid, true);
+                        const w = new Worker(WORKER_SCRIPT, { workerData: { class: "esp", threadID } });
+                        thread.esp[threadID] = w;
 
-                        thread.esp[tid].postMessage({ type: "config", esp: config, threadID: tid });
-                    });
-                }
+                        w.on('message', (data) => {
+                            try { ipc(data); } catch (e) { console.error("ipc error:", e); }
+                        });
 
-                // USAGE:
-                distributeESPDevices(cfg.esp.devices);
-                // console.log(threadAssignments)
+                        w.on('error', (err) => {
+                            log("ESP worker thread " + threadID + " error: " + String(err), 3);
+                        });
 
-                function newWorkerThread(threadID, boot = true) {
-                    if (boot) log("initializing ESP worker thread: " + threadID, 1);
-                    else log("re-initializing crashed ESP worker thread: " + threadID, 0);
-
-                    const w = new Worker(WORKER_SCRIPT, { workerData: { class: "esp", threadID } });
-                    thread.esp[threadID] = w;
-
-                    w.on('message', (data) => {
-                        try { ipc(data); } catch (e) { console.error("ipc error:", e); }
-                    });
-
-                    w.on('error', (err) => {
-                        log("ESP worker thread " + threadID + " error: " + String(err), 3);
-                    });
-
-                    w.on('exit', (code) => {
-                        log("ESP worker thread " + threadID + " exited with code " + code, 2);
-                        if (cfg.esp?.enable && !thread.esp[threadID].restart)
-                            setTimeout(() => {
-                                newWorkerThread(threadID, false);
-                                const assigned = threadAssignments[threadID] || {};
-                                for (const name in assigned) {
-                                    const cfg = assigned[name];
-                                    try {
-                                        if (thread.esp[threadID])
-                                            thread.esp[threadID].postMessage({ type: "config", esp: cfg, threadID });
-                                    } catch (e) {
-                                        log(`Failed to re-post config ${name} to restarted thread ${threadID}: ${e}`, 3);
+                        w.on('exit', (code) => {
+                            log("ESP worker thread " + threadID + " exited with code " + code, 2);
+                            if (cfg.esp?.enable && !thread.esp[threadID].restart)
+                                setTimeout(() => {
+                                    newWorkerThread(threadID, false);
+                                    const assigned = threadAssignments[threadID] || {};
+                                    for (const name in assigned) {
+                                        const cfg = assigned[name];
+                                        try {
+                                            if (thread.esp[threadID])
+                                                thread.esp[threadID].postMessage({ type: "config", esp: cfg, threadID });
+                                        } catch (e) {
+                                            log(`Failed to re-post config ${name} to restarted thread ${threadID}: ${e}`, 3);
+                                        }
                                     }
-                                }
-                            }, 2000);
-                    });
+                                }, 2000);
+                        });
 
-                    return w;
-                }
-            },
-            espAdd: function (cfg, name) {
-                if (!name) {
-                    log("espAdd: missing device name", 3);
-                    return;
-                }
-
-                const MAX_PER_THREAD = cfg.esp?.max_devices_per_thread || 10;
-                let targetThreadID = null;
-
-                // Find a thread with available space
-                for (const tid in threadAssignments) {
-                    const threadObj = threadAssignments[tid];
-                    if (!threadObj) continue;
-                    const currentCount = Object.keys(threadObj).length;
-                    if (currentCount < MAX_PER_THREAD) {
-                        targetThreadID = Number(tid);
-                        break;
+                        return w;
                     }
-                }
-
-                // If none found, create a new thread
-                if (targetThreadID === null) {
-                    targetThreadID = Object.keys(threadAssignments).length;
-                    threadAssignments[targetThreadID] = {};
-                    newWorkerThread(targetThreadID, true);
-                    log(`espAdd: created new worker thread ${targetThreadID}`, 1);
-                }
-
-                // Assign the device
-                const threadObj = threadAssignments[targetThreadID];
-                cfg.name = name;
-                threadObj[name] = cfg;
-
-                // Ensure the thread exists
-                if (!thread.esp[targetThreadID]) {
-                    newWorkerThread(targetThreadID, true);
-                }
-
-                // Send configuration to worker
-                try {
-                    thread.esp[targetThreadID].postMessage({
-                        type: "config",
-                        esp: cfg,
-                        threadID: targetThreadID
-                    });
-                    log(`espAdd: added '${name}' to thread ${targetThreadID}`, 1);
-                } catch (e) {
-                    log(`espAdd: failed to send config for '${name}' to thread ${targetThreadID}: ${e}`, 3);
-                }
-            },
-            espRemove: function (cfgName) {
-                // find which thread has this device
-                let foundThreadID = null;
-                for (const tid in threadAssignments) {
-                    if (threadAssignments[tid] && threadAssignments[tid][cfgName]) {
-                        foundThreadID = tid;
-                        break;
+                },
+                add: function (cfg, name) {
+                    if (!name) {
+                        log("espAdd: missing device name", 3);
+                        return;
                     }
-                }
 
-                if (foundThreadID === null) {
-                    log("espRemove: device not found in any thread: " + cfgName, 2);
-                    return;
-                }
+                    const MAX_PER_THREAD = cfg.esp?.max_devices_per_thread || 10;
+                    let targetThreadID = null;
 
-                // tell the worker to close the device
-                if (thread.esp[foundThreadID]) {
-                    thread.esp[foundThreadID].postMessage({
-                        type: "close",
-                        esp: { name: cfgName },
-                        threadID: Number(foundThreadID)
-                    });
-                }
+                    // Find a thread with available space
+                    for (const tid in threadAssignments) {
+                        const threadObj = threadAssignments[tid];
+                        if (!threadObj) continue;
+                        const currentCount = Object.keys(threadObj).length;
+                        if (currentCount < MAX_PER_THREAD) {
+                            targetThreadID = Number(tid);
+                            break;
+                        }
+                    }
 
-                // remove from threadAssignments
-                delete threadAssignments[foundThreadID][cfgName];
+                    // If none found, create a new thread
+                    if (targetThreadID === null) {
+                        targetThreadID = Object.keys(threadAssignments).length;
+                        threadAssignments[targetThreadID] = {};
+                        newWorkerThread(targetThreadID, true);
+                        log(`espAdd: created new worker thread ${targetThreadID}`, 1);
+                    }
 
-                log(`Removed ESP device '${cfgName}' from thread ${foundThreadID}`, 1);
+                    // Assign the device
+                    const threadObj = threadAssignments[targetThreadID];
+                    cfg.name = name;
+                    threadObj[name] = cfg;
+
+                    // Ensure the thread exists
+                    if (!thread.esp[targetThreadID]) {
+                        newWorkerThread(targetThreadID, true);
+                    }
+
+                    // Send configuration to worker
+                    try {
+                        thread.esp[targetThreadID].postMessage({
+                            type: "config",
+                            esp: cfg,
+                            threadID: targetThreadID
+                        });
+                        log(`espAdd: added '${name}' to thread ${targetThreadID}`, 1);
+                    } catch (e) {
+                        log(`espAdd: failed to send config for '${name}' to thread ${targetThreadID}: ${e}`, 3);
+                    }
+                },
+                remove: function (cfgName) {
+                    // find which thread has this device
+                    let foundThreadID = null;
+                    for (const tid in threadAssignments) {
+                        if (threadAssignments[tid] && threadAssignments[tid][cfgName]) {
+                            foundThreadID = tid;
+                            break;
+                        }
+                    }
+
+                    if (foundThreadID === null) {
+                        log("espRemove: device not found in any thread: " + cfgName, 2);
+                        return;
+                    }
+
+                    // tell the worker to close the device
+                    if (thread.esp[foundThreadID]) {
+                        thread.esp[foundThreadID].postMessage({
+                            type: "close",
+                            esp: { name: cfgName },
+                            threadID: Number(foundThreadID)
+                        });
+                    }
+
+                    // remove from threadAssignments
+                    delete threadAssignments[foundThreadID][cfgName];
+
+                    log(`Removed ESP device '${cfgName}' from thread ${foundThreadID}`, 1);
+                },
             },
         };
     function ipc(data) {      // Incoming inter process communication 
@@ -1008,39 +1010,39 @@ if (isMainThread) {
                     cfgTemp.esp?.devices?.forIn((name, value) => {
                         if (!(name in cfg.esp.devices)) {
                             log("found new ESP: " + name);
-                            workerThreads.espAdd(value, name)
+                            workerThreads.esp.add(value, name)
                         } else if (value.ip !== cfg.esp.devices[name].ip
                             || value.key !== cfg.esp.devices[name].key
                             || value.logDisconnect !== cfg.esp.devices[name].logDisconnect) {
                             cfg.esp.devices[name] = value;
-                            workerThreads.espRemove(name);
-                            workerThreads.espAdd(value, name);
+                            workerThreads.esp.remove(name);
+                            workerThreads.esp.add(value, name);
                             log("found updated config for ESP: " + name);
                         }
                     })
                     cfg.esp.devices.forIn((name, value) => {
                         if (!(name in cfgTemp.esp.devices)) {
                             log("found orphaned ESP: " + name);
-                            workerThreads.espRemove(name);
+                            workerThreads.esp.remove(name);
                         }
                     })
 
                     if (cfg.esp.max_devices_per_thread !== cfgTemp.esp.max_devices_per_thread && cfgTemp.esp.enable) {
                         log("max devices per thread change - Restarting ESP");
-                        cfg.esp.devices.forIn((name) => { workerThreads.espRemove(name) });
+                        cfg.esp.devices.forIn((name) => { workerThreads.esp.remove(name) });
                         cfg.esp = cfgTemp.esp;
-                        setTimeout(() => { workerThreads.esp(); }, 1e3);
+                        setTimeout(() => { workerThreads.esp.init(); }, 1e3);
                     }
 
                     if (cfg.esp.enable && !cfgTemp.esp.enable) {
                         log("disabling ESP - killing all workers");
-                        cfg.esp.devices.forIn((name) => { workerThreads.espRemove(name) });
+                        cfg.esp.devices.forIn((name) => { workerThreads.esp.remove(name) });
                     }
                     if (!cfg.esp.enable && cfgTemp.esp.enable) {
                         if (cfg.esp?.devices && Object.keys(cfg.esp?.devices).length > 0) {
                             log("enabling ESP - starting workers");
                             cfg.esp = cfgTemp.esp;
-                            workerThreads.esp();
+                            workerThreads.esp.init();
                         }
                     }
                     cfg.esp = cfgTemp.esp;
@@ -1215,7 +1217,7 @@ if (isMainThread) {
                 break;
             case 2: services.telegram(); services.webserver(); boot(3); break;
             case 3:     // connect to ESP and Home Assistant
-                if (cfg.esp?.enable && cfg.esp?.devices && Object.keys(cfg.esp?.devices).length > 0) { workerThreads.esp() }
+                if (cfg.esp?.enable && cfg.esp?.devices && Object.keys(cfg.esp?.devices).length > 0) { workerThreads.esp.init() }
                 if (cfg.homeAssistant) { workerThreads.ha() }
                 setTimeout(() => { boot(4); }, 2e3);
                 break;
@@ -1420,19 +1422,21 @@ if (isMainThread) {
         //if (logs.step < 500) logs.step++; else logs.step = 0;
         if (cfg.rocket?.enable && level > 1) sendRocket(buf);
         if (cfg.telegram?.enable && state.telegram.started && cfg.telegram.users) {
-            if (level >= cfg.telegram.logLevel || level == 0 && cfg.telegram.logDebug == true) {
+            if (level >= cfg.telegram.logLevel) {
                 try {
                     for (let x = 0; x < cfg.telegram.users.length; x++) {
-                        if (cfg.telegram.logESPDisconnect == false && level < 10) {
-                            if (!message.includes("connection error, resetting...")
-                                && !message.includes("failed to connect, trying to reconnect...")) {
-
-                                bot.sendMessage(cfg.telegram.users[x], buf).catch(error => {
-                                    log("telegram sending error");
-
-                                })
-                            }
-                        } else bot.sendMessage(cfg.telegram.users[x], buf).catch(error => { log("telegram sending error"); })
+                        if (cfg.telegram.logESPDisconnect) {
+                            bot.sendMessage(cfg.telegram.users[x], buf).catch(error => {
+                                log("telegram sending error");
+                            })
+                        } else if (
+                            !message.includes("connection error, resetting...")
+                            && !message.includes("failed to connect, trying to reconnect...")
+                            && !message.includes("disconnected:")) {
+                            bot.sendMessage(cfg.telegram.users[x], buf).catch(error => {
+                                log("telegram sending error");
+                            })
+                        }
                     }
                 } catch (error) {
                     // console.log(error, "\nmessage: " + message + "  - Mod: " + mod) 
@@ -2031,13 +2035,11 @@ if (isMainThread) {
             }
             function api(config, address, state) {
                 ws[address].connect("ws://" + address + ":" + config.port + "/api/websocket");
-
                 ws[address].on('connectFailed', function (error) {
                     if (!state.error) {
                         setTimeout(() => { haReconnect(error.toString()); }, 5e3);
                     }
                 });
-
                 ws[address].on('connect', function (socket) {
                     log("Websocket (" + color("cyan", address) + ") - starting connection", 0);
                     state.reply = true;
@@ -2050,7 +2052,6 @@ if (isMainThread) {
                         }
                         socket.close();
                     });
-
                     socket.on('message', function (message) {
                         let buf = JSON.parse(message.utf8Data);
                         switch (buf.type) {
@@ -2065,7 +2066,7 @@ if (isMainThread) {
                                     log("websocket (" + color("cyan", address) + ") ping lag: " + timeResult + "ms", 2);
                                 break;
                             case "result":
-                                // console.log(buf)
+
                                 let count = 0;
                                 if (buf.id == state.query) {
                                     for (let x = 0; x < buf.result?.length; x++) {
@@ -2109,10 +2110,8 @@ if (isMainThread) {
                                             state.clientFetch = null;
                                         }
                                     }
-                                }
-
-                                if (buf.id == state.zha.query) {
-                                    state.zha.devices ||= {};
+                                } else if (buf.id == state.zha.query) {
+                                    state.zha.devices ??= {};
                                     if (Array.isArray(buf.result)) {
                                         buf.result.forEach(dev => {
                                             if (dev.user_given_name) {
@@ -2148,9 +2147,11 @@ if (isMainThread) {
                                             log("Websocket (" + color("cyan", address) + ") - still no ZHA devices - disabling");
                                         }
                                     } else if (buf.error?.code == 'unknown_error') {
-                                        log("Websocket (" + color("cyan", address)
-                                            + ") - ZHA not online yet - will retry", 2);
+                                        log("Websocket (" + color("cyan", address) + ") - ZHA not online yet - will retry", 2);
                                     }
+                                } else {
+                                    log("Websocket (" + color("cyan", address) + ") - unknown result: \n"
+                                        + JSON.stringify(buf, null, 2), 0);
                                 }
                                 break;
                             case "auth_required":
@@ -2200,15 +2201,20 @@ if (isMainThread) {
                                         else state.log.ws[state.logStep] = buf.event;
                                         if (state.logStep < 200) state.logStep++; else state.logStep = 0;
 
-                                        if (buf.event.data.new_state != null) ibuf = buf.event.data.new_state.state;
+                                        ibuf = buf.event.data?.new_state?.state ?? null;
                                         if (ibuf === "on") obuf = true;
                                         else if (ibuf === "off") obuf = false;
                                         else if (ibuf == null)
-                                            log(`Websocket (${color("cyan", address)}) - sent null/undefined data: ${ibuf}`, 2);
-                                        //  else if (ibuf === "unavailable")
-                                        //    log(`Websocket (${color("cyan", address)}) - Entity went unavailable: ${buf.event.data.new_state.entity_id}`, 2);
+                                            log(`Websocket (${color("cyan", address)}) - sent null/undefined state data: ${ibuf}`, 2);
+                                        else if (ibuf === "unavailable")
+                                            log(`Websocket (${color("cyan", address)}) - Entity went unavailable: ${buf.event.data.new_state.entity_id}`, 0);
                                         else if (!isNaN(ibuf) && isFinite(ibuf)) obuf = Number(ibuf);
-                                        else if (ibuf.length === 32) obuf = ibuf;
+                                        else if (ibuf.length === 32) obuf = ibuf; // for buttons?
+                                        else {
+                                            log(`Websocket (${color("cyan", address)}) - sent unrecognizable state data: ${ibuf}`
+                                                + " for entity: " + buf.event.data.entity_id, 0);
+                                            obuf = ibuf;
+                                        }
 
                                         if (obuf !== undefined) {
                                             let entity_id = buf.event.data.entity_id;
