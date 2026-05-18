@@ -979,27 +979,6 @@ if (isMainThread) {
                 log(data.msg, data.module, data.level); break;
         }
     }
-    function watcher(filePath, reloadCallback) {
-        log("creating watcher for: " + filePath);
-        if (fileWatchers[filePath]) {
-            fileWatchers[filePath].close();
-            delete fileWatchers[filePath];
-        }
-        const filesWatcher = fs.watch(filePath, (eventType, filename) => {
-            if (eventType === 'change') {
-                const timerKey = `timer_${filePath}`;
-                timer[timerKey] ||= null;
-                if (timer[timerKey]) clearTimeout(timer[timerKey]);
-                timer[timerKey] = setTimeout(() => {
-                    log("File change event detected. Reloading: " + filePath);
-                    reloadCallback(filePath);
-                    delete timer[timerKey];
-                    watcher(filePath, reloadCallback);
-                }, 200);
-            }
-        });
-        fileWatchers[filePath] = filesWatcher;
-    }
     function reloadConfig() {
         fs.readFile(`${workingDir}/config-core.json`, (err, data) => {
             if (err) { console.error("Error reading config-core.json:", err); return; }
@@ -1151,9 +1130,8 @@ if (isMainThread) {
         switch (step) {
             case 0:     // read config-core.json file
                 fs = require('fs');
-                exec = require('child_process').exec;
-                execSync = require('child_process').execSync;
-                workingDir = require('path').dirname(require.main.filename);
+                scriptName = require('path').basename(__filename).slice(0, -3);
+                workingDir = require('path').dirname(require.main.filename) + "/";
                 console.log("Loading config data...");
                 fs.readFile(workingDir + "/config-core.json", function (err, data) {
                     if (err) {
@@ -1239,26 +1217,33 @@ if (isMainThread) {
                                 })
                         });
                 }, 4e3);
-                watcher((workingDir + "/config-core.json"), reloadConfig);
+                file.watch((workingDir + "/config-core.json"), reloadConfig);
                 setTimeout(() => { log("TWIT Core is fully " + color("green", "ONLINE"), 0); }, 1e3);
                 break;
         }
     }
     function init() { // initialize system volatile memory
-        state = { client: {}, sync: {}, fetchLast: null };
+        state = { client: {}, sync: {}, fetchLast: null, telegram: { started: false } };
         entity = {};
         thread = { ha: {}, esp: [], telegram: null };
-        timer = { fileWrite: null, fileWriteLast: time.epoch };
+        timer = {
+            file: {
+                write: null,
+                writeLast: time.epoch,
+                watch: {}
+            },
+        };
         logs = { step: 0, sys: [], tg: [], tgStep: 0 };
-        fileWatchers = {};
-        state.telegram = { started: false };
+        fileWatcher = {};
     }
     function lib() {
-        util = require('util');
+        // util = require('util'); // for promisify
         // https = require("https");
         http = require("http");
         udpServer = require('dgram');
         udp = udpServer.createSocket('udp4');
+        exec = require('child_process').exec;
+        execSync = require('child_process').execSync;
         client = function (type, data, port) {
             udp.send(JSON.stringify({ type, data }), port);
         };
@@ -1277,12 +1262,12 @@ if (isMainThread) {
         file = {
             write: {
                 nv: function () {  // write non-volatile memory to the disk
-                    clearTimeout(timer.fileWrite);
-                    if (time.epoch - timer.fileWriteLast > 2) writeFile();
-                    else timer.fileWrite = setTimeout(() => { writeFile(); }, 2e3);
+                    clearTimeout(timer.file.write);
+                    if (time.epoch - timer.file.writeLast > 2) writeFile();
+                    else timer.file.write = setTimeout(() => { writeFile(); }, 2e3);
                     function writeFile() {
                         log("writing NV data...", 0, 0);
-                        timer.fileWriteLast = time.epoch;
+                        timer.file.writeLast = time.epoch;
                         fs.writeFile(workingDir + "/nv-core-bak.json", JSON.stringify(nv, null, 2), function () {
                             fs.copyFile(workingDir + "/nv-core-bak.json", workingDir + "/nv-core.json", (err) => {
                                 if (err) throw err;
@@ -1291,8 +1276,138 @@ if (isMainThread) {
                     }
                 }
             },
+            watch: function (filePath, reloadCallback) {
+                log("creating watcher for: " + filePath);
+                if (fileWatcher[filePath]) {
+                    fileWatcher[filePath].close();
+                    delete fileWatcher[filePath];
+                }
+                fileWatcher[filePath] = fs.watch(filePath, (eventType, filename) => {
+                    if (eventType === 'change') {
+                        timer.file.watch[filePath] ||= null;
+                        if (timer.file.watch[filePath]) clearTimeout(timer.file.watch[filePath]);
+                        timer.file.watch[filePath] = setTimeout(() => {
+                            log("File change event detected. Reloading: " + filePath);
+                            reloadCallback(filePath);
+                            delete timer.file.watch[filePath];
+                            file.watch(filePath, reloadCallback);
+                        }, 200);
+                    }
+                });
+            },
         };
-        arrayAdd = function (dest, source, id) { // additive array merge
+        deepMerge = (dest, source, idKey = null) => {
+            // 1. Safety check: if source isn't an object/array, it can't be merged
+            if (!source || typeof source !== 'object') return dest;
+
+            // 2. Handle Arrays
+            if (Array.isArray(source)) {
+                dest = Array.isArray(dest) ? dest : [];
+                for (const item of source) {
+                    // Skip empty values but keep 0 and false
+                    if (!item && item !== 0 && item !== false) continue;
+
+                    if (typeof item !== 'object') {
+                        // Primitive deduplication
+                        if (!dest.includes(item)) dest.push(item);
+                    } else if (idKey) {
+                        // Deduplicate objects by ID
+                        if (!dest.some(d => d && d[idKey] === item[idKey])) {
+                            dest.push(item);
+                        }
+                    } else {
+                        // Structural comparison fallback
+                        const sItem = JSON.stringify(item);
+                        if (!dest.some(d => JSON.stringify(d) === sItem)) {
+                            dest.push(item);
+                        }
+                    }
+                }
+                return dest;
+            }
+
+            // 3. Handle Objects
+            dest = (dest && typeof dest === 'object' && !Array.isArray(dest)) ? dest : {};
+            for (const key in source) {
+                const sVal = source[key];
+                const dVal = dest[key];
+
+                if (sVal && typeof sVal === 'object') {
+                    // Recurse into nested objects or arrays
+                    dest[key] = deepMerge(dVal, sVal, idKey);
+                } else {
+                    // Overwrite or add primitives (only if key doesn't exist to remain non-destructive)
+                    if (!(key in dest)) {
+                        dest[key] = sVal;
+                    }
+                }
+            }
+            return dest;
+        };
+        deepMergeWithLogs = (dest, source, idKey = null, path = "root") => {
+            if (!source || typeof source !== 'object') return dest;
+
+            // 1. Handle Arrays
+            if (Array.isArray(source)) {
+                if (!Array.isArray(dest)) {
+                    console.log(`[LOG] ${path}: Target is not an array. Initializing.`);
+                    dest = [];
+                }
+                for (const item of source) {
+                    if (!item && item !== 0 && item !== false) continue;
+
+                    if (typeof item !== 'object') {
+                        if (!dest.includes(item)) {
+                            console.log(`[LOG] ${path}: Adding unique value "${item}"`);
+                            dest.push(item);
+                        }
+                    } else if (idKey) {
+                        const match = dest.find(d => d && d[idKey] === item[idKey]);
+                        if (!match) {
+                            console.log(`[LOG] ${path}: Adding object with ${idKey}="${item[idKey]}"`);
+                            dest.push(item);
+                        } else {
+                            // Optional: Recurse into the matching object
+                            deepMergeWithLogs(match, item, idKey, `${path}[ID:${item[idKey]}]`);
+                        }
+                    } else {
+                        const sItem = JSON.stringify(item);
+                        if (!dest.some(d => JSON.stringify(d) === sItem)) {
+                            console.log(`[LOG] ${path}: Adding unique object (no ID)`);
+                            dest.push(item);
+                        }
+                    }
+                }
+                return dest;
+            }
+
+            // 2. Handle Objects
+            if (!dest || typeof dest !== 'object' || Array.isArray(dest)) {
+                console.log(`[LOG] ${path}: Target is not an object. Initializing.`);
+                dest = {};
+            }
+
+            for (const key in source) {
+                const sVal = source[key];
+                const dVal = dest[key];
+                const currentPath = `${path}.${key}`;
+
+                if (!(key in dest)) {
+                    console.log(`[LOG] ${currentPath}: Key missing in target. Adding value.`);
+                    dest[key] = sVal;
+                } else if (sVal && typeof sVal === 'object') {
+                    console.log(`[LOG] ${currentPath}: Entering deep merge for nested ${Array.isArray(sVal) ? 'Array' : 'Object'}`);
+                    dest[key] = deepMergeWithLogs(dVal, sVal, idKey, currentPath);
+                } else {
+                    // Skips overwriting primitives based on your objAdd logic
+                    console.log(`[LOG] ${currentPath}: Key already exists. Skipping.`);
+                }
+            }
+            return dest;
+        };
+        arrayAdd = function (dest, source, id) { // additive object array merge (with ID) or array merge 
+            // if ID is specified, this is the object key that will be check for existence 
+            // if ID is not specified, any difference in the object will cause the object to be duplicated 
             if (!Array.isArray(source) || source.length === 0) return;
             dest ||= [];
             for (const it of source) {
@@ -1305,8 +1420,7 @@ if (isMainThread) {
                 // object or array
                 if (id) {
                     // compare by a specific key (fast)
-                    const key = id;
-                    if (!dest.some(d => d && d[key] === it[key])) dest.push(it);
+                    if (!dest.some(d => d && d[id] === it[id])) dest.push(it);
                 } else {
                     // fallback: structural compare (works for arrays or objects)
                     const sIt = JSON.stringify(it);
@@ -1317,18 +1431,14 @@ if (isMainThread) {
             }
             return dest;
         };
-        objMerge = function (dest, source) { // object merge, potentially destructive if conflicting. good for top level merging  
+        objMerge = function (dest, source) { // object merge, adds new keys and nested objects, destructive for nested arrays    
             for (const key in source) {
-                if (
-                    source[key] &&
-                    typeof source[key] === 'object' &&
-                    !Array.isArray(source[key])
-                ) {
+                if (source[key] && typeof source[key] === 'object'
+                    && !Array.isArray(source[key])) {
                     dest[key] = dest[key] || {};
                     objMerge(dest[key], source[key]);
-                } else {
-                    dest[key] = source[key];
                 }
+                else dest[key] = source[key];
             }
         };
         objAdd = function (dest, source) {
@@ -1362,7 +1472,7 @@ if (isMainThread) {
                 return accumulator;
             }, {}); // Initialize the accumulator as an empty object {}
             return temp;
-        }
+        };
         sendRocket = function (text) {
             const postData = JSON.stringify({ channel: cfg.rocket.channel, text: text, });
             const options = {
