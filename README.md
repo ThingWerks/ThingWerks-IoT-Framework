@@ -35,7 +35,7 @@
 Follow these steps but no need to create an automation. 
 - download [core.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js), [config.jsson](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/confg.json)
   - add your Home Assistant servers configurations 
-- download [client.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client.js) and [auto.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js)
+- download [client.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/client.js), [auto.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto.js) and [twit.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/twit.js)
   - no need to create a custom automation script, just name the example automation like "sync" 
   - create a named array for each sync group under the entities.sync object:
   - like `"myFirstSyncGroup": ["input_boolean.test_switch", "input_boolean.test", "test-led", "test-local-sensor"],`
