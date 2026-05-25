@@ -966,11 +966,11 @@ if (isMainThread) {
                         }
                         client("fetchReply", null, data.port);
                         break;
-                    case "reset":
+                    case "client-reregister":
+                        let clientHaS = false;
                         state.client.forIn((name, value) => {
                             client("reRegister", null, value.port);
                         })
-
                         break;
                 }
                 break;
@@ -2159,6 +2159,7 @@ if (isMainThread) {
                         if (!state.error) {
                             log("websocket (" + color("cyan", address) + ") - " + error.toString(), 3);
                             state.error = true;
+                            state.errorZHA = true;
                         }
                         socket.close();
                     });
@@ -2176,7 +2177,6 @@ if (isMainThread) {
                                     log("websocket (" + color("cyan", address) + ") ping lag: " + timeResult + "ms", 2);
                                 break;
                             case "result":
-
                                 let count = 0;
                                 if (buf.id == state.query) {
                                     for (let x = 0; x < buf.result?.length; x++) {
@@ -2199,7 +2199,7 @@ if (isMainThread) {
                                         log("Websocket (" + color("cyan", address)
                                             + ") - HA back online - requesting reregistrations", 1);
                                         parentPort.postMessage({
-                                            type: "ha", class: "reset",
+                                            type: "ha", class: "client-reregister",
                                             address: address,
                                         });
                                         state.error = false;
@@ -2243,6 +2243,13 @@ if (isMainThread) {
                                             + ") - received ZHA device list, items: " + buf.result.length);
                                         clearTimeout(state.zha.queryReply);
                                         state.zha.noDevices = false;
+                                        if (state.errorZHA) {
+                                            parentPort.postMessage({
+                                                type: "ha", class: "client-reregister",
+                                                address: address,
+                                            });
+                                            state.errorZHA = false;
+                                        }
                                     } else if (buf.error?.code == 'unknown_command') {
                                         clearTimeout(state.zha.queryReply);
                                         if (!state.zha.noDevices) {
@@ -2255,9 +2262,11 @@ if (isMainThread) {
                                             }, 60e3);
                                         } else {
                                             log("Websocket (" + color("cyan", address) + ") - still no ZHA devices - disabling");
+
                                         }
                                     } else if (buf.error?.code == 'unknown_error') {
                                         log("Websocket (" + color("cyan", address) + ") - ZHA not online yet - will retry", 2);
+
                                     }
                                 } else {
                                     log("Websocket (" + color("cyan", address) + ") - unknown result: \n"
