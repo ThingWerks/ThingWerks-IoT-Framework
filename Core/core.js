@@ -95,14 +95,15 @@ if (isMainThread) {
 
                             ent.owner = { type: "telemetry", client: buf.name, auto: buf.auto };
 
-                            if (ent.state !== buf.data.state || (time.epochMil - ent.update) > 300000) {
+                            if (ent.state !== buf.data.state || (time.epochMil - ent.updateHA) > 300e3) {
                                 // log("telemetry - updating HA sensor: " + buf.data.name);
                                 ent.state = buf.data.state;
+                                ent.updateHA = time.epochMil;
                                 sendPacket("HA");
                             } else {
                                 // log("telemetry - NOT updating HA sensor: " + buf.data.name);
                             }
-
+                            ent.updateHA ||= time.epochMil;
                             ent.unit = buf.data.unit;
                             ent.update = time.epochMil;
                             ent.stamp = time.stamp;
@@ -191,7 +192,7 @@ if (isMainThread) {
                                 state.client[buf.name].entities?.subscribe?.forIn((name, value) => {
                                     if (!(name in buf.data?.entities?.subscribe)) {
                                         log("client - " + color("purple", buf.name) + " - found orphaned entity in core: " +
-                                            color("cyan", name) + " -  deleting", 3, 1);
+                                            color("cyan", name) + " -  removing this clients subscription", 3, 1);
                                         //com.deleteReg()
                                     }
                                 })
