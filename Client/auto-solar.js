@@ -1308,18 +1308,18 @@ module.exports = {
                                             } else {
                                                 if (Number.isFinite(batWatts))
                                                     watts.state = batWatts + sum;
-                                                send("watt_" + cfg.name, ((batWatts + sum) / 1000).toFixed(2), "kW");
+                                                send("watt_" + cfg.name, tool.round(((batWatts + sum) / 1000), 100), "kW");
                                             }
                                         } else {
                                             watts.state = ~~sum;
-                                            send("watt_" + cfg.name, (sum / 1000).toFixed(2), "kW");
+                                            send("watt_" + cfg.name, tool.round((sum / 1000), 100), "kW");
                                         }
                                     }
                                 } else if (cfg.sensorAmp != undefined && cfg.sensorVolt != undefined) { // for volt/amp calc
                                     let amps = entity[cfg.sensorAmp].state, volts = entity[cfg.sensorVolt]?.state;
                                     if (Number.isFinite(volts * amps)) watts.state = volts * amps;
                                     else (watts.state = 0.0);
-                                    send("watt_" + cfg.name, (watts.state / 1000).toFixed(2), "kW");
+                                    send("watt_" + cfg.name, tool.round((watts.state / 1000), 100), "kW");
                                 }
 
                                 if (Number.isFinite(watts.state) && Math.sign(watts.state) != -1)
@@ -1347,7 +1347,7 @@ module.exports = {
                                     }
 
                                     nv.sensor.watt[cfg.name].today += whFinal;
-                                    send("kwh_" + cfg.name + "_today", (nv.sensor.watt[cfg.name].today / 1000).toFixed(2), "kWh");
+                                    send("kwh_" + cfg.name + "_today", tool.round((nv.sensor.watt[cfg.name].today / 1000), 100), "kWh");
                                     // console.log("watts today:" + nv.sensor.watt[cfg.name].today)
 
                                     state.recorder.watt[cfg.name].wh = 0;
@@ -1624,11 +1624,11 @@ module.exports = {
                     for (let x = 0; x < obj.day.length; x++) last30Days += obj.day[x];
                     for (let x = 0; x < obj.month.length; x++) lastMonth += obj.month[x];
 
-                    send("kwh_" + name + "_total", Math.round((obj.total / 1000) * 10) / 10, "kWh");
-                    send("kwh_" + name + "_hour", Math.round((lastHour / 1000) * 100) / 100, "kWh");
-                    send("kwh_" + name + "_day", Math.round((lastDay / 1000) * 100) / 100, "kWh");
-                    send("kwh_" + name + "_30days", Math.round((last30Days / 1000) * 10) / 10, "kWh");
-                    send("kwh_" + name + "_12months", Math.round((last30Days / 1000)), "kWh");
+                    send("kwh_" + name + "_total", tool.round((obj.total / 1000), 10), "kWh");
+                    send("kwh_" + name + "_hour", tool.round((lastHour / 1000), 100), "kWh");
+                    send("kwh_" + name + "_day", tool.round((lastDay / 1000), 100), "kWh");
+                    send("kwh_" + name + "_30days", tool.round((last30Days / 1000), 10), "kWh");
+                    send("kwh_" + name + "_12months", ~~(last30Days / 1000), "kWh");
                 }
                 function timer() {    // called every minute
                     if (time.hour == 3 && time.min == 0) {
