@@ -10,22 +10,28 @@ module.exports = {
             send: (name, s, u, a) => com.core("state", { name, state: s, unit: u, address: a }, _name),
             tool: {
                 debounce: Object.assign((key, delay, callback) => {
-                    // console.log("checking debounce: " + key);
                     let registry, gate;
                     if (_name && global.state[_name]) {
                         registry = global.state[_name]._debounce ||= {};
                         gate = registry[key] ||= { active: false, start: 0 };
+
+                        const now = time.epoch;
+                        // Check if 'now' is 13 digits or longer (1 trillion or higher)
+                        const isMillis = now >= 1e12;
+
+                        // If system is using milliseconds, multiply seconds-delay by 1000
+                        const adjustedDelay = isMillis ? (delay * 1000) : delay;
+
                         if (!gate.active) {
-                            gate.start = time.epoch; // time.epoch
+                            gate.start = now;
                             gate.active = true;
-                        } else if (time.epoch - gate.start >= delay) {
+                        } else if (now - gate.start >= adjustedDelay) {
                             callback();
                             gate.active = false;
                         }
                     }
                 }, {
                     reset: (key) => {
-                        // console.log("resetting debounce: " + key);
                         if (global.state[_name]._debounce?.[key]) global.state[_name]._debounce[key].active = false;
                     }
                 }),
