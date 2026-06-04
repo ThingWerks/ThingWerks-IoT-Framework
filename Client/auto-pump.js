@@ -17,7 +17,7 @@ module.exports = { // exports added to clean up layout
                         let value = [nv.flow[flowName].total, entity[flowNameEntity].hour, entity[flowNameEntity].day
                             , entity[flowNameEntity].lm, nv.flow[flowName].today];
                         for (let y = 0; y < 5; y++)
-                            core_send(flowNameEntity + list[y], Number(value[y]).toFixed(((unit[y] == "m3") ? 2 : 0)), unit[y]);
+                            core_send(flowNameEntity + list[y], ((unit[y] == "m3") ? tool.round(value[y], 100) : ~~value[y]), unit[y]);
                     }
                     for (let x = 0; x < config.sensor.press.length; x++) {
                         let calc = { percent: [], sum: 0 },
@@ -48,14 +48,14 @@ module.exports = { // exports added to clean up layout
                         calc.percent[0] = stopPressure - calc.meters;
                         calc.percent[1] = calc.percent[0] / stopPressure;
                         calc.percent[2] = Math.round(100 - (calc.percent[1] * 100));
-                        entity[name].volts = Number(calc.average.toFixed(3));
-                        entity[name].psi = (calc.psi < 0.0) ? 0 : Number(calc.psi.toFixed(2));
-                        entity[name].meters = (calc.meters < 0.0) ? 0 : Number(calc.meters.toFixed(2));
+                        entity[name].volts = tool.round(calc.average, 100);
+                        entity[name].psi = (calc.psi < 0.0) ? 0 : tool.round(calc.psi, 10);
+                        entity[name].meters = (calc.meters < 0.0) ? 0 : tool.round(calc.meters, 10);
                         entity[name].percent = (calc.percent[2] < 0.0) ? 0 : calc.percent[2];
                         entity[name].update = time.epoch;
-                        core_send(name + "_percent", entity[name].percent.toFixed(0), '%');
-                        core_send(name + "_meters", entity[name].meters.toFixed(2), 'm');
-                        core_send(name + "_psi", entity[name].psi.toFixed(0), 'psi');
+                        core_send(name + "_percent", entity[name].percent, '%');
+                        core_send(name + "_meters", entity[name].meters, 'm');
+                        core_send(name + "_psi", ~~entity[name].psi, 'psi');
                         /*  
                       send("cdata", {
                           name: cfg.name,
