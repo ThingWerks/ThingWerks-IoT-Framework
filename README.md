@@ -166,10 +166,10 @@ SolarWerks is a solar power management and automation control system.
  - compact button layout uses "card-mod" plugin
  - multi dimensional graphing uses "apexcharts-card" plugin
  - GUI examples in [here](https://github.com/ThingWerks/ThingWerks-IoT-Framework/tree/main/GUI)
-<img width="300" height="2460" alt="Screenshot_20260102-145512" src="https://github.com/user-attachments/assets/8e4706fd-ce2b-4295-90dd-3d66c7e3b965" />
-<img width="300" height="2460" alt="Screenshot_20260102-145518" src="https://github.com/user-attachments/assets/01647f03-3c58-45e3-89a8-115cfaa60d42" />
-<img width="300" height="2460" alt="Screenshot_20260102-150250" src="https://github.com/user-attachments/assets/6ff3251c-9f30-453d-b3de-a710b1911ce0" />
-<img width="300" height="2460" alt="Screenshot_20260102-150256" src="https://github.com/user-attachments/assets/58a5cd4c-ee2c-40a2-a67b-91095e85023d" />
+<img src="https://github.com/user-attachments/assets/8e4706fd-ce2b-4295-90dd-3d66c7e3b965" width="300"/>
+<img src="https://github.com/user-attachments/assets/01647f03-3c58-45e3-89a8-115cfaa60d42" width="300"/>
+<img src="https://github.com/user-attachments/assets/6ff3251c-9f30-453d-b3de-a710b1911ce0" width="300"/>
+<img src="https://github.com/user-attachments/assets/58a5cd4c-ee2c-40a2-a67b-91095e85023d" width="300"/>
 <img src="https://github.com/user-attachments/assets/264c2f16-12da-41d9-bb0f-9260f0d84ce4" width="300">
 <img src="https://github.com/user-attachments/assets/0b80fde8-d1a7-4d58-98ca-a836f914912e" width="300">
 <img src="https://github.com/user-attachments/assets/d5f32293-0004-486a-8dee-9622bf420f2a" width="300">
