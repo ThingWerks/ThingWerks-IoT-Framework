@@ -16,7 +16,7 @@ TWIT has a straight forward programming structure that provides:
 - event/push factory function construction 
 - event/error logging and notification
 - read more in the [Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Programming-Guide.md)
-- example template [here](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.js)
+- example automation template [here](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.js)
 
 TWIT provides useful Helper Functions that reduce the code you have to write, such as: 
 - event debouncing 
