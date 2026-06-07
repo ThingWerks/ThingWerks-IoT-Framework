@@ -2,8 +2,19 @@
 
 # ThingWerks IoT Framework (TWIT)
 
-## Fastest way to get started
+## What is TWIT?
 
+TWIT is an extremely simple, low latency industrial automation framework. It is very reliable, sets up in a few minutes and has virtually no learning curve provided you already know JavaScript or NodeJS. 
+
+Quickly put together an event based automation system with powerful GUI.
+
+TWIT was designed from inception to allow for cross system integration and communication. For example solar power control systems that influence the operation of other systems like pump operations based on power availability. 
+
+TWIT removes all of the foundational and background effort normally required for a complete automation system. 
+
+Logging, system and device communication, notifications, state initialization and management, non-volatile memory and many other fundamental capabilities are ready to go allowing you to just focus on automation logic. 
+
+## Fastest way to get started
 
 - if you have a question or documentation is incomplete, just ask us. Open a new [Issue](https://github.com/ThingWerks/ThingWerks-IoT-Framework/issues)
 - download [core.js](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/core.js) and [config.jsson](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Core/confg.json) template. 
@@ -45,18 +56,7 @@ Follow these steps but no need to create an automation.
   - then start the TWIT Core: `sudo node core.js`
   - then start the TWIT Client: `sudo node /apps/twit/client-myCleitnName.js -n "testClient" -a /apps/twit/auto-test.js`
 
-## What you gain from TWIT
-TWIT is an extremely simple automation framework. It is very reliable, sets up in a few minutes and has virtually no learning curve provided you already know JavaScript or NodeJS. 
-
-Quickly put together an event based automation system with powerful GUI.
-
-TWIT was designed from inception to allow for cross system integration and communication. For example solar power control systems that influence the operation of other systems like pump operations based on power availability. 
-
-TWIT removes all of the foundational and background effort normally required for a complete automation system. 
-
-Logging, system and device communication, notifications, state initialization and management, non-volatile memory and many other fundamental capabilities are ready to go allowing you to just focus on automation logic. 
-
-## Further explanation 
+## What is TWIT - Further explanation 
 The TWIT project was created with the sole purpose of making a highly reliable, lightweight, low latency, standalone, general purpose industrial automation framework that integrates with PLCs, IoT devices and general purpose micro-controllers while using JavaScript for its automation logic. 
 
 TWIT from inception was designed so that two completely independent control systems could easily interact and influence each other. For example an isolated solar power system could initiate or throttle certain operations on another control system like PumperPro as based on available energy levels. For making tiered based or smart energy delivery and interactive control systems. TWIT does this easily because TWIT Clients can seamlessly interact with each other through the TWIT Core via a shared IoT device subscription or Local TWIT Entities and or both redundantly via a sync group. 
