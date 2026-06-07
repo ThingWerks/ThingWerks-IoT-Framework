@@ -4,13 +4,47 @@
 
 ## What is TWIT?
 
-TWIT is an extremely simple, low latency industrial automation framework. It is very reliable, sets up in a few minutes and has virtually no learning curve provided you already know JavaScript or NodeJS. 
+TWIT is an extremely simple, stand alone, low latency, event based industrial automation and development framework that allows you to get straight to business writing your own automations in Java Script. 
 
-Quickly put together an event based automation system with powerful GUI.
+TWIT Framework loads and manages your automations and has a straight forward template where you insert your Javascript.
+
+TWIT has a straight forward programming structure that provides:
+- automation state / volatile memory initialization  
+- saving and loading of non-volatile memory, with save flood prevention
+- automation script loading and hot update/reloading
+- automation configuration that is independent of its automation script  
+- event/push factory function construction 
+- event/error logging and notification
+- read more in the [Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Programming-Guide.md)
+- example template [here](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-example.js)
+
+TWIT provides useful Helper Functions that reduce the code you have to write, such as: 
+- event debouncing 
+- time comparison 
+- entity state updates 
+- float decimal rounding/truncation 
+- read more about Helper Functions in the [Programming Guide](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/HowTo/TWIT-Programming-Guide.md)
+
+Significant Features:
+- well below 100ms latency, though hardware dependant, potentially sub 10ms, consistent 
+- fully supports Home Assistant for its GUI as a control scheme 
+- can sync multiple physical and software entities via its SyncGroup feature
+  - can easily sync two or more Home Assistant server's entities
+  - can sync Home Assistant, ESP Home, Native TWIT and all other entities  
+- fully supports ESP Home but works with any IoT device
+- totally stand alone, can work directly with any physical or software control scheme 
+  - dump any API into a client automation and connect to any other software
+  - no dependency on Home Assistant 
+- inter automation connectivity and coordination 
+- powerful built in debugger and live memory dumping 
+- master at sensor data interpretation, manipulation and redirection 
+
+
+It is reliable, sets up in a few minutes and has virtually no learning curve provided you already know JavaScript or NodeJS. TWIT removes the huge effort needed to build a reliable automation system from scratch. 
+
+Quickly put together an event based automation system with Home Assistant's powerful GUI.
 
 TWIT was designed from inception to allow for cross system integration and communication. For example solar power control systems that influence the operation of other systems like pump operations based on power availability. 
-
-TWIT removes all of the foundational and background effort normally required for a complete automation system. 
 
 Logging, system and device communication, notifications, state initialization and management, non-volatile memory and many other fundamental capabilities are ready to go allowing you to just focus on automation logic. 
 
