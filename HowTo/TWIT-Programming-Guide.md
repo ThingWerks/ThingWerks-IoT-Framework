@@ -37,6 +37,7 @@ Follow the [auto-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framew
 - `time.epochMin`   - unix epoch time in minutes
 - `time.epochMil`   - unix epoch time in milliseconds
 - `time.stamp`      - current time in string format ie. 2025-10-16 11:07:18.560
+- `time.format`     - convert integer to time string ie. 37934 ---> 10h 32m 14s
 
 ### Command Reference
 - `write()`         - write NV data to hard disk
@@ -51,9 +52,9 @@ Follow the [auto-example.js](https://github.com/ThingWerks/ThingWerks-IoT-Framew
   - 0 debug, 1 event (default), 2 warning, 3 error
 
 ### Tool/Helper Functions
-- `debounce()`  - general debouncing (resolution 1 second)
-  - `debounce("debouncerName", delay, ()=>{ /* your callback here */ })`
-  - `debounce.reset("debouncerName")` - reset the debouncer
+- `tool.debounce()`  - general debouncing (resolution 1 second)
+  - `tool.debounce("debouncerName", delay, ()=>{ /* your callback here */ })`
+  - `tool.debounce.reset("debouncerName")` - reset the debouncer
 - `tool.round()` - round float to speccific decimal 
   - `tool.round(myFloat, 100)` - output ie 123.12 rounded to 100ths
 
