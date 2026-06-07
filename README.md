@@ -181,7 +181,7 @@ TWIT has mainly been developed to interact with IoT devices either by using the 
 
 ## Fully Developed TWIT Clients
 
-### SolarWerks
+### [SolarWerks](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-solar.js)
 SolarWerks is a solar power management and automation control system.
 #### Features
  - Power monitoring, blackout detection
@@ -193,7 +193,7 @@ SolarWerks is a solar power management and automation control system.
  - Temp monitoring and electrical room ventilation control 
  - Solar and battery based System and device automation priority control
 
-### PumperPro
+### [PumperPro](https://github.com/ThingWerks/ThingWerks-IoT-Framework/blob/main/Client/auto-pump.js)
 
 ## Example Industrial Systems
 
