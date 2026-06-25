@@ -19,12 +19,15 @@ module.exports = {
             "pzem-groogies_meter",
             "pzem-groogies_watts",
             "pzem-mamigo_meter",
+            "pzem-vacant_watts",
             "battery-current",
             "battery-voltage",
             "battery-voltage-raw",
             "solar-relay1-alvarez",
             "solar-relay2-daren",
+            "solar-relay4-charger",
             "solar-relay5-inverter-10kw",
+            "solar-relay7",
             "solar-relay8-sofing",
             "solar-ram-relay1-water",
             "solar-ram-relay2-house",
@@ -33,7 +36,6 @@ module.exports = {
             "pzem-ram-house_watts",
             "pzem-ram-house_meter",
             "sunlight"
-
         ],
     },
     config: {
@@ -79,39 +81,89 @@ module.exports = {
                 //  }
             },
             solar: {
-                inverterAuto: "input_boolean.auto_inverter",            // HA Toggle automation id
-                cycleError: 10,    // inverter minimum switch cycle time for before faulting
-                sunlight: "sunlight",            // sunlight sensor esp ID
+                inverterAuto: "input_boolean.auto_inverter",    // HA Toggle automation id
+                cycleError: 10,                                 // inverter minimum switch cycle time for before faulting
+                sunlight: "sunlight",                           // sunlight sensor esp ID
                 watts: {
-                    inverterPower: "inverter_1"    // local sensor - total inverter power - used for welder detection only (as of now)
+                    inverterPower: "inverter_1"                 // local sensor - total inverter power - used for welder detection only (as of now)
                 },
                 priority: {
                     entityAuto: "input_boolean.auto_priority",  // entity to enable/disable priority system
-                    entitySolar: "solar_power",                 // sensor entity for all solar energy 
+                    powerSolar: "solar_power",                 // sensor entity for all solar energy 
+                    powerInverter: "inverter_main",            // total inverter power
                     battery: "main",                            // battery entity used by priority system 
                     delaySwitchOn: 5,    // 60s time to observe changes in amps/sun before toggling priorities on
                     delaySwitchOff: 5,  // 30s time to observe changes in amps/sun before toggling priorities off
                     queue: [
                         {
-                            name: "Inverter 10kw",
+                            name: "Inverter 2&3",
                             enable: true,
                             entity: ["solar-relay5-inverter-10kw"],
                             entityAuto: null,       // entity to control this members activation
                             // inverter: 0          // optional - which inverter carries the load - if not specified, inverter 0 is used
                             on: {
                                 time: { hour: 5, min: 55 },
-                                timeVoltsMin: 54.0,
-                                // amps: 20.0,
+                                timeVoltsMin: 54.0, // minimum volts for turn on timer
+                                amps: 40.0,
                                 // sun: 0.5,
-                                // volts: 54.0,     // battery level to turn on system - in addition to sunlight if configured
+                                volts: 55.0,        // battery level to turn on system - in addition to sunlight if configured
                             },
                             off: {
-                                time: { hour: 21, min: 16 },
+                                time: { hour: 22, min: 35 },
                                 // sun: 2.35,       // sunlight level to deactivate this system - independent of battery level
                                 // amps: -15.0,
                                 // ampsFloat: -30.0,
-                                volts: 53.7,      // battery level to turn off system - independent of battery level
-                                // delay: 300,         // shutdown criteria hold time 
+                                volts: 52.2,        // battery level to turn off system - independent of battery level
+                                // delay: 300,      // shutdown criteria hold time 
+                            },
+                        },
+                        {
+                            name: "Alvarez",
+                            enable: true,
+                            entity: ["solar-relay1-alvarez"],
+                            on: {
+                                amps: 40.0,
+                                volts: 55.0,
+                            },
+                            off: {
+                                soc: 22,      // battery level to turn off system - independent of battery level
+                            },
+                        },
+                        {
+                            name: "Sofing",
+                            enable: true,
+                            entity: ["solar-relay8-sofing"],
+                            on: {
+                                amps: 60.0,
+                                volts: 55.4,
+                            },
+                            off: {
+                                soc: 25,      // battery level to turn off system - independent of battery level
+                            },
+                        },
+                        {
+                            name: "Panagiton",
+                            enable: true,
+                            entity: ["solar-relay7"],
+                            on: {
+                                amps: 60.0,
+                                volts: 55.6,
+
+
+                                // if stored enough power at 6po, turn on for the night  
+                                // {hour: 16, soc:65, charge: 30.0}
+
+                            },
+                            off: {
+                                soc: 32,      // battery level to turn off system - independent of battery level
+                                budget: [
+                                    { hour: 10, amps: -20 },
+                                    { hour: 11, amps: -20 },
+                                    { hour: 12, amps: -20 },
+                                    { hour: 13, amps: -20 },
+                                    { hour: 14, amps: -20 },
+                                    { hour: 15, amps: -20 },
+                                ]
                             },
                         },
                         {
@@ -121,7 +173,7 @@ module.exports = {
                             entity: ["solar-ram-relay1-water"],
                             required: ["solar-relay5-inverter-10kw"],
                             on: {
-                                 time: { hour: 6, min: 0 },
+                                time: { hour: 6, min: 0 },
                                 timeVoltsMin: 54.4,
                                 //  sun: 3.0,
                                 delay: 10,
@@ -150,6 +202,7 @@ module.exports = {
                                 amps: 90.0,
                                 ampsFloat: -160.0,
                                 delay: 5,
+                                floatOverride: true,
                                 budget: [ // hour, charge, discharge, solar, volts
                                     { hour: 6, volts: 54.0 },
                                     { hour: 7, solar: 0.5, volts: 54.3, amps: -120 },           // 0kw      0.65kw      55.2v
@@ -162,11 +215,11 @@ module.exports = {
                                     { hour: 14, solar: 55.0 },
                                     { hour: 15, solar: 60.0 },
                                     { hour: 16, solar: 65.0 },
-                                    { hour: 17, amps: -140, discharge: 10.0, },
-                                    { hour: 18, amps: -140, discharge: 14.0, },
-                                    { hour: 19, amps: -140, discharge: 16.0, },
-                                    { hour: 20, amps: -140, discharge: 20.0, },
-                                    { hour: 21, amps: -140, discharge: 22.0, },
+                                    { hour: 17, amps: -140, soc: 60, },
+                                    { hour: 18, amps: -140, soc: 60, },
+                                    { hour: 19, amps: -140, soc: 60, },
+                                    { hour: 20, amps: -140, soc: 60, },
+                                    { hour: 21, amps: -140, soc: 60, },
                                 ],
                             },
                         },
@@ -176,7 +229,7 @@ module.exports = {
             inverter: [
                 {
                     enable: true,
-                    name: "11kw",
+                    name: "Team 1",
                     entity: "input_boolean.inverter_1", // required - entity for indicating operational status
                     nightMode: {
                         enable: true,               // optional - this inverter runs at night
@@ -195,13 +248,11 @@ module.exports = {
                     transfer: {                     // required!!
                         switchOn: [                 // transfer switch on sequence
                             { entity: "solar-relay2-daren", state: true }, // transfer elements, state is to turn on (true), or off (false)
-                            { entity: "solar-relay1-alvarez", state: true },
-                            { entity: "solar-relay8-sofing", state: true },
+                            //  { entity: "solar-relay1-alvarez", state: true },
                         ],
                         switchOff: [                // transfer switch off sequence
                             { entity: "solar-relay2-daren", state: false }, // transfer elements, state is to turn on (true), or off (false)
-                            { entity: "solar-relay1-alvarez", state: false },
-                            { entity: "solar-relay8-sofing", state: false },
+                            //   { entity: "solar-relay1-alvarez", state: false },
                             // { id: 16, state: true, delay: 5 },     // delays the action for x seconds
                         ],
                     },
@@ -209,7 +260,7 @@ module.exports = {
                     delaySwitchOff: 30, //30
                     gridWatt: "grid_power",         // optional - esp ID for grid watt sensor - needed to switch back fromm gid (comparing power)
                     gridWattMultiplier: 1.2,        // multiple of charge power exceeding grid power needed to switch load to inverter
-                    inverterWatts: "inverter_11kw", // optional - used for transfer switch (back to inverter)
+                    inverterWatts: "inverter_main", // optional - used for transfer switch (back to inverter)
                     inverterWattsSwitch: false,     // experimental - switch on last switch off watts
                     // inverterVolts: 26,           // optional - AC output voltage, used to sense inverter output voltage fault
                     // blackout: true,              // optional - switch to inverter on blackout if voltage is less than (voltsRun)
@@ -253,21 +304,23 @@ module.exports = {
                         record: false               // do not record sensor to NV mem
                     },
                     {
-                        name: "inverter_11kw",         // all inverters
-                        entity: ["pzem-alvarez_watts", "pzem-daren_watts", "pzem-sofia_watts"],
+                        name: "inverter_main",         // all inverters
+                        entity: ["pzem-alvarez_watts", "pzem-daren_watts", "pzem-sofia_watts", "pzem-vacant_watts", "pzem-ram-water_watts", "pzem-ram-house_watts"],
                     },
+                    /*
                     {
                         name: "inverter_10kw",         // all inverters
-                        entity: ["pzem-ram-water_watts", "pzem-ram-house_watts"],
+                        entity: [],
                     },
                     {
                         name: "inverter_all",         // all inverters
-                        entity: ["inverter_11kw", "inverter_10kw"],
+                        entity: ["inverter_main", "inverter_10kw"],
                     },
+                    */
                     {
                         name: "solar_power",
                         solarPower: true,               // this is a solar power sensor
-                        entity: ["inverter_all"],         // the esp IDs for inverter amps
+                        entity: ["inverter_main"],         // the esp IDs for inverter amps
                         batteryWatt: ["battery_power"], // must have battery watt sensor for Solar Power Calc
                     },
                     {
@@ -370,14 +423,16 @@ module.exports = {
                     sensorWatt: "battery_power",    // used for recorder
                     sensorAmp: "battery_current_rs485",
                     sensorVolt: "battery_volts_twit",
+                    sensorSolar: "solar_power",
+                    voltsChargeCycle: 58.0,
                     voltsFullCharge: 58.0,
-                    voltsFloat: 58.4,
+                    voltsFloat: 58.1,
                     voltsFloatStop: 56.0,
                     ampsResetDischarge: 30.0,
-                    socTable: 1,
+                    socTable: "LFE-17S",
                 },
             ],
-            soc: [
+            soc: {
                 /*
                     62.0V to 62.1V	100%	Full Charge	Maximum charge voltage (under load)
                     57.8V	~100%	Resting full charge voltage	Resting after full charge
@@ -393,7 +448,7 @@ module.exports = {
                     48.5V	~10%		
                     46.0V	0%	Discharged	Minimum voltage to avoid damage
                 */
-                [
+                "LFE-16S": [
                     { voltage: 54.0, percent: 100 },
                     { voltage: 53.8, percent: 96 },
                     { voltage: 53.6, percent: 90 },
@@ -409,9 +464,9 @@ module.exports = {
                     { voltage: 44.8, percent: 5 },
                     { voltage: 40.0, percent: 0 }
                 ],
-                [
-                    { voltage: 58.5, percent: 105 },
-                    { voltage: 57.8, percent: 100 },
+                "LFE-17S": [
+                    { voltage: 58.2, percent: 105 },
+                    { voltage: 58.0, percent: 100 },
                     { voltage: 56.9, percent: 90 },
                     { voltage: 56.4, percent: 80 },
                     { voltage: 56.1, percent: 70 },
@@ -423,7 +478,7 @@ module.exports = {
                     { voltage: 51.0, percent: 10 },
                     { voltage: 42.5, percent: 0 }
                 ],
-                [
+                "FFE-8S": [
                     { voltage: 28.0, percent: 100 },
                     { voltage: 27.6, percent: 99.5 },
                     { voltage: 27.0, percent: 99 },
@@ -439,7 +494,7 @@ module.exports = {
                     { voltage: 24.0, percent: 10 },
                     { voltage: 20.0, percent: 0 }
                 ],
-            ],
+            },
         },
     }
 }
