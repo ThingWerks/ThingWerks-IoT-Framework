@@ -8,91 +8,89 @@ module.exports = {
                 let solar = {
                     auto: function () { // check sequence director
                         ({ state, config, nv } = twit(_name));
-                        for (let x = 0; x < config.inverter.length; x++) solar.init(x);
-                        for (let x = config.inverter.length - 1; x > -1; x--) solar.off(x);
-                        for (let x = 0; x < config.inverter.length; x++) solar.on(x);
+                        for (let x = 0; x < config.inverter.length; x++) if (config.inverter[x].enable) solar.init(x);
+                        for (let x = config.inverter.length - 1; x > -1; x--) if (config.inverter[x].enable) solar.off(x);
+                        for (let x = 0; x < config.inverter.length; x++) if (config.inverter[x].enable) solar.on(x);
                     },
                     init: function (x) {
-                        if (config.inverter[x].enable == true) {
-                            let { voltsBat, cfg, inverter, inverterVolts } = solar.pointers(x) || undefined;
-                            if (cfg.voltsStop == undefined) {
-                                log("inverter: " + cfg.name + " - config error, you must configure 'voltsStop' - Inverter auto is going offline", 3);
-                                config.inverter[x].enable = false;
-                                solar.power(x, false, true);
-                                send(config.solar.inverterAuto, false);
-                            }
-                            if (inverter.state == null || inverter.boot == false) {
-                                if (config.inverter[x].entity != undefined) {
-                                    log("inverter: " + config.inverter[x].name + " - syncing operation entity - state: " + entity[config.inverter[x].entity]?.state);
-                                    if (entity[cfg.transfer.switchOn[0].entity] != null) {
-                                        if (entity[config.inverter[x].entity].state == true) {
-                                            if (entity[cfg.transfer.switchOn[0].entity].state != cfg.transfer.switchOn[0].state) {
-                                                log("inverter: " + config.inverter[x].name + " - primary ATS state OFF (" + entity[cfg.transfer.switchOn[0].entity]?.state
-                                                    + ") is not expected - HA says its ON", 2);
-                                                solar.power(x, true);
-                                                // inverter.state = true;
-                                            } else inverter.state = true;
-                                        } else {
-                                            if (entity[cfg.transfer.switchOff[0].entity].state != cfg.transfer.switchOff[0].state) {
-                                                log("inverter: " + config.inverter[x].name + " - primary ATS state ON (" + entity[cfg.transfer.switchOff[0].entity]?.state
-                                                    + ") is not expected - HA says its OFF", 2);
-                                                inverter.state = false;
-                                            } else inverter.state = false;
-                                        }
+                        let { voltsBat, cfg, inverter, inverterVolts } = solar.pointers(x) || undefined;
+                        if (cfg.voltsStop == undefined) {
+                            log("inverter: " + cfg.name + " - config error, you must configure 'voltsStop' - Inverter auto is going offline", 3);
+                            config.inverter[x].enable = false;
+                            solar.power(x, false, true);
+                            send(config.solar.inverterAuto, false);
+                        }
+                        if (inverter.state == null || inverter.boot == false) {
+                            if (config.inverter[x].entity != undefined) {
+                                log("inverter: " + config.inverter[x].name + " - syncing operation entity - state: " + entity[config.inverter[x].entity]?.state);
+                                if (entity[cfg.transfer.switchOn[0].entity] != null) {
+                                    if (entity[config.inverter[x].entity].state == true) {
+                                        if (entity[cfg.transfer.switchOn[0].entity].state != cfg.transfer.switchOn[0].state) {
+                                            log("inverter: " + config.inverter[x].name + " - primary ATS state OFF (" + entity[cfg.transfer.switchOn[0].entity]?.state
+                                                + ") is not expected - HA says its ON", 2);
+                                            solar.power(x, true);
+                                            // inverter.state = true;
+                                        } else inverter.state = true;
                                     } else {
-                                        log("inverter: " + cfg.name + " - operational entity is offline or unavailable - inverter auto is going offline", 3);
-                                        solar.power(x, false, true);
-                                        send(config.solar.inverterAuto, false);
+                                        if (entity[cfg.transfer.switchOff[0].entity].state != cfg.transfer.switchOff[0].state) {
+                                            log("inverter: " + config.inverter[x].name + " - primary ATS state ON (" + entity[cfg.transfer.switchOff[0].entity]?.state
+                                                + ") is not expected - HA says its OFF", 2);
+                                            inverter.state = false;
+                                        } else inverter.state = false;
                                     }
                                 } else {
-                                    log("inverter: " + cfg.name + " - config error, you must config inverter operation entity - Inverter auto is going offline", 3);
-                                    solar.power(x, false, true);
-                                    send(config.solar.inverterAuto, false);
-                                }
-                                //solar.nightMode(x);
-                                inverter.delayStep = false;
-                                inverter.delayVoltsStep = false;
-                                inverter.delayFaultStep = false;
-                                inverter.delayStepSun = false;
-                                inverter.delayTimer = time.epoch;
-                                inverter.delayTimerSun = time.epoch;
-                                inverter.stepPower = time.epoch - 20;
-                                inverter.step = time.epoch - 20;
-                                if (inverter.state == false) {
-                                    if (cfg.power.startAuto == true) {
-                                        if (voltsBat > cfg.voltsStop) {
-                                            log("inverter: " + cfg.name + " - first start, volts (" + voltsBat + ") is greater than stop volts (" + cfg.voltsStop + "), good to run");
-                                            solar.power(x, true);
-                                        }
-                                    } else if (nv.battery[cfg.battery].floating == true) {
-                                        log("inverter: " + cfg.name + " - first start, battery is floating, good to run");
-                                        solar.power(x, true);
-                                    }
-                                }
-                                inverter.boot = true;
-                            } else {
-                                if (entity[cfg.transfer.switchOn[0].entity] == null) {
                                     log("inverter: " + cfg.name + " - operational entity is offline or unavailable - inverter auto is going offline", 3);
                                     solar.power(x, false, true);
                                     send(config.solar.inverterAuto, false);
                                 }
-                                if (inverter.state == "faulted") {
-                                    if (inverterVolts <= cfg.voltsFloatStop) {
-                                        log("inverter: " + cfg.name + " - inverter was faulted but now resetting because charger is no longer floating", 2);
-                                        inverter.state = false;
+                            } else {
+                                log("inverter: " + cfg.name + " - config error, you must config inverter operation entity - Inverter auto is going offline", 3);
+                                solar.power(x, false, true);
+                                send(config.solar.inverterAuto, false);
+                            }
+                            //solar.nightMode(x);
+                            inverter.delayStep = false;
+                            inverter.delayVoltsStep = false;
+                            inverter.delayFaultStep = false;
+                            inverter.delayStepSun = false;
+                            inverter.delayTimer = time.epoch;
+                            inverter.delayTimerSun = time.epoch;
+                            inverter.stepPower = time.epoch - 20;
+                            inverter.step = time.epoch - 20;
+                            if (inverter.state == false) {
+                                if (cfg.power.startAuto == true) {
+                                    if (voltsBat > cfg.voltsStop) {
+                                        log("inverter: " + cfg.name + " - first start, volts (" + voltsBat + ") is greater than stop volts (" + cfg.voltsStop + "), good to run");
+                                        solar.power(x, true);
                                     }
-                                    if (config.solar.watts.inverterPower != undefined
-                                        && entity[config.solar.watts.inverterPower].state >= cfg.welderWatts) {
-                                        log("inverter: " + cfg.name + " - inverter was faulted but now resetting because welding is detected", 2);
-                                        inverter.state = false;
-                                    }
+                                } else if (nv.battery[cfg.battery].floating == true) {
+                                    log("inverter: " + cfg.name + " - first start, battery is floating, good to run");
+                                    solar.power(x, true);
+                                }
+                            }
+                            inverter.boot = true;
+                        } else {
+                            if (entity[cfg.transfer.switchOn[0].entity] == null) {
+                                log("inverter: " + cfg.name + " - operational entity is offline or unavailable - inverter auto is going offline", 3);
+                                solar.power(x, false, true);
+                                send(config.solar.inverterAuto, false);
+                            }
+                            if (inverter.state == "faulted") {
+                                if (inverterVolts <= cfg.voltsFloatStop) {
+                                    log("inverter: " + cfg.name + " - inverter was faulted but now resetting because charger is no longer floating", 2);
+                                    inverter.state = false;
+                                }
+                                if (config.solar.watts.inverterPower != undefined
+                                    && entity[config.solar.watts.inverterPower].state >= cfg.welderWatts) {
+                                    log("inverter: " + cfg.name + " - inverter was faulted but now resetting because welding is detected", 2);
+                                    inverter.state = false;
                                 }
                             }
                         }
                     },
                     on: function (x) {  // when inverter is running
                         let { voltsBat, inverterVolts, ampsBat, sun, inverterWatts, cfg, inverter } = solar.pointers(x);
-                        if (config.inverter[x].enable == true && inverter.state != "faulted" && inverter.state == true) {
+                        if (inverter.state != "faulted" && inverter.state == true) {
                             if (solar.nightMode(x) == true) {
                                 if (voltsBat < cfg.nightMode.startVoltageMin) {
                                     log("inverter: " + cfg.name + " - Battery is too low to make it through the night: "
@@ -194,31 +192,28 @@ module.exports = {
                                 }, 500e3);
                             }
                         }
-
                     },
                     off: function (x) { // when inverter is stopped
-                        if (config.inverter[x].enable == true) {
-                            let { voltsBat, inverterVolts, battery, cfg, inverter } = solar.pointers(x);
-                            //   console.log(inverter.state)
-                            if (battery.sensorVolt != undefined) {
-                                if (inverter.state != "faulted" && inverter.state === false) {
-                                    solar.changing(x, true);
-                                    // console.log("checking...")
-                                    if (solar.nightMode(x) == true) {
-                                        if (voltsBat >= cfg.nightMode.startVoltageMin) {
-                                            log("Battery is enough to make it through the night: " + voltsBat + ", " + cfg.name + " switching on");
-                                            solar.power(x, true);
-                                        } else log("Battery is too low to make it through the night: " + voltsBat + ", " + cfg.name + " staying off");
-                                    }
-                                    if (cfg.blackout == true && state.grid.state == false && voltsBat >= cfg.blackoutVoltMin) {
-                                        log("Blackout detected, volts is enough to run: " + voltsBat + ", " + cfg.name + " switching on", 2);
+                        let { voltsBat, inverterVolts, battery, cfg, inverter } = solar.pointers(x);
+                        //   console.log(inverter.state)
+                        if (battery.sensorVolt != undefined) {
+                            if (inverter.state != "faulted" && inverter.state === false) {
+                                solar.changing(x, true);
+                                // console.log("checking...")
+                                if (solar.nightMode(x) == true) {
+                                    if (voltsBat >= cfg.nightMode.startVoltageMin) {
+                                        log("Battery is enough to make it through the night: " + voltsBat + ", " + cfg.name + " switching on");
                                         solar.power(x, true);
-                                    }
-                                    if (cfg.power.entity != undefined && entity[cfg.power.entity].state == false && inverter.delayOffTimer == null
-                                        && time.epoch - inverter.timeShutdown > 10 && inverter.warn.manualPowerOn == false && inverterVolts > 20.0) {
-                                        log("inverter: " + cfg.name + " is still on but should be off - manual power on??", 2);
-                                        inverter.warn.manualPowerOn = true;
-                                    }
+                                    } else log("Battery is too low to make it through the night: " + voltsBat + ", " + cfg.name + " staying off");
+                                }
+                                if (cfg.blackout == true && state.grid.state == false && voltsBat >= cfg.blackoutVoltMin) {
+                                    log("Blackout detected, volts is enough to run: " + voltsBat + ", " + cfg.name + " switching on", 2);
+                                    solar.power(x, true);
+                                }
+                                if (cfg.power.entity != undefined && entity[cfg.power.entity].state == false && inverter.delayOffTimer == null
+                                    && time.epoch - inverter.timeShutdown > 10 && inverter.warn.manualPowerOn == false && inverterVolts > 20.0) {
+                                    log("inverter: " + cfg.name + " is still on but should be off - manual power on??", 2);
+                                    inverter.warn.manualPowerOn = true;
                                 }
                             }
                         }
@@ -239,7 +234,7 @@ module.exports = {
                             if (cfg.gridWatt != undefined) {
                                 // console.log("checking watts for: " + x + "  gridWatts: " + gridWatts, " wattsSolar: " + wattsSolar)
                                 if (wattsSolar > (gridWatts * cfg.gridWattMultiplier)) {
-                                    trigger(power, "charge current is higher than grid power: " + wattsSolar + "w  " + voltsBat + "v, switching on");
+                                    trigger(power, "charge current is higher than grid power: " + ~~wattsSolar + "w  " + voltsBat + "v, switching on");
                                 }
                                 if (wattsSolar <= (gridWatts * cfg.gridWattMultiplier)) { inverter.delayStep = false; }
                             } else if (cfg.inverterWattsSwitch && inverter.switchWatts) {
@@ -423,14 +418,19 @@ module.exports = {
                                 } else ampsBat = tool.round(entity[battery.sensorAmp].state, 10);
                             }
                             if (battery.sensorWatt != undefined)
-                                wattsSolar = tool.round(entity[battery.sensorWatt].state, 1000);
+                                wattsSolar = entity[battery.sensorWatt].state;
                         }
                         if (cfg.gridWatt != undefined)
-                            gridWatts = tool.round(entity[cfg.gridWatt].state, 1000);
+                            gridWatts = entity[cfg.gridWatt].state;
                         if (cfg.inverterVolts != undefined)
                             inverterVolts = ~~parseFloat(entity[cfg.inverterVolts].state);
-                        if (cfg.inverterWatts != undefined)
+                        if (cfg.inverterWatts != undefined) {
+                            if (entity[cfg.inverterWatts] == null) {
+                                log("inverter: " + cfg.name + " - you've specified an inverter/sensor that does not exists - check your configs");
+                                process.exit();
+                            }
                             inverterWatts = tool.round(entity[cfg.inverterWatts].state, 1000);
+                        }
                         if (config.solar.sunlight != undefined)
                             sun = tool.round(entity[config.solar.sunlight].state, 100);
                         return { voltsBat, inverterVolts, ampsBat, sun, inverterWatts, gridWatts, wattsSolar, battery, cfg, inverter: state.inverter[x] };
@@ -449,8 +449,7 @@ module.exports = {
                     },
                     onState: { // when the member is on
                         init: function (x) {
-                            let { battery, volts, amps, sun } = priority.pointers(x);
-                            let member = state.priority.queue[x]; member.config = config.solar.priority.queue[x];
+                            let { battery, volts, amps, sun, member } = priority.pointers(x);
 
                             /*
                             if (member.state == null) {
@@ -463,11 +462,15 @@ module.exports = {
                             if (member.state == true) {
                                 //  console.log("checking x:" + x + " amps: " + amps);
                                 if (member.config.enable == true) {
-                                    if (member.config.off.volts != undefined) {
-                                        if (volts <= member.config.offVolts) {
-                                            priority.trigger(x, "battery voltage is low (" + volts + "v) - stopping ", false);
-                                            return;
-                                        }
+
+                                    if (volts <= member.config.off.volts) {
+                                        priority.trigger(x, "battery voltage is low (" + volts + "v) - stopping ", false);
+                                        return;
+                                    }
+
+                                    if (battery.soc <= member.config.off.soc) {
+                                        priority.trigger(x, "battery SoC is low (" + battery.soc + "%) - stopping ", false);
+                                        return;
                                     }
 
                                     if (member.config.off.time?.hour == time.hour && member.config.off.time?.min == time.min) {
@@ -475,62 +478,18 @@ module.exports = {
                                         priority.send(x, false);
                                     }
 
-                                    if (member.config.off.budget) priority.onState.budget(x);
+                                    if (member.config.off.budget != null) priority.onState.budget(x);
                                     else priority.onState.conditions(x);
                                 }
                             }
 
                         },
-                        budget_old: function (x) {
-                            let { battery, volts, amps, sun } = priority.pointers(x);
-                            let member = state.priority.queue[x]; member.config = config.solar.priority.queue[x];
-                            let discharge = battery.discharge.today / 1000.0;
-                            let charge = battery.charge.today / 1000.0;
-                            let solar = nv.sensor.watt[config.solar.priority.entitySolar].today / 1000.0;
-                            let budgetHour = false;
-                            for (let budget of member.config.off.budget) {
-                                if (time.hour == (budget.hour)) {
-                                    budgetHour = true;
-                                    //   if (member.config.name == "Ram-Water ATS")
-                                    //    console.log("further processing hour: "+ budget.hour)
-                                    // this is useless until discharge counter resets in the morning 
-                                    if (budget.discharge && discharge > budget.discharge) { triggerBudget("discharge budget exceeded"); break; }
-                                    if (budget.charge && charge < budget.charge) { triggerBudget("insufficient charging"); break; }
-                                    if (budget.solar && solar < budget.solar) { triggerBudget("insufficient solar harvest"); break; }
-                                    if (budget.volts && volts < budget.volts) { triggerBudget("low battery voltage"); break; }
-                                    if (budget.amps && amps < budget.amps) { triggerBudget("high discharge amps"); break; }
-                                    // abort further processing if within budget
-                                    member.delayStep = false;
-                                    tool.debounce.reset(member.config.name + "_priority_budget");
-                                    return;
-                                } else continue;
-                                function triggerBudget(msg) {
-                                    tool.debounce(member.config.name + "_priority_budget", (member.config.off.delay != null
-                                        ? member.config.off.delay : config.solar.priority.delaySwitchOff), () => {
-                                            log(member.config.name + " - " + msg + " - hour: " + budget.hour
-                                                + (budget.volts != null ? " - minVolts: " + budget.volts : "") + " volts: " + volts
-                                                + (budget.amps != null ? " - minAmps: " + budget.amps : "") + " amps: " + amps + "\n"
-                                                + (budget.solar != null ? " - minSolar: " + budget.solar : "") + " solar: " + solar.toFixed(1)
-                                                + (budget.charge != null ? " - minCharge: " + budget.charge : "") + " charge: " + charge.toFixed(1)
-                                                + (budget.discharge != null ? " - maxDischarge: " + budget.discharge : "") + " discharge : " + discharge.toFixed(1));
-                                            if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch;
-                                            tool.debounce.reset(member.config.name + "_priority_budget");
-                                            priority.send(x, false);
-                                            return true;
-                                        }
-                                    )
-                                }
-                            }
-                            if (!budgetHour) priority.onState.conditions(x);
-                        },
                         budget: function (x) {
-                            let { battery, volts, amps, sun } = priority.pointers(x);
-                            let member = state.priority.queue[x];
-                            member.config = config.solar.priority.queue[x];
+                            let { battery, volts, amps, sun, member } = priority.pointers(x);
 
                             let discharge = battery.discharge.today / 1000.0;
                             let charge = battery.charge.today / 1000.0;
-                            let solar = nv.sensor.watt[config.solar.priority.entitySolar].today / 1000.0;
+                            let solar = nv.sensor.watt[config.solar.priority.powerSolar].today / 1000.0;
 
                             let budgetList = member.config.off.budget;
                             let currentIndex = budgetList.findIndex(b => b.hour === time.hour);
@@ -564,6 +523,7 @@ module.exports = {
                             // Interpolated Targets
                             let targetSolar = getTarget('solar');
                             let targetVolts = getTarget('volts');
+                            let targetSOC = getTarget('soc');
                             let targetCharge = getTarget('charge');
                             let targetDischarge = getTarget('discharge');
 
@@ -571,64 +531,68 @@ module.exports = {
                             let targetAmps = currentB.amps;
 
                             let msg = "";
-                            if (targetDischarge != null && discharge > targetDischarge) msg = "max discharge exceeded";
+                            if (targetVolts != null && volts < targetVolts) msg = "low battery voltage";
+                            else if (targetSOC != null && battery.soc < targetSOC) msg = "low battery SoC";
+                            else if (targetAmps != null && amps < targetAmps) msg = "high discharge amps";
+                            else if (targetAmps != null && Number.isInteger(amps) && amps >= targetAmps) return;
+                            // else if (member.config.floatOverride && battery.chargeFull) { }
+
+                            else if (targetDischarge != null && discharge > targetDischarge) msg = "max discharge exceeded";
+
                             else if (targetCharge != null && charge < targetCharge) msg = "insufficient charging";
                             else if (targetSolar != null && solar < targetSolar) msg = "insufficient solar harvest";
-                            else if (targetVolts != null && volts < targetVolts) msg = "low battery voltage";
-                            else if (targetAmps != null && amps < targetAmps) msg = "high discharge amps";
 
                             if (msg !== "") {
                                 // Trigger Budget (Off)
-                                tool.debounce(member.config.name + "_priority_budget",
+                                tool.debounce("priority_budget_" + member.config.name,
                                     (member.config.off.delay != null ? member.config.off.delay : config.solar.priority.delaySwitchOff),
                                     () => {
                                         log(member.config.name + " - " + msg + " - hour: " + time.hour + ":" + time.min + " (Coef: " + progress.toFixed(2) + ")\n"
                                             + (targetVolts != null ? " - targetVolts: " + targetVolts.toFixed(2) : "") + " volts: " + volts + "\n"
+                                            + (targetSOC != null ? " - targetSoC: " + targetSOC.toFixed(0) : "") + " SoC: " + battery.soc + "%\n"
                                             + (targetAmps != null ? " - targetAmps: " + targetAmps : "") + " amps: " + amps + "\n"
                                             + (targetSolar != null ? " - targetSolar: " + targetSolar.toFixed(2) : "") + " solar: " + solar.toFixed(1) + "\n"
                                             + (targetCharge != null ? " - targetCharge: " + targetCharge.toFixed(2) : "") + " charge: " + charge.toFixed(1) + "\n"
                                             + (targetDischarge != null ? " - targetDischarge: " + targetDischarge.toFixed(2) : "") + " discharge: " + discharge.toFixed(1));
 
                                         if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch;
-                                        tool.debounce.reset(member.config.name + "_priority_budget");
+                                        tool.debounce.reset("priority_budget_" + member.config.name);
                                         priority.send(x, false);
                                         return true;
                                     }
                                 );
                             } else {
                                 // Within budget - clear debounce and exit
-                                member.delayStep = false;
-                                tool.debounce.reset(member.config.name + "_priority_budget");
+                                tool.debounce.reset("priority_trigger_" + member.config.name);
+                                tool.debounce.reset("priority_budget_" + member.config.name);
                             }
                         },
                         conditions(x) {
-                            let { battery, volts, amps, sun } = priority.pointers(x);
-                            let member = state.priority.queue[x]; member.config = config.solar.priority.queue[x];
+                            let { battery, volts, amps, sun, member } = priority.pointers(x);
 
-                            if (member.config.off.budget) tool.debounce.reset(member.config.name + "_priority_budget");
+                            if (member.config.off.budget) tool.debounce.reset("priority_budget_" + member.config.name);
                             if (sun != undefined && member.config.off.sun != undefined) {
                                 if (sun <= member.config.off.sun) {
                                     priority.trigger(x, "sun is low (" + sun + "v) - stopping ", false);
                                     return;
-                                } else member.delayStep = false;
+                                } else tool.debounce.reset("priority_trigger_" + member.config.name);
                             } else if (member.config.off.amps != undefined) {
-                                if (volts < member.config.voltsFloat || nv.battery[config.solar.priority.battery].floating == true) {
+                                if (nv.battery[config.solar.priority.battery].floating == true) {
                                     //  console.log("volts: " + volts + " voltsFloat: " + member.config.voltsFloat)
                                     if (amps <= member.config.off.amps) {
                                         priority.trigger(x, "charge amps is too low (" + amps + "a) - stopping ", false);
                                         return;
-                                    } else member.delayStep = false;
+                                    } else tool.debounce.reset("priority_trigger_" + member.config.name);
                                 } else if (amps <= member.config.off.ampsFloat) {
                                     priority.trigger(x, "(floating) discharge amps is high (" + amps + "a) - stopping ", false);
                                     return;
-                                } else member.delayStep = false;
-                            } else member.delayStep = false;
+                                } else tool.debounce.reset("priority_trigger_" + member.config.name);
+                            } else tool.debounce.reset("priority_trigger_" + member.config.name);
                         },
                     },
                     offState: { // when the member is off
                         init: function (x) {
-                            let { battery, volts, amps, sun } = priority.pointers(x);
-                            let member = state.priority.queue[x]; member.config = config.solar.priority.queue[x];
+                            let { battery, volts, amps, sun, member } = priority.pointers(x);
                             let required = true;
 
                             if (member.config.entityAuto == undefined
@@ -638,8 +602,11 @@ module.exports = {
                                     if (member.config.enable == true) {
                                         if (member.config.required != null) {
                                             for (const element of member.config.required) {
-                                                if (!entity[element].state) {
-                                                    log("priority queue - " + member.config.name + " - required member not active");
+                                                if (!entity[element]?.state) {
+                                                    if (!member.warn.requiredEntity)
+                                                        log("priority queue OFF init - " + member.config.name + " - required entity offline: "
+                                                            + member.config.required + " - halting", 2);
+                                                    member.warn.requiredEntity = true;
                                                     return;
                                                 }
                                             }
@@ -655,8 +622,10 @@ module.exports = {
                                             if (member.config.on.timeVoltsMin && volts >= member.config.on.timeVoltsMin) {
                                                 log("priority queue - " + member.config.name + " - start time reached - volts: " + volts);
                                                 priority.send(x, true);
-                                            } else {
-                                                log("priority queue - " + member.config.name + " - start time reached - but voltage is too low - " + volts + "v");
+                                            } else if (!member.warn.timeVoltsMin) {
+                                                log("priority queue - " + member.config.name + " - start time reached - but voltage is too low - " + volts + "v"
+                                                    + " - required: " + member.config.on.timeVoltsMin + "v", 2);
+                                                member.warn.timeVoltsMin = true;
                                                 return;
                                             }
                                         }
@@ -665,15 +634,16 @@ module.exports = {
                             }
 
                             function checkVolts() {
+                                // console.log("soc: " + battery.soc)
                                 if (member.config.on.volts != undefined) {
                                     if (volts >= member.config.on.volts) {
                                         conditions();
-                                    } else member.delayStep = false;
+                                    } else tool.debounce.reset("priority_trigger_" + member.config.name);
                                 } else conditions()
                             }
 
                             function conditions() {
-                                if (member.config.on.budget) {
+                                if (member.config.on.budget != null) {
                                     if (member.config.on?.time?.hour) {
                                         if (time.hour < member.config.on?.time?.hour
                                             || time.hour == member.config.on?.time?.hour
@@ -682,73 +652,12 @@ module.exports = {
                                 } else priority.offState.conditions(x);
                             }
                         },
-                        budget_old: function (x) {
-                            let { battery, volts, amps, sun } = priority.pointers(x);
-                            let member = state.priority.queue[x]; member.config = config.solar.priority.queue[x];
-                            let discharge = battery.discharge.today / 1000.0;
-                            let charge = battery.charge.today / 1000.0;
-                            let solar = nv.sensor.watt[config.solar.priority.entitySolar].today / 1000.0;
-                            let budgetHour = false;
-                            for (let budget of member.config.on.budget) {
-                                if (time.hour == budget.hour) {
-                                    budgetHour = true;
-                                    let pass = true;
-                                    // this is useless until discharge counter resets in the morning 
-
-                                    let budgetOff = member.config.off.budget.find(tbudget => tbudget.hour === time.hour);
-
-                                    if (budget.discharge != null) {
-                                        if (discharge >= budget.discharge) pass = false;
-                                    } else if (budgetOff) {
-                                        if (budgetOff.discharge != null && discharge >= budgetOff.discharge) pass = false;
-                                    }
-                                    if (budget.amps != null) {
-                                        if (amps < budget.amps) pass = false;   // budget hour specific amps
-                                    } else if (member.config.on.amps != null    // member general turn on amps
-                                        && amps < member.config.on.amps) pass = false;
-                                    if (budget.charge != null && charge < budget.charge) pass = false;
-                                    if (budget.solar != null && solar < budget.solar) pass = false;
-                                    if (budget.volts != null && volts < budget.volts) pass = false;
-
-                                    if (pass) {
-                                        if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch - 30;
-
-                                        tool.debounce(member.config.name + "_priority_budget", (member.config.on.delay != null
-                                            ? member.config.on.delay : config.solar.priority.delaySwitchOn), () => {
-                                                log(member.config.name + " - budget met or exceeded - hour: " + budget.hour
-                                                    + (budget.volts != null ? " - minVolts: " + budget.volts : "") + " volts: " + volts + "\n"
-                                                    + (budget.amps != null ? " - minAmps: " + budget.amps : "") + " amps: " + amps
-                                                    + (budget.solar != null ? " - minSolar: " + budget.solar : "") + " solar: " + solar.toFixed(1)
-                                                    + (budget.charge != null ? " - minCharge: " + budget.charge : "") + " charge: " + charge.toFixed(1)
-                                                    + (budget.discharge != null ? " - maxDischarge: " + budget.discharge : "") + " discharge : " + discharge.toFixed(1));
-                                                if (time.epoch - member.budgetSwitchOn < 30) {
-                                                    log(member.config.name + " - last switch-on too recent - priority system shutting down", 3);
-                                                    send(config.solar.priority.entityAuto, false);
-                                                    return true;
-                                                } else {
-                                                    member.budgetSwitchOn = time.epoch;
-                                                    member.budgetNotify = false;
-                                                    member.delayStep = false;
-                                                    tool.debounce.reset(member.config.name + "_priority_budget");
-                                                    member.state = true;
-                                                    priority.send(x, true);
-                                                    return true;
-                                                }
-                                            })
-                                    } else tool.debounce.reset(member.config.name + "_priority_budget");
-                                    break;
-                                } else continue;
-                            }
-                            if (!budgetHour) priority.offState.conditions(x);
-                        },
                         budget: function (x) {
-                            let { battery, volts, amps, sun } = priority.pointers(x);
-                            let member = state.priority.queue[x];
-                            member.config = config.solar.priority.queue[x];
+                            let { battery, volts, amps, sun, member } = priority.pointers(x);
 
                             let discharge = battery.discharge.today / 1000.0;
                             let charge = battery.charge.today / 1000.0;
-                            let solar = nv.sensor.watt[config.solar.priority.entitySolar].today / 1000.0;
+                            let solar = nv.sensor.watt[config.solar.priority.powerSolar].today / 1000.0;
 
                             let budgetList = member.config.on.budget;
                             let currentIndex = budgetList.findIndex(b => b.hour === time.hour);
@@ -814,7 +723,7 @@ module.exports = {
                             if (pass) {
                                 if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch - 30;
 
-                                tool.debounce(member.config.name + "_priority_budget",
+                                tool.debounce("priority_budget_" + member.config.name,
                                     (member.config.on.delay != null ? member.config.on.delay : config.solar.priority.delaySwitchOn),
                                     () => {
                                         // Log including actual readings vs the calculated progressive targets
@@ -831,22 +740,20 @@ module.exports = {
                                             return true;
                                         } else {
                                             member.budgetSwitchOn = time.epoch;
-                                            member.budgetNotify = false;
-                                            member.delayStep = false;
-                                            tool.debounce.reset(member.config.name + "_priority_budget");
+                                            tool.debounce.reset("priority_trigger_" + member.config.name);
+                                            tool.debounce.reset("priority_budget_" + member.config.name);
                                             member.state = true;
                                             priority.send(x, true);
                                             return true;
                                         }
                                     });
                             } else {
-                                tool.debounce.reset(member.config.name + "_priority_budget");
+                                tool.debounce.reset("priority_budget_" + member.config.name);
                             }
                         },
                         conditions: function (x) {
-                            let { battery, volts, amps, sun } = priority.pointers(x);
-                            let member = state.priority.queue[x]; member.config = config.solar.priority.queue[x];
-                            if (member.config.on.budget) tool.debounce.reset(member.config.name + "_priority_budget");
+                            let { battery, volts, amps, sun, member } = priority.pointers(x);
+                            if (member.config.on.budget) tool.debounce.reset("priority_budget_" + member.config.name);
                             if (sun != undefined && member.config.on.sun != undefined) {
                                 if (member.config.offAmpsFloat == undefined || member.config.offAmpsFloat != undefined
                                     && nv.battery[config.solar.priority.battery].floating == true) {
@@ -867,16 +774,15 @@ module.exports = {
                             if (member.config.on.amps != undefined) {
                                 if (amps >= member.config.on.amps) {
                                     priority.trigger(x, "charge amps is high (" + amps + "a) volts: " + volts + " on-volts: "
-                                        + member.config.onVolts + " - starting ", true);
+                                        + member.config.on.volts + " - starting ", true);
                                     return;
-                                } else if (amps <= member.config.on.amps) member.delayStep = false;
+                                } else if (amps <= member.config.on.amps) tool.debounce.reset("priority_trigger_" + member.config.name);
                             } else if (member.config.on.volts != undefined) {
                                 priority.trigger(x, "battery volts is enough (" + volts + "v) - starting ", true);
                                 return;
                             }
                         },
                     },
-
                     trigger: function (x, message, newState, isSun) {
                         let member = state.priority.queue[x]; member.config = config.solar.priority.queue[x];
                         if (config.inverter.length > 0) {
@@ -896,20 +802,19 @@ module.exports = {
                             return true;
                         }
                         function proceed() {
-                            if (member.delayStep == false) {
-                                member.delayTimer = time.epoch;
-                                member.delayStep = true;
-                                return;
-                            } else if (time.epoch - member.delayTimer >= (newState
-                                ? ((member.config.delayOn != null) ? member.config.delayOn : config.solar.priority.delaySwitchOn)
-                                : ((member.config.delayOff != null) ? member.config.delayOff : config.solar.priority.delaySwitchOff))) {
-                                log("priority queue - " + member.config.name + " - " + message);
-                                if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch;
-                                if (newState) member.budgetNotify = false;
-                                priority.send(x, newState);
-                                return;
-                            }
+                            tool.debounce("priority_trigger_" + member.config.name,
+                                (newState ? ((member.config.delayOn != null) ? member.config.delayOn : config.solar.priority.delaySwitchOn)
+                                    : ((member.config.delayOff != null) ? member.config.delayOff : config.solar.priority.delaySwitchOff))
+                                , () => {
+                                    log("priority queue - " + member.config.name + " - " + message);
+                                    if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch;
+                                    priority.send(x, newState);
+                                    return;
+                                })
                         }
+
+
+
                     },
                     send: function (x, newState) {
                         let member = state.priority.queue[x]; member.config = config.solar.priority.queue[x];
@@ -921,13 +826,18 @@ module.exports = {
                         config.solar.priority.queue.forEach((_, y) => { state.priority.queue[y].delayStep = false; member.delayStepSun = false; });
                         member.state = newState;
                         state.priority.step = time.epoch;
+                        member.warn.timeVoltsMin = false;
+                        member.warn.requiredEntity = false;
                     },
                     pointers: function (x) {
+                        let member = state.priority.queue[x];
+                        member.config = config.solar.priority.queue[x];
                         let battery;
                         if (config.solar.priority.queue[x].battery)
                             battery = nv.battery[config.solar.priority.queue[x].battery];
                         else battery = nv.battery[config.solar.priority.battery] ?? nv.battery[0];
                         let batteryConfig = config.battery[config.battery.findIndex(batt => batt.name === config.solar.priority.battery)];
+                        battery.soc = entity["battery_" + batteryConfig.name].state;
                         let volts = Math.round(entity[batteryConfig.sensorVolt]?.state * 10) / 10;
                         let sun = Math.round(entity[config.solar.sunlight]?.state * 100) / 100;
                         let amps;
@@ -940,7 +850,7 @@ module.exports = {
                                 }
                             } else amps = Math.round(entity[batteryConfig.sensorAmp]?.state * 10) / 10;
                         }
-                        return { battery, volts, sun, amps }
+                        return { battery, volts, sun, amps, member }
                     },
                 }
                 let check = {
@@ -1156,11 +1066,11 @@ module.exports = {
                                 };
                             }
 
-                            let harvest = nv.sensor.watt[config.solar.priority.entitySolar]?.today / 1000.0,
+                            let harvest = nv.sensor.watt[cfg.sensorSolar]?.today / 1000.0,
                                 charge = nv.battery[name].charge.today / 1000.0;
 
                             if (entity[cfg.sensorVolt]) {
-                                if (!nv.battery[name].chargeCycle && volts >= cfg.voltschargeCycle) {
+                                if (!nv.battery[name].chargeCycle && volts >= cfg.voltsChargeCycle) {
                                     log("battery - " + cfg.name + " - recording charge cycle: " + volts + "v");
                                     nv.battery[name].chargeCycle = true;
                                     nv.battery[name].cycles++;
@@ -1170,9 +1080,9 @@ module.exports = {
                                         tool.debounce("battery_float", 30, () => {
                                             log("battery - " + cfg.name + " - charger is floating: " + volts + "v - solar: "
                                                 + harvest.toFixed(1) + "kwh - charge: " + charge.toFixed(1) + " kwh");
-                                            if (cfg.voltschargeCycle == null) nv.battery[name].cycles++;
+                                            if (cfg.voltsChargeCycle == null) nv.battery[name].cycles++;
                                             nv.battery[name].floating = true;
-                                            nv.battery[name].chargeFull = true;
+                                            if (cfg.voltsFullCharge == null) nv.battery[name].chargeFull = true;
                                         })
                                     } else tool.debounce.reset("battery_float");
                                 } else {
@@ -1183,9 +1093,19 @@ module.exports = {
                                         })
                                     } else tool.debounce.reset("battery_float");
                                 }
-                                bat.percent = Math.round(voltPercent(volts, cfg));
-                                // console.log("bat percent: " + bat.percent)
-                                send("battery_" + cfg.name, bat.percent, "%");
+
+                                if (cfg.voltsFullCharge != null && !nv.battery[name].chargeFull) {
+                                    if (volts >= cfg.voltsFullCharge) {
+                                        tool.debounce("battery_charge_full", 30, () => {
+                                            log("battery - " + cfg.name + " - is fully charged: " + volts + "v");
+                                            nv.battery[name].chargeFull = true;
+                                        })
+                                    } else tool.debounce.reset("battery_charge_full");
+                                }
+
+                                bat.soc = Math.round(voltPercent(volts, cfg));
+                                // console.log("bat percent: " + bat.soc)
+                                send("battery_" + cfg.name, bat.soc, "%");
 
                                 if (cfg.sensorAmp) {
                                     if (amps >= cfg.ampsResetDischarge) {
@@ -1209,7 +1129,7 @@ module.exports = {
                                     if (time.min != bat.min) {
                                         let charge = (bat.whPos / 60 / 60), discharge = (bat.whNeg / 60 / 60) * -1;
                                         if (time.hour == 3 && time.min == 0) {
-                                            log("battery - " + cfg.name + " - resetting discharge meter");
+                                            log("battery - " + cfg.name + " - resetting battery charge meter");
                                             nv.battery[name].dischargeReset = true;
                                             nv.battery[name].charge.today = 0;
                                         }
@@ -1247,15 +1167,14 @@ module.exports = {
                             }
                         }
                         function voltPercent(voltage, cfg) {
-                            let percent = null;
+                            let soc = null;
                             if (voltage >= config.soc[cfg.socTable][0]) return 100;
                             if (voltage <= config.soc[cfg.socTable].length - 1) return 0;
                             for (let i = 0; i < config.soc[cfg.socTable].length - 1; i++) {
                                 const current = config.soc[cfg.socTable][i];
                                 const next = config.soc[cfg.socTable][i + 1];
                                 if (voltage <= current.voltage && voltage > next.voltage) {
-                                    percent = next.percent + (voltage - next.voltage) * (current.percent - next.percent) / (current.voltage - next.voltage);
-                                    return Math.round(percent * 10) / 10;
+                                    return next.percent + (voltage - next.voltage) * (current.percent - next.percent) / (current.voltage - next.voltage);
                                 }
                             }
                         }
@@ -1293,7 +1212,8 @@ module.exports = {
                                 if (cfg.entity != undefined) {
                                     if (cfg.entity.length > 1 || cfg.solarPower == true) {
                                         for (let y = 0; y < cfg.entity.length; y++) {
-                                            let value = parseFloat(entity[cfg.entity[y]]?.state)
+
+                                            let value = parseFloat(entity[cfg.entity[y]]?.state);
                                             if (Number.isFinite(value)) {
                                                 if (cfg.combineNegative === true) { sum += entity[cfg.entity[y]].state }
                                                 else if (Math.sign(value) != -1) { sum += entity[cfg.entity[y]].state }
@@ -1330,14 +1250,14 @@ module.exports = {
                                     state.recorder.watt[cfg.name].min = time.min;
                                 } else if (time.min != state.recorder.watt[cfg.name].min) {
                                     whFinal = ((state.recorder.watt[cfg.name].wh / 60) / 60);
-                                    nv.sensor.watt[cfg.name].total += whFinal;
                                     if (cfg.record !== false) {
-                                        if (!nv.sensor.watt[cfg.name]) {
+                                        if (nv.sensor.watt[cfg.name] == null) {
                                             log("initializing NV memory for - watt sensor: " + cfg.name);
                                             nv.sensor.watt[cfg.name] = { total: 0, today: 0, min: [], hour: [], day: [], month: [] };
                                         }
+                                        nv.sensor.watt[cfg.name].total += whFinal;
                                         recorder(nv.sensor.watt[cfg.name], whFinal, cfg.name);
-                                    }
+                                    } else nv.sensor.watt[cfg.name].total += whFinal;
 
 
                                     if (state.recorder.watt[cfg.name].todayReset) {
@@ -1424,7 +1344,7 @@ module.exports = {
                                     else amps.state = final;
                                 } else amps.state = parseFloat(state);
                                 if (amps.state != null && Number.isFinite(amps.state)) {
-                                    send("amp_" + cfg.name, Math.round(amps.state * 10) / 10, "A");
+                                    send("amp_" + cfg.name, amps.state > 20 ? ~~amps.state : Math.round(amps.state, 10), "A");
                                 }
                                 amps.update = time.epoch;
                             };
@@ -1571,7 +1491,7 @@ module.exports = {
                     priority: {
                         auto: function () {
                             return (newState, name) => {
-                                log("priority queue - auto entity toggle - state: " + newState);
+                                log("priority system - state changed: " + newState);
                                 config.solar.priority.queue.forEach((element, index) => {
                                     state.priority.queue[index].delayStep = false;
                                     state.priority.queue[index].delayStepSun = false;
@@ -1583,7 +1503,7 @@ module.exports = {
                         queue: function (priority, entity, x, y) {
                             return (newState, name) => {
                                 if (!state.priority.skipLog)
-                                    log("syncing priority queue: " + priority.name + "  with entity: " + entity + " - new state: " + newState);
+                                    log("priority queue member: " + priority.name + " - entity: " + entity + " - state changed: " + newState);
                                 state.priority.queue[x].state = newState;
                                 state.priority.queue[x].delayStep = false;
                                 state.priority.queue[x].delayStepSun = false;
@@ -1668,7 +1588,7 @@ module.exports = {
                     config.solar.priority.queue.forEach(_ => {
                         state.priority.queue.push({
                             state: null, delayStep: false, delayStepBudget: false, delayStepSun: false, delayTimer: time.epoch, delayTimerSun: time.epoch,
-                            delayTimerBudget: time.epoch, boot: false, budgetNotify: false
+                            delayTimerBudget: time.epoch, boot: false, warn: { timeVoltsMin: false, requiredEntity: false, }
                         })
                     });
                     config.battery.forEach(_ => {
