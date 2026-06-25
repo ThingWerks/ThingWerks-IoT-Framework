@@ -9,6 +9,7 @@ TWIT is an extremely simple, stand alone, low latency, event based industrial au
 TWIT Framework loads and manages your automations and has a straight forward template where you insert your Javascript.
 
 TWIT has a straight forward programming structure that provides:
+- instant realtime automation code hot loading, rapidly debug and update code while in operation
 - automation state / volatile memory initialization  
 - saving and loading of non-volatile memory, with save flood prevention
 - automation script loading and hot update/reloading
