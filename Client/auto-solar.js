@@ -563,7 +563,7 @@ module.exports = {
                                 tool.debounce.reset("priority_budget_" + member.config.name);
                             }
                         },
-                        conditions(x) {
+                        conditions: function (x) {
                             let { battery, volts, amps, sun, member } = priority.pointers(x);
 
                             if (member.config.off.budget) tool.debounce.reset("priority_budget_" + member.config.name);
@@ -1517,7 +1517,12 @@ module.exports = {
                                         tool.debounce.reset("priority_budget_" + members.name);
                                     }
                                 }
-                                state.priority.queue.forEach(element => { element.lastSwitch = null; });
+                                state.priority.queue.forEach(element => {
+                                    element.lastSwitch = null;
+                                    element.warn.timeVoltsMin = false;
+                                    element.warn.timeSOCmin = false;
+                                    element.warn.requiredEntity = false;
+                                });
                             }
                         },
                         queue: function (priority, entity, x, y) {
@@ -1610,7 +1615,7 @@ module.exports = {
                     });
                     config.solar.priority.queue.forEach(_ => {
                         state.priority.queue.push({
-                            state: null, boot: false, 
+                            state: null, boot: false,
                             warn: { timeVoltsMin: false, timeVoltsMin: false, requiredEntity: false, }
                         })
                     });
