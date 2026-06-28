@@ -357,11 +357,8 @@ module.exports = {
                         state.inverter[x].delayFaultStep = false;
                         state.inverter[x].delayStepSun = false;
                         config.inverter.forEach((_, y) => { state.inverter[y].delayStep = false });
-                        config.solar.priority.queue.forEach((_, y) => {
-                            state.priority.queue[y].delayStep = false
-                            state.priority.queue[y].delayStepSun = false;
-                            state.priority.queue[y].delayStepBudget = false;
-                        });
+                        for (const members of config.solar.priority.queue) // reset priority queue debounce for each member
+                            if (members.enable) tool.debounce.reset("priority_trigger_" + members.name);
                     },
                     nightMode: function (x) {
                         let nightMode = null, cfg = config.inverter[x];
@@ -555,7 +552,6 @@ module.exports = {
                                             + (targetCharge != null ? " - targetCharge: " + targetCharge.toFixed(2) : "") + " charge: " + charge.toFixed(1) + "\n"
                                             + (targetDischarge != null ? " - targetDischarge: " + targetDischarge.toFixed(2) : "") + " discharge: " + discharge.toFixed(1));
 
-                                        if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch;
                                         tool.debounce.reset("priority_budget_" + member.config.name);
                                         priority.send(x, false);
                                         return true;
@@ -619,14 +615,27 @@ module.exports = {
                                         } else if (state.inverter[member.config.inverter].state == true) checkVolts();
 
                                         if (member.config.on?.time?.hour == time.hour && member.config.on?.time?.min == time.min) {
-                                            if (member.config.on.timeVoltsMin && volts >= member.config.on.timeVoltsMin) {
-                                                log("priority queue - " + member.config.name + " - start time reached - volts: " + volts);
-                                                priority.send(x, true);
-                                            } else if (!member.warn.timeVoltsMin) {
-                                                log("priority queue - " + member.config.name + " - start time reached - but voltage is too low - " + volts + "v"
-                                                    + " - required: " + member.config.on.timeVoltsMin + "v", 2);
-                                                member.warn.timeVoltsMin = true;
-                                                return;
+                                            if (member.config.on.timeVoltsMin) {
+                                                if (volts >= member.config.on.timeVoltsMin != null) {
+                                                    log("priority queue - " + member.config.name + " - start time reached - volts: " + volts);
+                                                    priority.send(x, true);
+                                                } else if (!member.warn.timeVoltsMin) {
+                                                    log("priority queue - " + member.config.name + " - start time reached - but voltage is too low - " + volts + "v"
+                                                        + " - required: " + member.config.on.timeVoltsMin + "v", 2);
+                                                    member.warn.timeVoltsMin = true;
+                                                    return;
+                                                }
+                                            } else if (member.config.on.timeSOCmin != null) {
+                                                if (battery.soc >= member.config.on.timeSOCmin) {
+                                                    log("priority queue - " + member.config.name + " - start time reached - SoC: " + battery.soc);
+                                                    priority.send(x, true);
+
+                                                } else if (!member.warn.timeSOCmin) {
+                                                    log("priority queue - " + member.config.name + " - start time reached - but SoC is too low - " + battery.soc + "%"
+                                                        + " - required: " + member.config.on.timeSOCmin + "%", 2);
+                                                    member.warn.timeSOCmin = true;
+                                                    return;
+                                                }
                                             }
                                         }
                                     }
@@ -635,21 +644,18 @@ module.exports = {
 
                             function checkVolts() {
                                 // console.log("soc: " + battery.soc)
-                                if (member.config.on.volts != undefined) {
-                                    if (volts >= member.config.on.volts) {
-                                        conditions();
-                                    } else tool.debounce.reset("priority_trigger_" + member.config.name);
+                                if (member.config.on.volts != null) {
+                                    if (volts >= member.config.on.volts) conditions();
+                                    else tool.debounce.reset("priority_trigger_" + member.config.name);
+                                } else if (member.config.on.soc != null) {
+                                    if (battery.soc >= member.config.on.soc) conditions();
+                                    else tool.debounce.reset("priority_trigger_" + member.config.name);
                                 } else conditions()
                             }
 
                             function conditions() {
-                                if (member.config.on.budget != null) {
-                                    if (member.config.on?.time?.hour) {
-                                        if (time.hour < member.config.on?.time?.hour
-                                            || time.hour == member.config.on?.time?.hour
-                                            && time.minute < member.config.on?.time?.min) priority.offState.budget(x);
-                                    } else priority.offState.budget(x);
-                                } else priority.offState.conditions(x);
+                                if (member.config.on.budget != null) priority.offState.budget(x);
+                                else priority.offState.conditions(x);
                             }
                         },
                         budget: function (x) {
@@ -671,6 +677,7 @@ module.exports = {
                             let prevB = budgetList[currentIndex - 1];
                             let nextB = budgetList[currentIndex + 1];
                             let progress = time.min / 60; // Our "exponent" or coefficient for the hour
+
 
                             /**
                              * Interpolation Helper
@@ -697,6 +704,7 @@ module.exports = {
                             // Dynamic targets with minute-based coefficient
                             let targetSolar = getTarget('solar');
                             let targetVolts = getTarget('volts');
+                            let targeSOC = getTarget('soc');
                             let targetCharge = getTarget('charge');
                             let targetDischarge = getTarget('discharge');
 
@@ -719,9 +727,10 @@ module.exports = {
                             if (targetCharge != null && charge < targetCharge) pass = false;
                             if (targetSolar != null && solar < targetSolar) pass = false;
                             if (targetVolts != null && volts < targetVolts) pass = false;
+                            if (targeSOC != null && soc < targeSOC) pass = false;
 
                             if (pass) {
-                                if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch - 30;
+
 
                                 tool.debounce("priority_budget_" + member.config.name,
                                     (member.config.on.delay != null ? member.config.on.delay : config.solar.priority.delaySwitchOn),
@@ -729,23 +738,13 @@ module.exports = {
                                         // Log including actual readings vs the calculated progressive targets
                                         log(member.config.name + " - budget met/exceeded - hour: " + time.hour + ":" + time.min + " (Coef: " + progress.toFixed(2) + ")\n"
                                             + (targetVolts != null ? " - targetVolts: " + targetVolts.toFixed(2) : "") + " volts: " + volts + "\n"
+                                            + (targeSOC != null ? " - targetVolts: " + targeSOC.toFixed(2) : "") + " SoC: " + battery.soc + "%\n"
                                             + (targetAmps != null ? " - targetAmps: " + targetAmps : "") + " amps: " + amps + "\n"
                                             + (targetSolar != null ? " - targetSolar: " + targetSolar.toFixed(2) : "") + " solar: " + solar.toFixed(1) + "\n"
                                             + (targetCharge != null ? " - targetCharge: " + targetCharge.toFixed(2) : "") + " charge: " + charge.toFixed(1) + "\n"
                                             + (targetDischarge != null ? " - targetDischarge: " + targetDischarge.toFixed(2) : "") + " discharge: " + discharge.toFixed(1));
 
-                                        if (time.epoch - member.budgetSwitchOn < 30) {
-                                            log(member.config.name + " - last switch-on too recent - priority system shutting down", 3);
-                                            send(config.solar.priority.entityAuto, false);
-                                            return true;
-                                        } else {
-                                            member.budgetSwitchOn = time.epoch;
-                                            tool.debounce.reset("priority_trigger_" + member.config.name);
-                                            tool.debounce.reset("priority_budget_" + member.config.name);
-                                            member.state = true;
-                                            priority.send(x, true);
-                                            return true;
-                                        }
+                                        priority.send(x, true);
                                     });
                             } else {
                                 tool.debounce.reset("priority_budget_" + member.config.name);
@@ -754,8 +753,8 @@ module.exports = {
                         conditions: function (x) {
                             let { battery, volts, amps, sun, member } = priority.pointers(x);
                             if (member.config.on.budget) tool.debounce.reset("priority_budget_" + member.config.name);
-                            if (sun != undefined && member.config.on.sun != undefined) {
-                                if (member.config.offAmpsFloat == undefined || member.config.offAmpsFloat != undefined
+                            if (sun != null && member.config.on.sun != null) {
+                                if (member.config.offAmpsFloat == undefined || member.config.offAmpsFloat != null
                                     && nv.battery[config.solar.priority.battery].floating == true) {
                                     if (sun >= member.config.on.sun) {
                                         // console.log("checking sun: " + sun + " floating:" + nv.battery[cfg.battery].floating)
@@ -771,14 +770,20 @@ module.exports = {
                                     } else member.delayStepSun = false;
                                 }
                             }
-                            if (member.config.on.amps != undefined) {
+                            if (member.config.on.amps != null) {
                                 if (amps >= member.config.on.amps) {
-                                    priority.trigger(x, "charge amps is high (" + amps + "a) volts: " + volts + " on-volts: "
-                                        + member.config.on.volts + " - starting ", true);
+                                    priority.trigger(x, "charge amps is high (" + amps + "a) volts: " + volts
+                                        + (member.config.on.volts ? " on-volts: " + member.config.on.volts :
+                                            member.config.on.soc ? " on-SoC: " + member.config.on.soc : "")
+                                        + " - starting ", true);
                                     return;
                                 } else if (amps <= member.config.on.amps) tool.debounce.reset("priority_trigger_" + member.config.name);
-                            } else if (member.config.on.volts != undefined) {
+                            } else if (member.config.on.volts != null) {
                                 priority.trigger(x, "battery volts is enough (" + volts + "v) - starting ", true);
+                                return;
+                            } else if (member.config.on.soc != null) {
+                                console.log("battery soc is enough: " + battery.soc)
+                                priority.trigger(x, "battery SoC is enough (" + battery.soc + "%) - starting ", true);
                                 return;
                             }
                         },
@@ -807,26 +812,40 @@ module.exports = {
                                     : ((member.config.delayOff != null) ? member.config.delayOff : config.solar.priority.delaySwitchOff))
                                 , () => {
                                     log("priority queue - " + member.config.name + " - " + message);
-                                    if (!member.budgetSwitchOn) member.budgetSwitchOn = time.epoch;
                                     priority.send(x, newState);
                                     return;
                                 })
                         }
-
-
-
                     },
                     send: function (x, newState) {
                         let member = state.priority.queue[x]; member.config = config.solar.priority.queue[x];
+
+                        config.inverter.forEach((_, y) => { state.inverter[y].delayStep = false });
+
+                        if (member.lastSwitch == null) {
+                            log("priority queue - " + member.config.name + " - resetting last switch timer", 0);
+                            member.lastSwitch = time.epoch;
+                        } else if (time.epoch - member.lastSwitch < config.solar.priority.cycleError) {
+                            log("priority queue - " + member.config.name + " - FAULT - last switch too recent: "
+                                + (time.epoch - member.lastSwitch) + "s ago - priority system shutting down", 3);
+                            send(config.solar.priority.entityAuto, false);
+                            member.lastSwitch = time.epoch;
+                            return;
+                        }
+
                         for (let y = 0; y < member.config.entity.length; y++) {
                             state.priority.skipLog = true;
                             send(member.config.entity[y], newState);
                         }
-                        config.inverter.forEach((_, y) => { state.inverter[y].delayStep = false });
-                        config.solar.priority.queue.forEach((_, y) => { state.priority.queue[y].delayStep = false; member.delayStepSun = false; });
+
+                        for (const members of config.solar.priority.queue) {
+                            if (members.enable) tool.debounce.reset("priority_trigger_" + members.name);
+                            if (members.enable) tool.debounce.reset("priority_budget_" + members.name);
+                        }
+
                         member.state = newState;
-                        state.priority.step = time.epoch;
                         member.warn.timeVoltsMin = false;
+                        member.warn.timeSOCmin = false;
                         member.warn.requiredEntity = false;
                     },
                     pointers: function (x) {
@@ -1492,12 +1511,13 @@ module.exports = {
                         auto: function () {
                             return (newState, name) => {
                                 log("priority system - state changed: " + newState);
-                                config.solar.priority.queue.forEach((element, index) => {
-                                    state.priority.queue[index].delayStep = false;
-                                    state.priority.queue[index].delayStepSun = false;
-                                    state.priority.queue[index].delayStepBudget = false;
-                                    state.priority.queue[index].budgetSwitchOn = null;
-                                });
+                                for (const members of config.solar.priority.queue) {
+                                    if (members.enable) {
+                                        tool.debounce.reset("priority_trigger_" + members.name);
+                                        tool.debounce.reset("priority_budget_" + members.name);
+                                    }
+                                }
+                                state.priority.queue.forEach(element => { element.lastSwitch = null; });
                             }
                         },
                         queue: function (priority, entity, x, y) {
@@ -1505,9 +1525,12 @@ module.exports = {
                                 if (!state.priority.skipLog)
                                     log("priority queue member: " + priority.name + " - entity: " + entity + " - state changed: " + newState);
                                 state.priority.queue[x].state = newState;
-                                state.priority.queue[x].delayStep = false;
-                                state.priority.queue[x].delayStepSun = false;
-                                state.priority.queue[x].delayStepBudget = false;
+                                for (const members of config.solar.priority.queue) {
+                                    if (members.enable) {
+                                        tool.debounce.reset("priority_trigger_" + members.name);
+                                        tool.debounce.reset("priority_budget_" + members.name);
+                                    }
+                                }
                                 state.priority.skipLog = false;
                             }
                         },
@@ -1587,8 +1610,8 @@ module.exports = {
                     });
                     config.solar.priority.queue.forEach(_ => {
                         state.priority.queue.push({
-                            state: null, delayStep: false, delayStepBudget: false, delayStepSun: false, delayTimer: time.epoch, delayTimerSun: time.epoch,
-                            delayTimerBudget: time.epoch, boot: false, warn: { timeVoltsMin: false, requiredEntity: false, }
+                            state: null, boot: false, 
+                            warn: { timeVoltsMin: false, timeVoltsMin: false, requiredEntity: false, }
                         })
                     });
                     config.battery.forEach(_ => {
