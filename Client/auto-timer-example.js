@@ -1,5 +1,5 @@
 #!/usr/bin/node
-let twit = require("./twit.js").framework;
+let state, config, nv, log, write, push, send, tool, twit = require("./twit.js").framework;
 module.exports = {
     entity: {
         subscribe: [],
@@ -13,7 +13,7 @@ module.exports = {
     automation: {
         Compound: function (_name, _push, _reload) {
             try {
-                let { state, config, nv, log, write, send, push, tool } = twit(_name);
+                ({ state, config, nv, log, write, push, send, tool } = twit(_name));
                 function timer() {
                     if (time.hour == 5 && time.min == 15) {
                         log("Lights - Outside Lights - Turning OFF");
@@ -47,13 +47,13 @@ module.exports = {
                     if (time.hour == 21 && time.min == 0) {
                         send("input_boolean.auto_bubon", false);
                     }
-                    if (time.hour == 22 && time.min == 0) {
+                    if (time.hour == 20 && time.min == 30) {
                         send("switch.lights_outside_bedroom", false);
                     }
                 }
                 if (_push === "init") {
-                    global.state[_name] = { boot: false, timer: null };
-                    global.config[_name] ||= {};
+                    global._state[_name] = { boot: false, timer: null };
+                    global._config[_name] ||= {};
                     ({ state, config, nv, push } = twit(_name));
                     log("automation is starting");
                     setTimeout(() => {  // start minute timer aligned with system minute
@@ -65,7 +65,7 @@ module.exports = {
                 else if (_push) push[_push.name]?.(_push.state, _push.name);
                 else if (_reload) {
                     if (push) push.forIn((name) => { delete push[name]; })
-                    if (_reload == "config") { ({ state, config, nv } = twit(_name)); }
+                    if (_reload == "config") { }
                     else {
                         log("hot reload initiated");
                         clearInterval(state.timer);
