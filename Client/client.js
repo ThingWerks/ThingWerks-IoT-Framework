@@ -19,8 +19,8 @@ checkArgs = function () {
             }
         }
     }
-    state.args = execStartArgs.join(" ");
-    console.log("starting arguments: " + state.args)
+    _state.args = execStartArgs.join(" ");
+    console.log("starting arguments: " + _state.args)
     for (let i = 0; i < args.length; i++) {
         const option = args[i];
         const value = args[i + 1];
@@ -40,7 +40,7 @@ checkArgs = function () {
                     console.log("Extra function triggered because -j was provided:", map["-j"]);
                     process.exit();
                 }
-                const execStartCommand = `nodemon "${workingDir}client.js" -w "${workingDir}client.js" --exitcrash ${state.args}`;
+                const execStartCommand = `nodemon "${workingDir}client.js" -w "${workingDir}client.js" --exitcrash ${_state.args}`;
                 console.log("service command: " + execStartCommand);
                 let service = [
                     "[Unit]",
@@ -169,9 +169,9 @@ com = {
                             return value;
                         }, null); // <-- Use null or omit the argument to remove formatting
                     }
-                    udp.send(safeStringify({ type: "diag", clientName: moduleName, state, nv, config, entitySubscribe, entity }), 65432, '127.0.0.1');
-                    // console.log(state)
-                    //core(JSON.stringify({ type: "diag", obj: { state, nv: nv, config } }), 65432, '127.0.0.1');
+                    udp.send(safeStringify({ type: "diag", clientName: moduleName, _state, _nv, _config, entitySubscribe, entity }), 65432, '127.0.0.1');
+                    // console.log(_state)
+                    //core(JSON.stringify({ type: "diag", obj: { _state, nv: _nv, config } }), 65432, '127.0.0.1');
                     break;
                 case "telegram":
                     switch (buf.class) {
@@ -202,9 +202,9 @@ com = {
         com.core((update ? "registerUpdate" : "register"), obj);
         if (user?.telegram?.agent) {
             slog("registering client as Telegram agent");
-            if (!nv.telegram) nv.telegram ||= [];
-            else for (let x = 0; x < nv.telegram.length; x++)
-                com.core("telegram", { class: "sub", id: nv.telegram[x].id });
+            if (!_nv.telegram) _nv.telegram ||= [];
+            else for (let x = 0; x < _nv.telegram.length; x++)
+                com.core("telegram", { class: "sub", id: _nv.telegram[x].id });
         }
     },
     core: function (type, data, auto) {
@@ -251,11 +251,11 @@ auto = {
         entitySubscribe = Object.fromEntries((configData.entity?.subscribe ?? []).map(k => [k, {}]));
         entitySync = configData.entity?.sync ?? undefined;
         //    console.log(configData)
-        config.heartbeat ||= {};
+        _config.heartbeat ||= {};
         configData.heartbeat ||= {};
         configData?.entity?.heartbeat?.forIn((name, value) => {
-            if (name in config?.heartbeat) {
-                if (config.heartbeat[name]?.interval != value) {
+            if (name in _config?.heartbeat) {
+                if (_config.heartbeat[name]?.interval != value) {
                     console.log("heartbeat - changed - updating timer for: " + name);
                     createTimer(name, value);
                 }
@@ -264,26 +264,26 @@ auto = {
                 createTimer(name, value);
             }
         })
-        config.heartbeat?.forIn((name, value) => {
+        _config.heartbeat?.forIn((name, value) => {
             if (!(name in configData.entity.heartbeat)) {
                 console.log("heartbeat - orphaned - removing: " + name);
-                clearInterval(config.heartbeat[name]?.timer);
-                delete config.heartbeat[name];
+                clearInterval(_config.heartbeat[name]?.timer);
+                delete _config.heartbeat[name];
             }
         })
         function createTimer(name, value) {
-            config.heartbeat[name] = { interval: value, timer: null, state: false };
-            if (config.heartbeat[name].timer) clearInterval(member.timer);
-            config.heartbeat[name].timer = setInterval(() => {
-                if (config.heartbeat[name].state == false) {
-                    com.core("state", { name, state: true }); config.heartbeat[name].state = true;
+            _config.heartbeat[name] = { interval: value, timer: null, state: false };
+            if (_config.heartbeat[name].timer) clearInterval(member.timer);
+            _config.heartbeat[name].timer = setInterval(() => {
+                if (_config.heartbeat[name].state == false) {
+                    com.core("state", { name, state: true }); _config.heartbeat[name].state = true;
                 }
                 else {
-                    com.core("state", { name, state: false }); config.heartbeat[name].state = false;
+                    com.core("state", { name, state: false }); _config.heartbeat[name].state = false;
                 }
             }, (value));
         }
-        console.log("heartbeat - importation finished - members: ", Object.keys(config.heartbeat));
+        console.log("heartbeat - importation finished - members: ", Object.keys(_config.heartbeat));
     },
     loadConfig: function (configPath, reload) {
         try {
@@ -308,7 +308,7 @@ auto = {
 
             for (const name of names) {
                 console.log(`loading external config for automation: ${name}`);
-                config[name] = externalCfg.config[name];
+                _config[name] = externalCfg.config[name];
                 if (reload) automation[name](name, null, "config");
             }
             console.log(`loading entities from external config: ${configPath}`);
@@ -349,7 +349,7 @@ auto = {
                 let path = workingDir + "nv-" + lname + ".json";
                 if (fs.existsSync(path)) {
                     console.log("found NV data for: " + name + " - loading now...");
-                    global.nv[name] = JSON.parse(fs.readFileSync(path, 'utf8'));
+                    global._nv[name] = JSON.parse(fs.readFileSync(path, 'utf8'));
                 } else {
                     console.log("found no NV data for: " + name + " - required path: " + path);
                 }
@@ -382,10 +382,10 @@ auto = {
                         console.error(`Error cleaning automation "${name}"`, e);
                     }
                     // clear any known timers/listeners
-                    if (state[name]?.timer) clearInterval(state[name].timer);
+                    if (_state[name]?.timer) clearInterval(_state[name].timer);
                     delete automation[name];            // <-- REMOVE FIRST
-                    delete state[name];
-                    if (internal) delete config[name];
+                    delete _state[name];
+                    if (internal) delete _config[name];
                 }
             }
 
@@ -449,7 +449,7 @@ user = {        // user configurable block - Telegram
         agent: function (msg) {
             //  log("incoming telegram message: " + msg,  0);
             console.log("incoming telegram message: ", msg);
-            nv.telegram || {};
+            _nv.telegram || {};
             if (telegram.auth(msg)) {
                 switch (msg.text) {
                     case "?": console.log("test help menu"); break;
@@ -469,7 +469,7 @@ user = {        // user configurable block - Telegram
                         break;
                 }
             }
-            else if (msg.text == nv.telegram.password) telegram.sub(msg);
+            else if (msg.text == _nv.telegram.password) telegram.sub(msg);
             else if (msg.text == "/start") bot("give me the passcode");
             else bot("i don't know you, go away");
             function bot(text) { com.core("telegram", { class: "send", id: msg.from.id, text }); }
@@ -502,7 +502,7 @@ telegram = {
         let buf = { user: msg.from.first_name + " " + msg.from.last_name, id: msg.from.id }
         if (!telegram.auth(msg)) {
             slog("telegram - user just joined the group - " + msg.from.first_name + " " + msg.from.last_name + " ID: " + msg.from.id, 0, 2);
-            nv.telegram.push(buf);
+            _nv.telegram.push(buf);
             bot(msg.chat.id, 'registered');
             com.core(JSON.stringify({ type: "telegram", obj: { class: "sub", id: msg.from.id } }), 65432, '127.0.0.1');
             //            file.write.nv();
@@ -510,8 +510,8 @@ telegram = {
     },
     auth: function (msg) {
         let exist = false;
-        for (let x = 0; x < nv.telegram.length; x++)
-            if (nv.telegram[x].id == msg.from.id) { exist = true; break; };
+        for (let x = 0; x < _nv.telegram.length; x++)
+            if (_nv.telegram[x].id == msg.from.id) { exist = true; break; };
         if (exist) return true; else return false;
     },
     buttonToggle: function (msg, auto, name) {
@@ -540,12 +540,12 @@ sys = {         // ______________________system area, don't need to touch anythi
     init: function () {
         automation = {};
         auto.module = {}; // map resolvedModulePath -> [automationName, ...]
-        nv = {};
+        _nv = {};
         entity = {};
         entitySubscribe = {};
-        config = { heartbeat: {} };
-        state = { cache: {}, args: "" };
-        push = {};
+        _config = { heartbeat: {} };
+        _state = { cache: {}, args: "" };
+        _push = {};
         heartbeat = { timer: [], state: [] };
         logName = null;
         online = false;
@@ -692,7 +692,7 @@ sys = {         // ______________________system area, don't need to touch anythi
                 function writeFile() {
                     // slog("writing NV data...");
                     timer.fileWriteLast = time.epoch;
-                    fs.writeFile(workingDir + "/" + prefix + lname + "-bak.json", JSON.stringify(global.nv[name], null, 2), function () {
+                    fs.writeFile(workingDir + "/" + prefix + lname + "-bak.json", JSON.stringify(global._nv[name], null, 2), function () {
                         fs.copyFile(workingDir + "/" + prefix + lname + "-bak.json", workingDir + "/" + prefix + lname + ".json", (err) => {
                             if (err) throw err;
                         });
