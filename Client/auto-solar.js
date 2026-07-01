@@ -1,10 +1,10 @@
 #!/usr/bin/node
-let twit = require("./twit.js").framework;
+let state, config, nv, log, write, push, send, tool, twit = require("./twit.js").framework;
 module.exports = {
     automation: {
         Solar: function (_name, _push, _reload) {
             try {
-                let { state, config, nv, log, write, push, send, tool } = twit(_name);
+                ({ state, config, nv, log, write, push, send, tool } = twit(_name));
                 let solar = {
                     auto: function () { // check sequence director
                         ({ state, config, nv } = twit(_name));
@@ -362,7 +362,7 @@ module.exports = {
                     },
                     nightMode: function (x) {
                         let nightMode = null, cfg = config.inverter[x];
-                        if (cfg.nightMode?.enable == true) {                     // undefined config returns false
+                        if (cfg.nightMode.enable == true) {                     // undefined config returns false
                             if (time.hour == cfg.nightMode.startHour) {   // if nightMode match
                                 if (cfg.nightMode.startMin != undefined) {
                                     if (time.min >= cfg.nightMode.startMin) { nightMode = true; }
@@ -435,6 +435,7 @@ module.exports = {
                 }
                 let priority = {
                     auto: function () {
+                        ({ state, config, nv } = twit(_name));
                         if (!state.priority.boot) {
                             state.priority.boot = true;
                             if (nv.battery[config.battery[0].name].floating)
@@ -745,6 +746,7 @@ module.exports = {
                                             + (targetDischarge != null ? " - targetDischarge: " + targetDischarge.toFixed(2) : "") + " discharge: " + discharge.toFixed(1));
 
                                         priority.send(x, true);
+                                        console.log(member.config)
                                     });
                             } else {
                                 tool.debounce.reset("priority_budget_" + member.config.name);
@@ -1589,7 +1591,7 @@ module.exports = {
                     }
                 }
                 if (_push === "init") {
-                    global.state[_name] = {               // initialize automation volatile memory
+                    global._state[_name] = {               // initialize automation volatile memory
                         priority: { step: time.epoch, queue: [], skipLog: false, },
                         inverter: [],
                         battery: [],
@@ -1602,7 +1604,7 @@ module.exports = {
                         welder: { detect: false, step: null },
                         timer: { second: null, minute: null, priority: null },
                     };
-                    global.nv[_name] ||= {};
+                    global._nv[_name] ||= {};
                     ({ state, config, nv, push } = twit(_name));
                     config.inverter.forEach(_ => {
                         state.inverter.push({
@@ -1667,10 +1669,10 @@ module.exports = {
                         delete push[name];
                     })
                     if (_reload == "config") {
-                        ({ state, config, nv } = twit(_name));
+                        log("config hot reload initiated");
                         constructor.init();
                     } else {
-                        log("hot reload initiated");
+                        log("automation hot reload initiated");
                         state.inverter.forEach(inverter => {
                             clearTimeout(inverter.switchWattsTimer);
                         });
