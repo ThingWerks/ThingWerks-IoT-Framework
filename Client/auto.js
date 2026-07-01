@@ -1,5 +1,5 @@
 #!/usr/bin/node
-let twit = require("./twit.js").framework;
+let state, config, nv, log, write, push, send, tool, twit = require("./twit.js").framework;
 module.exports = {
     entity: {
         subscribe: [],
@@ -15,7 +15,7 @@ module.exports = {
     automation: {
         "---automation name here----": function (_name, _push, _reload) {
             try {
-                let { state, config, nv, log, write, push, send, tool } = twit(_name);
+                ({ state, config, nv, log, write, push, send, tool } = twit(_name));
 
 
 
@@ -26,10 +26,10 @@ module.exports = {
                 */
 
                 if (_push === "init") { // ran only once - your initialization procedure
-                    global.config[_name] = {};  // initialize automation's configurations here or from -c config File or from config object above
-                    global.state[_name] = {};   // initialize automation's volatile memory
-                    global.nv[_name] ||= {};    // initialize automation's non-volatile memory
-                    global.push[_name] = { "myEntity": () => { console.log("test") } };    // initialize push functions 
+                    global._config[_name] = {};  // initialize automation's configurations here or from -c config File or from config object above
+                    global._state[_name] = {};   // initialize automation's volatile memory
+                    global._nv[_name] ||= {};    // initialize automation's non-volatile memory
+                    global._push[_name] = { "myEntity": () => { console.log("test") } };    // initialize push functions 
                     ({ state, config, nv, push } = twit(_name)); // call pointers directly after global declarations
 
                     /*
@@ -58,7 +58,6 @@ module.exports = {
 
                     } else {
                         log("automation hot reload initiated");
-                        ({ state, config, nv } = twit(_name));
 
                         // clear you event timers/intervals here.  ie. clearInterval(state.timer.second);
                         // _push === "init" will be called again
