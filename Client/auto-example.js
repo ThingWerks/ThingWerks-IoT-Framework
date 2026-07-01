@@ -1,5 +1,5 @@
 #!/usr/bin/node
-let twit = require("./twit.js").framework;
+let state, config, nv, log, write, push, send, tool, twit = require("./twit.js").framework;
 module.exports = {
     entity: {
         subscribe: [    // entities to subscribe to 
@@ -33,7 +33,7 @@ module.exports = {
 
         // choose any name for automation 
         "---automation name here----": function (_name, _push, _reload) {
-            let { state, config, nv, log, write, push, send, tool } = twit(_name);
+            ({ state, config, nv, log, write, push, send, tool } = twit(_name));
 
 
             /*  common functions and those called by push events or the init function need to go in this area. 
@@ -90,7 +90,7 @@ module.exports = {
             // you initialization sequence begins here
 
             if (_push === "init") { // ran only once
-                global.config[_name] = {    // initialize automation's configurations
+                global._config[_name] = {    // initialize automation's configurations
                     // static configuration can be put here for simplicity 
                     // or can be specified above in module.exports.config 
                     // or ca be put into an external config file and specified  with  client.js -n autoName -a autoFile.js -c configFile.js
@@ -102,15 +102,15 @@ module.exports = {
                     ]
 
                 };
-                global.state[_name] = {     // initialize automation's volatile memory
+                global._state[_name] = {     // initialize automation's volatile memory
                     timer: {},
                     // generally state initialization would have its own function after this declaration 
                 };
-                global.nv[_name] ||= {      // initialize automation's non-volatile memory
+                global._nv[_name] ||= {      // initialize automation's non-volatile memory
                     // generally NV initialization would have its own function after this declaration 
                     // write(); // wite non-volatile memory after your initialization logic
                 };
-                global.push[_name] = {      // initialize incoming push function logic
+                global._push[_name] = {      // initialize incoming push function logic
 
                     // the push object is called using the entities name as subscribed above in module.exports entities, subscribed 
                     // the call includes, first the "state or value" and seconds "the entities name itself"
@@ -176,7 +176,7 @@ module.exports = {
                 if (push) push.forIn((name) => {  // destroy all push calls 
                     log("deleting constructor for: " + name, 0);
                     delete push[name];
-                }) 
+                })
                 if (_reload == "config") {
                     log("config hot reload initiated");
 
@@ -203,17 +203,17 @@ module.exports = {
         // create another automation if needed - same logic applies
         "---another automation name here----": function (_name, _push, _reload) {
             try {
-                let { state, config, nv, log, write, push, send, tool } = twit(_name);
+                ({ state, config, nv, log, write, push, send, tool } = twit(_name));
 
 
                 // your program functions here
 
 
                 if (_push === "init") { // ran only once - your initialization procedure
-                    global.config[_name] = {};  // initialize automation's configurations or from -c config File or from config object above
-                    global.state[_name] = {};   // initialize automation's volatile memory
-                    global.nv[_name] ||= {};    // initialize automation's non-volatile memory
-                    global.push[_name] = {};    // initialize push functions 
+                    global._config[_name] = {};  // initialize automation's configurations or from -c config File or from config object above
+                    global._state[_name] = {};   // initialize automation's volatile memory
+                    global._nv[_name] ||= {};    // initialize automation's non-volatile memory
+                    global._push[_name] = {};    // initialize push functions 
                     ({ state, config, nv, push } = _pointers(_name)); // call pointers directly after config and state initialization 
 
                     // your init logic here
