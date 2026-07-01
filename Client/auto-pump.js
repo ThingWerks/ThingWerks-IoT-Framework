@@ -1,12 +1,11 @@
 #!/usr/bin/node
-let twit = require("./twit.js").framework;
+let state, config, nv, log, write, push, send, tool, twit = require("./twit.js").framework;
 module.exports = { // exports added to clean up layout
     automation: {
         Pumper: function (_name, _push, _reload) {
-            let { state, config, nv, log, write, send, push, tool } = twit(_name);
+            ({ state, config, nv, log, write, push, send, tool } = twit(_name));
             let sensor = {
                 update: function () {
-                    ({ state, config, nv } = twit(_name));
                     let sendDelay = 0;
                     let list = ["_total", "_hour", "_day", "_lm", "_today"];
                     for (let x = 0; x < config.sensor.flow.length; x++) {
@@ -1095,8 +1094,8 @@ module.exports = { // exports added to clean up layout
             }
             if (_push === "init") {
                 log("initializing pumper config and state")
-                global.state[_name] = { init: true, dd: [], fountain: [], timer: {}, pump: {} };
-                global.nv[_name] ||= {};
+                global._state[_name] = { init: true, dd: [], fountain: [], timer: {}, pump: {} };
+                global._nv[_name] ||= {};
                 ({ state, config, nv, push } = twit(_name));
                 if (config.sensor.flow) { // initialize NV data
                     nv.flow ||= {};
@@ -1236,11 +1235,11 @@ module.exports = { // exports added to clean up layout
                     delete push[name];
                 })
                 if (_reload == "config") {
-                    ({ state, config, nv } = twit(_name));
+                    log("config hot reload initiated");
                     constructor.init();
                 }
                 else {
-                    log("hot reload initiated");
+                    log("automation hot reload initiated");
                     try {
                         clearInterval(state.timer.hour);
                         clearInterval(state.timer.minute);
