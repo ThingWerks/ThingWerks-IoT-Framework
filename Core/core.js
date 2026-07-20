@@ -327,7 +327,7 @@ if (isMainThread) {
                         }
                         break;
                     case "log":         // incoming log messages from UDP clients
-                        log(buf.data.message, buf.data.mod, buf.data.level, port);
+                        log(buf.data.message, buf.data.mod, buf.data.level, port, buf.name);
                         break;
                     case "telegram":
                         console.log("receiving telegram data: ", buf);
@@ -366,8 +366,10 @@ if (isMainThread) {
                                 log("client - " + color("purple", buf.name) + " - is unrecognized - updating", 3, 2);
                                 state.client[buf.name] = { address: info.address, port: info.port, entities: [] };
                             }
-                            if (state.client[buf.name]) state.client[buf.name].update = time.epoch;
-                            if (state.client[buf.name]) state.client[buf.name].stamp = time.stamp;
+                            if (state.client[buf.name]) {
+                                state.client[buf.name].update = time.epoch;
+                                state.client[buf.name].stamp = time.stamp;
+                            }
                         }
                     } catch (error) { log("A UDP client (" + info.address + ") is sending invalid data: " + error, 3, 3); return; }
                 }
@@ -445,7 +447,7 @@ if (isMainThread) {
                 })
             }
         },
-        services = {
+        service = {
             telegram: function () {
                 /*
                 (() => {
@@ -628,6 +630,83 @@ if (isMainThread) {
                         });
                     }
                     serverWeb = express.listen(cfg.webDiagPort, function () { log("diag web server starting on port " + cfg.webDiagPort, 0); });
+                }
+            },
+            logCleanup: function () {
+                // 1. Define paths and configuration constants from global scope
+                const logDir = workingDir + "/log/";
+                const maxFiles = cfg.logging.file.count;           // Maximum files to retain per prefix (derived from config)
+
+                // 2. Verify the log directory exists before attempting to scan
+                if (!fs.existsSync(logDir)) {
+                    log("Log directory does not exist at: " + logDir, 3);
+                    return;
+                }
+
+                // 3. Read all filenames in the log directory synchronously
+                let dirContents;
+                try {
+                    dirContents = fs.readdirSync(logDir);
+                } catch (err) {
+                    log("Failed to read log directory: " + err.message, 3);
+                    return;
+                }
+
+                // 4. Iterate through each prefix defined in the configuration
+                for (const prefix of cfg.logging.file.record) {
+                    // Filter directory contents to isolate files belonging to this specific prefix
+                    const matchingFiles = dirContents.filter(file =>
+                        file.startsWith(prefix + "_") && file.endsWith(".txt")
+                    );
+
+                    // 5. Identify the currently active log file using the global startTimeStamp postfix
+                    const currentFileName = prefix + "_" + startTimeStamp + ".txt";
+                    const currentFilePath = logDir + currentFileName;
+
+                    // 6. Check if the current active file exists and measure its size
+                    try {
+                        const fileStats = fs.statSync(currentFilePath);
+
+                        // If the current file exceeds the configured maximum size, trigger a rotation
+                        if (fileStats.size > (cfg.logging.file.size * 1024 * 1024)) {
+                            log(`Current log file ${currentFileName} reached ${Math.round(fileStats.size / 1024 / 1024)}MB. Threshold is ${cfg.logging.file.size}MB. Rotating...`);
+
+                            // Update the global startTimeStamp so subsequent fs.appendFile calls create a new file
+                            startTimeStamp = time.stamp;
+                            log(`Updated startTimeStamp to ${startTimeStamp}. Logging will now direct to ${prefix}_${startTimeStamp}.txt`);
+                        } else {
+                            log(`Current log file ${currentFileName} size: ${Math.round(fileStats.size / 1024)}KB. Within limit.`, 0, 0);
+                        }
+                    } catch (err) {
+                        // File not found is normal if logging just started or this prefix isn't active yet
+                        if (err.code !== 'ENOENT') {
+                            log(`Error checking size of ${currentFileName}: ${err.message}`, 0, 3);
+                        }
+                    }
+
+                    // 7. Sort matching files by name in descending order. 
+                    // Since filenames contain ISO-like timestamps, alphabetical sorting effectively orders them chronologically (newest first).
+                    matchingFiles.sort((a, b) => b.localeCompare(a));
+
+                    // 8. Check if the number of accumulated files exceeds the configured retention limit
+                    if (matchingFiles.length > maxFiles) {
+                        const filesToDelete = matchingFiles.slice(maxFiles); // Extract the oldest files (end of sorted array)
+
+                        log(`Prefix '${prefix}' has ${matchingFiles.length} file(s). Limit is ${maxFiles}. Deleting ${filesToDelete.length} oldest file(s)...`);
+
+                        // Iterate over the oldest files and permanently remove them from disk
+                        for (const oldFile of filesToDelete) {
+                            const filePath = logDir + oldFile;
+                            try {
+                                fs.unlinkSync(filePath);
+                                log(`Successfully deleted old log file: ${oldFile}`);
+                            } catch (err) {
+                                log(`Failed to delete ${oldFile}: ${err.message}`, 0, 3);
+                            }
+                        }
+                    } else {
+                        log(`Prefix '${prefix}' has ${matchingFiles.length} file(s). Within retention limit of ${maxFiles}.`, 0, 0);
+                    }
                 }
             }
         },
@@ -985,7 +1064,16 @@ if (isMainThread) {
             if (err) { console.error("Error reading config-core.json:", err); return; }
             try {
                 const cfgTemp = JSON.parse(data);
-                cfg.logging = cfgTemp.logging;
+
+                if (cfg.logging.file.record == null || cfg.logging.file.record.length < 1) {
+                    if (cfg.logging.file.record.length > 0) {
+                        cfg.logging = cfgTemp.logging;
+                        clearInterval(timer.logCleanup);
+                        service.logCleanup();
+                        timer.logCleanup = setInterval(() => { service.logCleanup(); }, 600e3);
+                    } else cfg.logging = cfgTemp.logging;
+                } else cfg.logging = cfgTemp.logging;
+
                 if (JSON.stringify(cfg.esp) !== JSON.stringify(cfgTemp.esp)) {
                     cfgTemp.esp?.devices?.forIn((name, value) => {
                         if (!(name in cfg.esp.devices)) {
@@ -1148,11 +1236,18 @@ if (isMainThread) {
                 checkArgs();
                 lib();
                 init();
+                startTimeStamp = time.stamp;
                 log("actual working directory: " + workingDir);
                 log("initializing system states done");
                 log("Loading non-volatile data...");
 
                 let filePath = workingDir + "/nv-core.json";
+                if (cfg.logging.file.record.length > 0)
+                    setTimeout(() => {
+                        service.logCleanup();
+                        timer.logCleanup = setInterval(() => { service.logCleanup(); }, 600e3);
+                    }, 10e3);
+
                 if (!fs.existsSync(filePath)) {
                     // Logic for NON-EXISTENT file (as in original 'if (err)' block)
                     log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
@@ -1194,7 +1289,7 @@ if (isMainThread) {
                     });
                 }
                 break;
-            case 2: services.telegram(); services.webserver(); boot(3); break;
+            case 2: service.telegram(); service.webserver(); boot(3); break;
             case 3:     // connect to ESP and Home Assistant
                 if (cfg.esp?.enable && cfg.esp?.devices && Object.keys(cfg.esp?.devices).length > 0) { workerThreads.esp.init() }
                 if (cfg.homeAssistant) { workerThreads.ha() }
@@ -1231,10 +1326,11 @@ if (isMainThread) {
             file: {
                 write: null,
                 writeLast: time.epoch,
-                watch: {}
+                watch: {},
             },
+            logCleanup: null,
         };
-        logs = { step: 0, sys: [], tg: [], tgStep: 0 };
+        logs = { step: 0, sys: [], tg: [], tgStep: 0, writeLast: null };
         fileWatcher = {};
     }
     function lib() {
@@ -1499,7 +1595,7 @@ if (isMainThread) {
         };
         time.startTime();
     }
-    function log(message, mod, level, port) {      // add a new case with the name of your automation function
+    function log(message, mod, level, port, clientName) {      // add a new case with the name of your automation function
         let buf = time.stamp, cbuf = buf + "\x1b[3", lbuf = "", mbuf = "", ubuf = buf + "\x1b[3";
         if (level == undefined) level = 1;
         switch (level) {
@@ -1558,13 +1654,34 @@ if (isMainThread) {
             if (level != 0) {
                 if (cfg.logging.client || debug) console.log(ubuf);
                 client("log", ubuf, port);
+                if (cfg.logging.file.record.includes(clientName)
+                    || cfg.logging.file.record.includes(clientName.toLowerCase())) {
+                    fs.appendFile(workingDir + "/log/" + clientName + "_" + startTimeStamp + ".txt", cbuf + '\n',
+                        (err) => { if (err) throw err; });
+                }
             } else if (cfg.logging.clientDebug) {
                 client("log", ubuf, port);
                 // console.log(ubuf);
-
             }
+
         } else if (level == 0 && cfg.logging.debug || debug) console.log(cbuf);
-        else if (level != 0) console.log(cbuf);
+        else if (level != 0) {
+            console.log(cbuf);
+            if (startTimeStamp) {
+                if (cfg.logging.file.record.includes("core")) {
+                    fs.appendFile(workingDir + "/log/core_" + startTimeStamp + ".txt", cbuf + '\n',
+                        (err) => {
+                            if (err) {
+                                console.log(err);
+                                log("creating log folder", 2);
+                                if (!fs.existsSync(workingDir + "/log/"))
+                                    fs.mkdirSync(workingDir + "/log/", { recursive: true });
+                                fs.appendFile(workingDir + "/log/core_" + startTimeStamp + ".txt", cbuf + '\n',);
+                            }
+                        });
+                }
+            }
+        }
         return buf;
     }
     boot(0);
