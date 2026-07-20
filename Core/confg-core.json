@@ -2,8 +2,17 @@
     "webDiag": true,
     "webDiagPort": 20000,
     "logging": {
-        "debug": true,
+        "debug": false,
+        "verbose": true,
         "client": false,
+        "file": {
+            "size": 15,
+            "count": 5,
+            "record": [
+                "core",
+                "solar"
+            ]
+        },
         "clientDebug": false,
         "clientCrash": true
     },
