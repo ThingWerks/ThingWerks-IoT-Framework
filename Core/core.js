@@ -2360,13 +2360,13 @@ if (isMainThread) {
                                         log("Websocket (" + color("cyan", address)
                                             + ") - received ZHA device list, items: " + buf.result.length);
                                         clearTimeout(state.zha.queryReply);
-                                        state.zha.noDevices = false;
-                                        if (state.errorZHA) {
+                                        // state.zha.noDevices = false;
+                                        if (state.zha.noDevices) {
                                             parentPort.postMessage({
                                                 type: "ha", class: "client-reregister",
                                                 address: address,
                                             });
-                                            state.errorZHA = false;
+                                            state.noDevices = false;
                                         }
                                     } else if (buf.error?.code == 'unknown_command') {
                                         clearTimeout(state.zha.queryReply);
@@ -2374,10 +2374,9 @@ if (isMainThread) {
                                             log("Websocket (" + color("cyan", address) + ") - no ZHA devices - will retry");
                                             state.zha.noDevices = true;
                                             state.zha.queryReply = setTimeout(() => {
-                                                log("Websocket (" + color("cyan", address)
-                                                    + ") - retrying ZHA device query");
+                                                log("Websocket (" + color("cyan", address) + ") - retrying ZHA device query");
                                                 zhaQuery();
-                                            }, 60e3);
+                                            }, 120e3);
                                         } else {
                                             log("Websocket (" + color("cyan", address) + ") - still no ZHA devices - disabling");
 
@@ -2606,6 +2605,7 @@ if (isMainThread) {
                         if (!state.reply) haReconnect();
                     }, 10e3);
                 }
+
             }
             parentPort.on('message', (data) => {
                 switch (data.type) {
@@ -2628,6 +2628,7 @@ if (isMainThread) {
                         break;
                 }
             });
+
             break;
         }
         case "telegram": {
