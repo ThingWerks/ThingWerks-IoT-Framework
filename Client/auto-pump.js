@@ -376,7 +376,7 @@ module.exports = { // exports added to clean up layout
                     st.flow.batch = 0;
                     st.flow.check = false;
                     st.flow.checkPassed = false;
-                    st.flow.checkRunDelay = false; // debounce reset trigger
+                    tool.debounce.reset("flow_check_run");
                     st.timer.run = time.epoch;
                     st.timer.runMax = time.epoch;
                     st.timer.timeoutOn = false;
@@ -615,7 +615,7 @@ module.exports = { // exports added to clean up layout
                                         return true;
                                     } else
                                         trigger((" - RUN flow stop (" + flowLM.toFixed(1) + "lm) - pump stopping - " + psi + " psi"), false);
-                                } else st.flow.checkRunDelay = false;
+                                } else tool.debounce.reset("flow_check_run");
                             } else if (pumpConfig.runWarn != undefined) {
                                 if (flowLM < pumpConfig.runWarn && !warn.flow) {
                                     log(cfg.name + " - RUN low flow (" + flowLM.toFixed(1) + "lm) - clean filter?");
@@ -625,12 +625,12 @@ module.exports = { // exports added to clean up layout
                                 if (flowLM < pumpConfig.runError) {
                                     trigger((" - RUN low flow (" + flowLM.toFixed(1) + "lm) HA State: "
                                         + pump[st.pump].state + " - going OFFLINE permanently"), true);
-                                } else st.flow.checkRunDelay = false;
+                                } else tool.debounce.reset("flow_check_run");
                             } else if (pumpConfig.runError == undefined) {
                                 if (flowLM < pumpConfig.startError) {
                                     trigger((" - RUN low flow (" + flowLM.toFixed(1) + "lm) HA State: "
                                         + pump[st.pump].state + " - going OFFLINE permanently"), true);
-                                } else st.flow.checkRunDelay = false;
+                                } else tool.debounce.reset("flow_check_run");
                             }
 
 
@@ -705,6 +705,19 @@ module.exports = { // exports added to clean up layout
                             auto.state = false;
                             return true;
                         }
+
+
+                        if (cfg.pump[st.pump].required) {
+                            cfg.pump[st.pump].required.forEach(element => {
+                                if (entity[element]?.state != true) {
+                                    log(cfg.name + " - pump start error - required entity is offline - entity: " + element, 3);
+                                    send(auto.name, false);
+                                    auto.state = false;
+                                    return true;
+                                }
+                            });
+                        }
+
 
 
                         if (st.cycleCount == 0) {
@@ -882,6 +895,8 @@ module.exports = { // exports added to clean up layout
                             push[cfg.control.auto] = constructor.auto(state.dd[x], x, cfg);
                         if (cfg.control.turbo)
                             push[cfg.control.turbo] = constructor.turbo(state.dd[x], x, cfg);
+                        if (cfg.control.enable)
+                            push[cfg.control.enable] = constructor.enable(state.dd[x], x, cfg);
                         if (cfg.control.profile)
                             push[cfg.control.profile] = constructor.profile(state.dd[x], x, cfg);
                         if (cfg.buttons?.entities) {
@@ -897,7 +912,7 @@ module.exports = { // exports added to clean up layout
                         if (st) {
                             if (!cfg.enable) {
                                 log(cfg.name + " - system disabled - cannot go online", 2);
-                                send(dd.auto.name, false);
+                                send(cfg.control.auto, false);
                                 entity[cfg.ha?.auto] && (entity[cfg.control.auto].state = false);
                                 return;
                             }
@@ -1069,6 +1084,19 @@ module.exports = { // exports added to clean up layout
                         }
                     };
                 },
+                enable: function (dd, index, cfg) {
+                    return (st, name) => {
+                        if (st) {
+                            log(cfg.name + " - enabling automation");
+                            cfg.enable = true;
+                        } else {
+                            log(cfg.name + " - disabling automation");
+                            cfg.enable = false;
+                            send(cfg.control.auto, false);
+                            entity[cfg.ha?.auto] && (entity[cfg.control.auto].state = false);
+                        }
+                    };
+                },
                 example: function (dd, index, cfg) {
                     return (st, name) => {
 
@@ -1147,7 +1175,6 @@ module.exports = { // exports added to clean up layout
                                 batch: 0,
                                 check: false,
                                 checkPassed: false,
-                                checkRunDelay: false,
                                 timerCheck: null,
                                 timerRestart: null,
                             },
@@ -1181,10 +1208,7 @@ module.exports = { // exports added to clean up layout
                         },
                     })
 
-
-
-
-                    if (cfg.press?.output?.profile != undefined) {  // concerning since both pumps and global profiles can exist
+                    if (cfg.press?.output?.profile != null) {  // concerning since both pumps and global profiles can exist
                         if (cfg.control.profile != undefined && cfg.press.output.profile.length > 0) {
                             log(cfg.name + " - profile selector enabled");
                             state.dd[x].state.profile = parseInt(entity[cfg.control.profile]?.state);
@@ -1193,17 +1217,20 @@ module.exports = { // exports added to clean up layout
                             state.dd[x].state.profile = 0;
                         }
                     }
-
-
-                    if (cfg.control.turbo != undefined) {
+                    if (cfg.control.turbo != null) {
                         state.dd[x].state.turbo = entity[cfg.control.turbo].state;
                     }
-
-
-
-
-
-
+                    if (cfg.control.enable != null) {
+                        if (entity[cfg.control.enable]?.state) {
+                            log(cfg.name + " - enable entity exists - enabling automation");
+                            cfg.enable = true;
+                        } else {
+                            log(cfg.name + " - enable entity exists - disabling automation");
+                            cfg.enable = false;
+                            send(cfg.control.auto, false);
+                            entity[cfg.ha?.auto] && (entity[cfg.control.auto].state = false);
+                        }
+                    }
                 });
 
                 sensor.flow.calc();
