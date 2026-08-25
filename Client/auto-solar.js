@@ -147,7 +147,7 @@ module.exports = {
                                             + "a  " + voltsBat + "v, exiting night mode");
                                         inverter.nightMode = false;
                                     }
-                                } else solar.changing(x, false); // inverter only exits night mode when there is sufficient charging
+                                } else solar.charging(x, false); // inverter only exits night mode when there is sufficient charging
                             }
                             if (inverterVolts < 20) {
                                 log("inverter: " + cfg.name + " - FAULT - no output - Inverter is going offline", 3);
@@ -198,7 +198,7 @@ module.exports = {
                         //   console.log(inverter.state)
                         if (battery.sensorVolt != undefined) {
                             if (inverter.state != "faulted" && inverter.state === false) {
-                                solar.changing(x, true);
+                                solar.charging(x, true);
                                 // console.log("checking...")
                                 if (solar.nightMode(x) == true) {
                                     if (voltsBat >= cfg.nightMode.startVoltageMin) {
@@ -218,7 +218,7 @@ module.exports = {
                             }
                         }
                     },
-                    changing: function (x, power) {
+                    charging: function (x, power) {
                         let { voltsBat, ampsBat, gridWatts, wattsSolar, sun, cfg, inverter } = solar.pointers(x);
                         if (cfg.voltsRun != undefined) {
                             if (voltsBat >= cfg.voltsRun) checkConditions();
@@ -358,7 +358,11 @@ module.exports = {
                         state.inverter[x].delayStepSun = false;
                         config.inverter.forEach((_, y) => { state.inverter[y].delayStep = false });
                         for (const members of config.solar.priority.queue) // reset priority queue debounce for each member
-                            if (members.enable) tool.debounce.reset("priority_trigger_" + members.name);
+                            if (members.enable) {
+                                tool.debounce.reset("priority_trigger_" + members.name);
+                                tool.debounce.reset("priority_trigger_sun_" + members.name);
+                                tool.debounce.reset("priority_budget_" + members.name);
+                            }
                     },
                     nightMode: function (x) {
                         let nightMode = null, cfg = config.inverter[x];
@@ -442,11 +446,11 @@ module.exports = {
                                 log("priority queue initializing - system is going ONLINE - Battery Floating");
                             else log("priority queue initializing - system is going ONLINE");
                         }
-                        for (let x = config.solar.priority.queue.length - 1; x > -1; x--) priority.onState.init(x);
-                        for (let x = 0; x < config.solar.priority.queue.length; x++) priority.offState.init(x);
+                        for (let x = config.solar.priority.queue.length - 1; x > -1; x--) priority.onState.run(x);
+                        for (let x = 0; x < config.solar.priority.queue.length; x++) priority.offState.run(x);
                     },
                     onState: { // when the member is on
-                        init: function (x) {
+                        run: function (x) {
                             let { battery, volts, amps, sun, member } = priority.pointers(x);
 
                             /*
@@ -458,7 +462,7 @@ module.exports = {
                             }
                             */
                             if (member.state == true) {
-                                //  console.log("checking x:" + x + " amps: " + amps);
+
                                 if (member.config.enable == true) {
 
                                     if (volts <= member.config.off.volts) {
@@ -466,7 +470,8 @@ module.exports = {
                                         return;
                                     }
 
-                                    if (battery.soc <= member.config.off.soc) {
+                                    if (battery.soc < member.config.off.soc) {
+                                        //  console.log("checking: " + member.config.name + " Soc: " + battery.soc);
                                         priority.trigger(x, "battery SoC is low (" + battery.soc + "%) - stopping ", false);
                                         return;
                                     }
@@ -567,13 +572,21 @@ module.exports = {
                         conditions: function (x) {
                             let { battery, volts, amps, sun, member } = priority.pointers(x);
 
+                            // this line might have been added to reset budget timeout if it was changed during config update
                             if (member.config.off.budget) tool.debounce.reset("priority_budget_" + member.config.name);
+
                             if (sun != undefined && member.config.off.sun != undefined) {
                                 if (sun <= member.config.off.sun) {
-                                    priority.trigger(x, "sun is low (" + sun + "v) - stopping ", false);
-                                    return;
-                                } else tool.debounce.reset("priority_trigger_" + member.config.name);
-                            } else if (member.config.off.amps != undefined) {
+                                    tool.debounce("priority_trigger_sun_" + member.config.name
+                                        , (member.config.on.delaySun ? member.config.on.delaySun : member.config.on.delay)
+                                        , () => {
+                                            log("priority queue - " + member.config.name + " - sun is LOW (" + sun + "v) - stopping");
+                                            priority.send(x, false);
+                                            return;
+                                        })
+                                } else tool.debounce.reset("priority_trigger_sun_" + member.config.name);
+                            }
+                            if (member.config.off.amps != undefined) {
                                 if (nv.battery[config.solar.priority.battery].floating == true) {
                                     //  console.log("volts: " + volts + " voltsFloat: " + member.config.voltsFloat)
                                     if (amps <= member.config.off.amps) {
@@ -588,7 +601,7 @@ module.exports = {
                         },
                     },
                     offState: { // when the member is off
-                        init: function (x) {
+                        run: function (x) {
                             let { battery, volts, amps, sun, member } = priority.pointers(x);
                             let required = true;
 
@@ -616,7 +629,7 @@ module.exports = {
                                         } else if (state.inverter[member.config.inverter].state == true) checkVolts();
 
                                         if (member.config.on?.time?.hour == time.hour && member.config.on?.time?.min == time.min) {
-                                            if (member.config.on.timeVoltsMin) {
+                                            if (member.config.on.timeVoltsMin != null) {
                                                 if (volts >= member.config.on.timeVoltsMin != null) {
                                                     log("priority queue - " + member.config.name + " - start time reached - volts: " + volts);
                                                     priority.send(x, true);
@@ -637,6 +650,9 @@ module.exports = {
                                                     member.warn.timeSOCmin = true;
                                                     return;
                                                 }
+                                            } else {
+                                                log("priority queue - " + member.config.name + " - start time reached");
+                                                priority.send(x, true);
                                             }
                                         }
                                     }
@@ -728,7 +744,7 @@ module.exports = {
                             if (targetCharge != null && charge < targetCharge) pass = false;
                             if (targetSolar != null && solar < targetSolar) pass = false;
                             if (targetVolts != null && volts < targetVolts) pass = false;
-                            if (targeSOC != null && soc < targeSOC) pass = false;
+                            if (targeSOC != null && battery.soc < targeSOC) pass = false;
 
                             if (pass) {
 
@@ -759,17 +775,16 @@ module.exports = {
                                 if (member.config.offAmpsFloat == undefined || member.config.offAmpsFloat != null
                                     && nv.battery[config.solar.priority.battery].floating == true) {
                                     if (sun >= member.config.on.sun) {
+                                        tool.debounce("priority_trigger_sun_" + member.config.name
+                                            , (member.config.on.delaySun ? member.config.on.delaySun : member.config.on.delay)
+                                            , () => {
+                                                log("priority queue - " + member.config.name + " - sun is HIGH (" + sun + "v) - starting ");
+                                                priority.send(x, true);
+                                                return;
+                                            })
                                         // console.log("checking sun: " + sun + " floating:" + nv.battery[cfg.battery].floating)
-                                        if (member.delayStepSun == false) {
-                                            member.delayTimerSun = time.epoch;
-                                            member.delayStepSun = true;
-                                            return;
-                                        } else if (time.epoch - member.delayTimerSun >= config.solar.priority.delaySwitchOn) {
-                                            log("priority queue - " + member.config.name + " - sun is high (" + sun + "v) - starting ");
-                                            priority.send(x, true);
-                                            return;
-                                        }
-                                    } else member.delayStepSun = false;
+                                        // if (member.delayStepSun == false) {
+                                    } else tool.debounce.reset("priority_trigger_sun_" + member.config.name);
                                 }
                             }
                             if (member.config.on.amps != null) {
@@ -803,12 +818,13 @@ module.exports = {
                                             if (member.inverter === y) state.inverter[y].delayStep = false;
                                         } else state.inverter[y].delayStep = false;
                                     }
-                                    if (entity[config.inverter[y].entity]?.state == false) return false;
-                                }
+                                    //if (entity[config.inverter[y].entity]?.state == false) return false;
+                                } else proceed();
                             }
                             return true;
                         }
                         function proceed() {
+                            //  console.log("proceed")
                             tool.debounce("priority_trigger_" + member.config.name,
                                 (newState ? ((member.config.delayOn != null) ? member.config.delayOn : config.solar.priority.delaySwitchOn)
                                     : ((member.config.delayOff != null) ? member.config.delayOff : config.solar.priority.delaySwitchOff))
@@ -835,14 +851,18 @@ module.exports = {
                             return;
                         }
 
-                        for (let y = 0; y < member.config.entity.length; y++) {
+                        member.config.entity.forEach(entity => {
                             state.priority.skipLog = true;
-                            send(member.config.entity[y], newState);
-                        }
+                            send(entity, newState);
+                        });
+
 
                         for (const members of config.solar.priority.queue) {
-                            if (members.enable) tool.debounce.reset("priority_trigger_" + members.name);
-                            if (members.enable) tool.debounce.reset("priority_budget_" + members.name);
+                            if (members.enable) {
+                                tool.debounce.reset("priority_trigger_" + members.name);
+                                tool.debounce.reset("priority_trigger_sun_" + members.name);
+                                tool.debounce.reset("priority_budget_" + members.name);
+                            }
                         }
 
                         member.state = newState;
@@ -860,7 +880,7 @@ module.exports = {
                         let batteryConfig = config.battery[config.battery.findIndex(batt => batt.name === config.solar.priority.battery)];
                         battery.soc = entity["battery_" + batteryConfig.name].state;
                         let volts = Math.round(entity[batteryConfig.sensorVolt]?.state * 10) / 10;
-                        let sun = Math.round(entity[config.solar.sunlight]?.state * 100) / 100;
+                        let sun = Math.round(entity[config.solar.sunlight]?.state * 100) / 100 ?? null;
                         let amps;
                         if (config.solar.priority.battery != undefined) {
                             if (Array.isArray(batteryConfig.sensorAmp)) {
@@ -1476,15 +1496,16 @@ module.exports = {
                                 if (newState) log("inverter auto going online");
                                 else log("inverter auto going offline");
                                 for (let x = 0; x < config.inverter.length; x++) {
-                                    if (entity[config.inverter[x].entity].state) {
-                                        log("inverter: " + config.inverter[x].name + " - inverter ON - syncing ATS with inverter operational state");
-                                        syncInverter(x, true);
-                                    } else {
-                                        log("inverter: " + config.inverter[x].name + " - inverter OFF - syncing ATS with inverter operational state");
-                                        syncInverter(x, false);
-                                        state.inverter[x].step = time.epoch - config.solar.cycleError - 5;
-                                        state.inverter[x].stepPower = time.epoch - config.solar.cycleError - 5;
-                                    }
+                                    if (config.inverter.enable)
+                                        if (entity[config.inverter[x].entity].state) {
+                                            log("inverter: " + config.inverter[x].name + " - inverter ON - syncing ATS with inverter operational state");
+                                            syncInverter(x, true);
+                                        } else {
+                                            log("inverter: " + config.inverter[x].name + " - inverter OFF - syncing ATS with inverter operational state");
+                                            syncInverter(x, false);
+                                            state.inverter[x].step = time.epoch - config.solar.cycleError - 5;
+                                            state.inverter[x].stepPower = time.epoch - config.solar.cycleError - 5;
+                                        }
                                 }
                                 function syncInverter(x, tState) {
                                     state.inverter[x].state = tState;
