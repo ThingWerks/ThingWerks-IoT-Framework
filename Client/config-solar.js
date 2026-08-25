@@ -26,8 +26,8 @@ module.exports = {
             "solar-relay1-alvarez",
             "solar-relay2-daren",
             "solar-relay4-charger",
-            "solar-relay5-inverter-10kw",
-            "solar-relay7",
+            "solar-relay5-inverter",
+            "solar-relay7-panagiton",
             "solar-relay8-sofing",
             "solar-ram-relay1-water",
             "solar-ram-relay2-house",
@@ -92,29 +92,44 @@ module.exports = {
                     powerSolar: "solar_power",                 // sensor entity for all solar energy 
                     powerInverter: "inverter_main",            // total inverter power
                     battery: "main",                            // battery entity used by priority system 
+                    cycleError: 20,                             // priority minimum switch cycle time for before faulting
                     delaySwitchOn: 5,    // 60s time to observe changes in amps/sun before toggling priorities on
                     delaySwitchOff: 5,  // 30s time to observe changes in amps/sun before toggling priorities off
                     queue: [
                         {
                             name: "Inverter 2&3",
                             enable: true,
-                            entity: ["solar-relay5-inverter-10kw"],
+                            entity: ["solar-relay5-inverter"],
                             entityAuto: null,       // entity to control this members activation
                             // inverter: 0          // optional - which inverter carries the load - if not specified, inverter 0 is used
                             on: {
-                                time: { hour: 5, min: 55 },
-                                timeVoltsMin: 54.0, // minimum volts for turn on timer
-                                amps: 40.0,
+                                time: { hour: 5, min: 30 },
+                                timeSOCmin: 17,
+                                // timeVoltsMin: 54.0, // minimum volts for turn on timer
+                                amps: 20,
                                 // sun: 0.5,
-                                volts: 55.0,        // battery level to turn on system - in addition to sunlight if configured
+                                // delaySun: 10 // not required, defaults to delay
+                                soc: 35,    // battery level to turn on system - in addition to sunlight if configured
                             },
                             off: {
                                 time: { hour: 22, min: 35 },
                                 // sun: 2.35,       // sunlight level to deactivate this system - independent of battery level
                                 // amps: -15.0,
                                 // ampsFloat: -30.0,
-                                volts: 52.2,        // battery level to turn off system - independent of battery level
+                               // soc: 16,        // battery level to turn off system - independent of battery level
                                 // delay: 300,      // shutdown criteria hold time 
+                            },
+                        },
+                        {
+                            name: "Daren",
+                            enable: true,
+                            entity: ["solar-relay2-daren"],
+                            on: {
+                              //  amps: 10,
+                                soc: 20,
+                            },
+                            off: {
+                                soc: 12,      // battery level to turn off system - independent of battery level
                             },
                         },
                         {
@@ -122,11 +137,11 @@ module.exports = {
                             enable: true,
                             entity: ["solar-relay1-alvarez"],
                             on: {
-                                amps: 40.0,
-                                volts: 55.0,
+                              //  amps: 10,
+                                soc: 20,
                             },
                             off: {
-                                soc: 22,      // battery level to turn off system - independent of battery level
+                                soc: 16,      // battery level to turn off system - independent of battery level
                             },
                         },
                         {
@@ -134,72 +149,118 @@ module.exports = {
                             enable: true,
                             entity: ["solar-relay8-sofing"],
                             on: {
-                                amps: 60.0,
-                                volts: 55.4,
+                                amps: 10,
+                                soc: 25,
                             },
                             off: {
-                                soc: 25,      // battery level to turn off system - independent of battery level
+                                soc: 18,      // battery level to turn off system - independent of battery level
                             },
                         },
                         {
                             name: "Panagiton",
                             enable: true,
-                            entity: ["solar-relay7"],
+                            entity: ["solar-relay7-panagiton"],
                             on: {
-                                amps: 60.0,
-                                volts: 55.6,
-
-
-                                // if stored enough power at 6po, turn on for the night  
-                                // {hour: 16, soc:65, charge: 30.0}
-
+                                amps: 20,
+                                soc: 25,
                             },
                             off: {
-                                soc: 32,      // battery level to turn off system - independent of battery level
-                                budget: [
-                                    { hour: 10, amps: -20 },
-                                    { hour: 11, amps: -20 },
-                                    { hour: 12, amps: -20 },
-                                    { hour: 13, amps: -20 },
-                                    { hour: 14, amps: -20 },
-                                    { hour: 15, amps: -20 },
-                                ]
+                                soc: 18,      // battery level to turn off system - independent of battery level
                             },
                         },
                         {
                             name: "Ram-Water ATS",
                             enable: true,
-                            voltsFloat: 58.2,
                             entity: ["solar-ram-relay1-water"],
-                            required: ["solar-relay5-inverter-10kw"],
+                            required: ["solar-relay5-inverter"],
                             on: {
                                 time: { hour: 6, min: 0 },
-                                timeVoltsMin: 54.4,
+                                timeSOCmin: 25,
                                 //  sun: 3.0,
                                 delay: 10,
+                                amps: 90.0,
                                 //  battery: "main", optional if not in solar/priority
+                                budget: [ // hour, charge, discharge, solar, volts
+                                    { hour: 6, solar: 0.5, soc: 25 },
+                                    { hour: 7, solar: 1.0, soc: 30 },
+                                    { hour: 8, solar: 4.0, soc: 60 },
+                                    { hour: 9, solar: 11.0, amps: 50.0, soc: 70 },
+                                    { hour: 10, solar: 22.0, amps: 160.0, charge: 10.0 },
+                                    { hour: 11, solar: 39.0, amps: 160.0, charge: 16.0 },
+                                    { hour: 12, solar: 50.0, amps: 160.0, charge: 20.0 },
+                                    { hour: 13, solar: 55.0, amps: 100.0, charge: 28.0 },
+                                    //    { hour: 14, solar: 60.0 },
+                                    //   { hour: 15, solar: 65.0 },
+                                    //   { hour: 16, solar: 70.0 },
+                                    //   { hour: 17, amps: -55, discharge: 9.5, },
+                                    //   { hour: 18, amps: -55, discharge: 11.5, },
+                                    //   { hour: 19, amps: -55, discharge: 15.0, },
+                                    //   { hour: 20, amps: -55, discharge: 16.5, },
+                                    //   { hour: 21, amps: -55, discharge: 17.5, },
+                                ],
+                            },
+                            off: {
+                                time: { hour: 21, min: 15 },
+                                amps: 30.0,
+                                ampsFloat: -160.0,
+                                delay: 5,
+                                floatOverride: true,
+                                budget: [ // hour, charge, discharge, solar, volts
+                                    { hour: 6, soc: 20 },
+                                    { hour: 7, solar: 0.5, soc: 20, amps: -120 },           // 0kw      0.65kw      55.2v
+                                    { hour: 8, solar: 3.3, soc: 25, amps: -120 },           // 2.3kw    5kw         56.78v
+                                    { hour: 9, solar: 8.0, soc: 40, amps: -120 },           // 7.2kw    12kw        56.88v
+                                    { hour: 10, solar: 18.0, amps: -100, charge: 8.0 },                      // 10kw     22kw        57v         
+                                    { hour: 11, solar: 33.0, amps: -100, charge: 14.0 },                      // 15kw     34kw        57v
+                                    { hour: 12, solar: 45.0, amps: -100, charge: 19.0 },                      // 20kw     42kw        57.2v
+                                    { hour: 13, solar: 50.0, amps: -100, charge: 22.0 },                      // 24kw     50kw        57.2v
+                                    { hour: 14, solar: 55.0 },
+                                    { hour: 15, solar: 60.0 },
+                                    { hour: 16, solar: 65.0 },
+                                    { hour: 17, amps: -140, soc: 60, },
+                                    { hour: 18, amps: -140, soc: 60, },
+                                    { hour: 19, amps: -140, soc: 60, },
+                                    { hour: 20, amps: -140, soc: 60, },
+                                    { hour: 21, amps: -140, soc: 60, },
+                                ],
+                            },
+                        },
+                        {
+                            name: "Ram-House ATS",
+                            enable: false,
+                            entity: ["solar-ram-relay2-house"],
+                            required: ["solar-relay5-inverter"],
+                            on: {
+                                time: { hour: 6, min: 0 },
+                                timeSOCmin: 20,
+                                //  sun: 3.0,
+                                delay: 2,
+                                // amps: 90.0,
+                                //  battery: "main", optional if not in solar/priority
+
                                 budget: [ // hour, charge, discharge, solar, volts
                                     { hour: 6, solar: 0.5, volts: 54.5 },
                                     { hour: 7, solar: 1.0, volts: 55.0 },
                                     { hour: 8, solar: 4.0, volts: 56.0 },
                                     { hour: 9, solar: 11.0, amps: 50.0, volts: 56.0 },
-                                    { hour: 10, solar: 22.0, amps: 160.0, charge: 10.0 },
-                                    { hour: 11, solar: 39.0, amps: 160.0, charge: 16.0 },
-                                    { hour: 12, solar: 50.0, amps: 160.0, charge: 20.0 },
-                                    { hour: 13, solar: 55.0, amps: 100.0, charge: 28.0 },
-                                    { hour: 14, solar: 60.0 },
-                                    { hour: 15, solar: 65.0 },
-                                    { hour: 16, solar: 70.0 },
-                                    { hour: 17, amps: -55, discharge: 9.5, },
-                                    { hour: 18, amps: -55, discharge: 11.5, },
-                                    { hour: 19, amps: -55, discharge: 15.0, },
-                                    { hour: 20, amps: -55, discharge: 16.5, },
-                                    { hour: 21, amps: -55, discharge: 17.5, },
+                                    { hour: 10, solar: 22.0, amps: 5.0, charge: 10.0 },
+                                    { hour: 11, solar: 39.0, amps: 5.0, charge: 16.0 },
+                                    { hour: 12, solar: 50.0, amps: 5.0, charge: 20.0 },
+                                    //  { hour: 13, solar: 55.0, amps: 5.0, charge: 28.0 },
+                                    //    { hour: 14, solar: 60.0 },
+                                    //    { hour: 15, solar: 65.0 },
+                                    //    { hour: 16, solar: 70.0 },
+                                    //   { hour: 17, amps: -55, discharge: 9.5, },
+                                    //    { hour: 18, amps: -55, discharge: 11.5, },
+                                    //   { hour: 19, amps: -55, discharge: 15.0, },
+                                    //  { hour: 20, amps: -100, discharge: 16.5, },
+                                    { hour: 21, amps: -100, discharge: 17.5, },
                                 ],
+
                             },
                             off: {
                                 time: { hour: 21, min: 15 },
-                                amps: 90.0,
+                                amps: 30.0,
                                 ampsFloat: -160.0,
                                 delay: 5,
                                 floatOverride: true,
@@ -228,7 +289,7 @@ module.exports = {
             },
             inverter: [
                 {
-                    enable: true,
+                    enable: false,
                     name: "Team 1",
                     entity: "input_boolean.inverter_1", // required - entity for indicating operational status
                     nightMode: {
