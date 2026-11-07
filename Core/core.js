@@ -549,7 +549,7 @@ if (isMainThread) {
                     // express.get("/tg", function (request, response) { response.send(logs.tg); });
                     // express.get("/ws", function (request, response) { response.send(logs.ws); });
                     // express.get("/nv", function (request, response) { response.send(nv); });
-                    // express.get("/state", function (request, response) { response.send(state); });
+                    express.get("/state", function (request, response) { response.send(state); });
                     // express.get("/thread", function (request, response) { response.send(thread); });
                     // express.get("/cfg", function (request, response) { response.send(cfg); });
                     // express.get("/perf", function (request, response) { response.send(state.perf); });
@@ -2243,7 +2243,11 @@ if (isMainThread) {
                     logs ||= { ws: {}, zhaDevices: {} };
                     state[config.address] ||= {
                         entityTotal: 0, id: 0, logStep: 0,
-                        zha: { queryReply: null },
+                        zha: {
+                            queryReply: null,
+                            retries: 0,
+                            maxRetries: 6
+                        },
                         timer: { reconnect: null },
                         log: { ws: [], zhaDevices: {} },
                         perf: {},
@@ -2598,6 +2602,7 @@ if (isMainThread) {
                     state.error = true;
                     state.zha.noDevices = false;
                     clearTimeout(state.timer.reconnect);
+                    clearTimeout(state.zha.queryReply);
                     if (error) log("websocket (" + color("cyan", address) + ") - " + error.toString(), 3);
                     em[address].removeAllListeners();
                     ws[address].connect("ws://" + address + ":" + config.port + "/api/websocket");
