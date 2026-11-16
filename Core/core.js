@@ -956,13 +956,17 @@ if (isMainThread) {
                         if (data.name in entity) {
                             // console.log(entity[data.name])
                             if (data.name == "input_boolean.debug_core") {
-                                log("logging - TWIT core logging set to: " + data.state);
+                                log("logging - TWIT core debug logging set to: " + data.state);
                                 cfg.logging.debug = (data.state == "on") ? true : (data.state == "off") ? false : data.state;
+                                nv.log.debug.core = cfg.logging.debug;
+                                file.write.nv();
                                 return;
                             }
                             if (data.name == "input_boolean.debug_clients") {
-                                log("logging - TWIT Client logging set to: " + data.state);
+                                log("logging - TWIT Client debug logging set to: " + data.state);
                                 cfg.logging.clientDebug = (data.state == "on") ? true : (data.state == "off") ? false : data.state;
+                                nv.log.debug.core = cfg.logging.debug;
+                                file.write.nv()
                                 return;
                             }
                             try {
@@ -1196,19 +1200,20 @@ if (isMainThread) {
                     try { fs.writeFileSync("/etc/systemd/system/twit-core.service", service.join("\n")); } catch { }
                     // execSync("mkdir /apps/ -p");
                     // execSync("cp " + process.argv[1] + " /apps/ha/");
-                    try { execSync("systemctl daemon-reload"); } catch { }
-                    try { execSync("systemctl enable twit-core.service"); } catch { }
-                    try { execSync("systemctl start twit-core"); } catch { }
-                    try { execSync("service twit-core status"); } catch { }
+                    try { execSync("systemctl daemon-reload"); } catch (e) { console.log(e) }
+                    try { execSync("systemctl enable twit-core.service"); } catch (e) { console.log(e) }
+                    try { execSync("systemctl start twit-core"); } catch (e) { console.log(e) }
+                    try { execSync("service twit-core status"); } catch (e) { console.log(e) }
                     console.log("service installed and started");
                     console.log("type:  journalctl -f -u twit-core --output=cat");
                     //  console.log("or if not using journal:  tail -f /apps/log-twit-core.txt -n 500");
                     process.exit();
                 case "--uninstall":
                     console.log("uninstalling TWIT-Core service...");
-                    try { execSync("systemctl stop twit-core"); } catch { }
-                    try { execSync("systemctl disable twit-core.service"); } catch { }
-                    try { fs.unlinkSync("/etc/systemd/system/twit-core.service"); } catch { }
+                    try { execSync("systemctl stop twit-core"); } catch (e) { console.log(e) }
+                    try { execSync("systemctl disable twit-core.service"); } catch (e) { console.log(e) }
+                    try { fs.unlinkSync("/etc/systemd/system/twit-core.service"); } catch (e) { console.log(e) }
+                    try { execSync("systemctl daemon-reload"); } catch (e) { console.log(e) }
                     console.log("TWIT-Core service uninstalled");
                     process.exit();
                 case "-d": debug = true; break;
@@ -1233,8 +1238,8 @@ if (isMainThread) {
                 break;
             case 1:     // args, init, lib, load nv.json file (for local/core entities)
                 console.log("checking args");
-                checkArgs();
                 lib();
+                checkArgs();
                 init();
                 startTimeStamp = time.stamp;
                 log("actual working directory: " + workingDir);
@@ -1252,7 +1257,7 @@ if (isMainThread) {
                     // Logic for NON-EXISTENT file (as in original 'if (err)' block)
                     log("\x1b[33;1mNon-Volatile Storage does not exist\x1b[37;m"
                         + "\nnv.json file should be in same folder as core.js file");
-                    nv = { entity: {} };
+                    nv = { entity: {}, log: {} };
                     file.write.nv();
                     boot(2);
                 } else {
@@ -1279,6 +1284,9 @@ if (isMainThread) {
                                     count++;
                                 })
                             }
+                            nv.log ||= {};
+                            nv.log.debug ||= {};
+                            if (nv.log.debug.core) cfg.logging.debug = nv.log.debug.core;
                             log("loaded " + count + " entities from NV data");
                         } catch (parseError) {
                             // Error parsing JSON, throw and quit.
