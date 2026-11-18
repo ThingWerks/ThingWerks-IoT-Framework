@@ -616,12 +616,12 @@ if (isMainThread) {
                                 resolve({
                                     client: buf.clientName,
                                     syncGroup: buf.syncGroup,
-                                    state: buf.state,
-                                    config: buf.config,
-                                    entityTemp: buf.entityTemp,
+                                    state: buf._state,
+                                    config: buf._config,
+                                 //   entityTemp: buf.entityTemp,
                                     entity: buf.entity,
                                     owner: buf.owner,
-                                    nv: buf.nv
+                                    nv: buf._nv
                                 });
 
 
