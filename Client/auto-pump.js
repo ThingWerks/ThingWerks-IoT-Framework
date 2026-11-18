@@ -47,6 +47,7 @@ module.exports = { // exports added to clean up layout
                         calc.percent[0] = stopPressure - calc.meters;
                         calc.percent[1] = calc.percent[0] / stopPressure;
                         calc.percent[2] = Math.round(100 - (calc.percent[1] * 100));
+
                         entity[name].volts = tool.round(calc.average, 100);
                         entity[name].psi = (calc.psi < 0.0) ? 0 : tool.round(calc.psi, 10);
                         entity[name].meters = (calc.meters < 0.0) ? 0 : tool.round(calc.meters, 10);
@@ -178,7 +179,7 @@ module.exports = { // exports added to clean up layout
                                 conditions: function (x) {
                                     let { st, cfg, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
                                     if (press.out.config.unit == "m") {
-                                        if (press.out.state.meters <= cfg.press.start) {
+                                        if (press.out.state.meters <= cfg.press.output.start) {
                                             log(cfg.name + " - " + press.out.config.name + " is low (" + press.out.state.meters.toFixed(2)
                                                 + "m) - pump is starting");
                                             delivery.start(x);
@@ -221,7 +222,7 @@ module.exports = { // exports added to clean up layout
                                             }
                                         }
 
-                                        if (!warn.flowFlush && flow?.[st.pump]?.lm > cfg.pump[st.pump].flow.startError) {
+                                        if (flow > 0 && !warn.flowFlush && flow?.[st.pump]?.lm > cfg.pump[st.pump].flow.startError) {
                                             log(cfg.name + " - flow is detected (" + flow[st.pump].lm.toFixed(0)
                                                 + "lpm) possible sensor damage or flush operation", 2);
                                             warn.flowFlush = true;
@@ -247,7 +248,7 @@ module.exports = { // exports added to clean up layout
                             conditions: function (x) {
                                 let { st, cfg, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
                                 if (press.out.config.unit == "m") {
-                                    if (press.out.state.meters >= cfg.press.stop) {
+                                    if (press.out.state.meters >= cfg.press.output.stop) {
                                         log(cfg.name + " - " + press.out.config.name + " is full - pump is stopping");
                                         delivery.stop(x);
                                         return true;
@@ -352,7 +353,7 @@ module.exports = { // exports added to clean up layout
                                 delivery.start(x, true);
                                 return;
                             }
-                            if (flow?.[st.pump]?.lm > cfg.pump[st.pump].flow.startError
+                            if (flow < 0 && flow?.[st.pump]?.lm > cfg.pump[st.pump].flow.startError
                                 && warn.flowFlush == false && cfg.fault.flushWarning != false && st.sharedPump.shared == false) {
                                 warn.flowFlush = true;
                                 log(cfg.name + " - Auto is off but flow is detected (" + flow[st.pump].lm.toFixed(1)
@@ -399,27 +400,49 @@ module.exports = { // exports added to clean up layout
                         }
                     }
 
+                    /*
+                                        if (flow.length > 0) {  // at least 1 pump has a flow sensor
+                                            flow[st.pump].batch = nv.flow[cfg.pump[st.pump].flow.sensor].total;
+                                            if (runAlready) { // skip flow check delay
+                                                log(cfg.name + " - flow meter reenabled");
+                                                st.flow.check = true;
+                                                st.flow.checkPassed = true;
+                                            } else {
+                                                st.flow.timerCheck = setTimeout(() => {
+                                                    st.flow.check = true;
+                                                }, cfg.pump[st.pump].flow.startWait * 1000);
+                                            }
+                                        }
+                    */
 
-                    if (flow.length > 0) {  // least 1 pump has a flow sensor
+                    if (flow.length > 0) {  // at least 1 pump has a flow sensor
                         flow[st.pump].batch = nv.flow[cfg.pump[st.pump].flow.sensor].total;
                         if (runAlready) { // skip flow check delay
                             log(cfg.name + " - flow meter reenabled");
                             st.flow.check = true;
                             st.flow.checkPassed = true;
                         } else {
+                            st.flow.epoch = (st.flow.epoch || 0) + 1;
+                            const epoch = st.flow.epoch;
+                            st.flow.check = false;
+                            st.flow.checkPassed = false;
+                            tool.debounce.reset("flow_check_run");
                             st.flow.timerCheck = setTimeout(() => {
+                                if (st.flow.epoch !== epoch) return;   // stale from prior cycle
                                 st.flow.check = true;
                             }, cfg.pump[st.pump].flow.startWait * 1000);
                         }
                     }
 
-
-                    if (cfg.control.reserve != undefined) {
+                    if (cfg.control.reserve != null) {
                         if (entity[cfg.control.reserve].state == true) {
                             let pumpSelect = cfg.pump.findIndex(obj => obj.class === "reserve");
                             if (pumpSelect == -1) {
                                 log(cfg.name + " - no reserve pump found - selecting pump 0 instead", 2);
-                            } else log(cfg.name + " - selecting reserve pump: " + cfg.pump[pumpSelect].name);
+                            } else {
+                                log(cfg.name + " - selecting reserve pump: " + cfg.pump[pumpSelect].name);
+                                st.pump = pumpSelect;
+                            }
                         }
                         else st.pump = 0;
                     } else st.pump = 0;
@@ -447,6 +470,9 @@ module.exports = { // exports added to clean up layout
                     st.timer.timeoutOff = false;
                     pump[st.pump].state = false;
 
+                    st.flow.epoch = (st.flow.epoch || 0) + 1;
+                    clearTimeout(st.flow.timerCheck);
+
                     delivery.check.shared(x);
                     if (st.sharedPump.run == false) {
                         lbuf = cfg.name + " - " + color("cyan", "stopping pump") + ": " + pump[st.pump].config.name
@@ -467,12 +493,16 @@ module.exports = { // exports added to clean up layout
 
 
 
-                    if (flow != undefined) {
+                    if (flow > 0) {
                         //  st.flow.check = false;
                         tFlow = nv.flow[cfg.pump[st.pump].flow.sensor].total - flow[st.pump].batch;
                         log(lbuf + " - pumped " + help.flow(tFlow) + " - Average: "
                             + ((tFlow * 1000) / (time.epoch - st.timer.run) * 60).toFixed(1) + "lm");
                     } else log(lbuf);
+
+
+
+
 
                     setTimeout(() => { st.timer.timeoutOff = true }, 10e3);
 
@@ -698,8 +728,9 @@ module.exports = { // exports added to clean up layout
                         let { st, cfg, auto, press, flow, pump, fault, warn } = delivery.pointers(x);
 
                         // check that both press and flow stop are both not configured 
-                        if (cfg.pump[st.pump].flow.runStop == null
-                            && cfg.press?.output?.profile?.[st.profile].stop == null) {
+                        if (cfg.pump[st.pump].flow?.runStop == null
+                            && cfg.press?.output?.profile?.[st.profile].stop == null
+                            && cfg.press?.output?.stop == null) {
                             log(cfg.name + " - config error - you must configure ether 'Flow runStop' or 'Press output profile stop'", 3);
                             send(auto.name, false);
                             auto.state = false;
@@ -718,7 +749,13 @@ module.exports = { // exports added to clean up layout
                             });
                         }
 
-
+                        if (flow > 0 && nv.flow[cfg.pump[st.pump].flow.sensor].total == null) {
+                            log(cfg.name + " - pump config error - invalid pump flow sensor entity - configured entity: "
+                                + cfg.pump[st.pump].flow.sensor, 3);
+                            send(auto.name, false);
+                            auto.state = false;
+                            return true;
+                        }
 
                         if (st.cycleCount == 0) {
                             st.timer.cycle = time.epoch;
@@ -807,11 +844,18 @@ module.exports = { // exports added to clean up layout
                             config: config.sensor.press.find(obj => obj.name === cfg.press.input.sensor),
                             get state() { return entity[("press_" + cfg.press.input.sensor)] }
                         }
-                    if (cfg.press?.output?.sensor)
+                    if (cfg.press?.output?.sensor) {
+
+                        if (!cfg.press.output.sensor in entity) {
+                            log(cfg.name + " - invalid output tank entity specified - entity: " + cfg.press.output.sensor, 3);
+                            cfg.enable = false;
+                        }
                         press.out = {
                             config: config.sensor.press.find(obj => obj.name === cfg.press.output.sensor),
                             get state() { return entity[("press_" + cfg.press.output.sensor)] },
                         }
+                    }
+
 
                     cfg.pump.forEach(element => {
                         pump.push({
@@ -933,6 +977,7 @@ module.exports = { // exports added to clean up layout
                             clearTimeout(dd.state.oneShot);
                             dd.state.oneShot = false;
                             dd.state.oneShotCount = false;
+                            dd.state.flow.epoch = (dd.state.flow.epoch || 0) + 1;  // invalidate in-flight timers
                             if (dd.state.run) delivery.stop(index);
                         }
                     };
